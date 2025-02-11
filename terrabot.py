@@ -53,8 +53,12 @@ elif arguments[1] == 'phills15':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
 elif arguments[1] == 'phills2':
     token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
+elif arguments[1] == 'phills2':
+    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
+elif arguments[1] == 'yh480825':
+    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
 else:
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
+    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"    
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
@@ -68,7 +72,7 @@ g_company = ""
 g_buy_price = 0
 g_buy_amount = 0
 g_sell_price = 0
-g_sell_amount = 2
+g_sell_amount = 0
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -2181,7 +2185,7 @@ def echo(update, context):
                         if int(a['hts_avls']) > 5000:
                             buy_expect_sum = 5000000
                         elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 1500000
+                            buy_expect_sum = 2000000
                         else:
                             buy_expect_sum = 3000000
 
@@ -2256,7 +2260,7 @@ def echo(update, context):
                         if int(a['hts_avls']) > 5000:
                             buy_expect_sum = 5000000
                         elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 1500000
+                            buy_expect_sum = 2000000
                         else:
                             buy_expect_sum = 3000000
 
@@ -2323,7 +2327,7 @@ def echo(update, context):
                         if int(a['hts_avls']) > 5000:
                             buy_expect_sum = 5000000
                         elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 1500000
+                            buy_expect_sum = 2000000
                         else:
                             buy_expect_sum = 3000000
 
