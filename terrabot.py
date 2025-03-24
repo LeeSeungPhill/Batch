@@ -1319,7 +1319,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-거래폭발 호출
-                    search.search(access_token, app_key, app_secret, '0', 'phills2')
+                    search.search(access_token, app_key, app_secret, 'phills2', '0')
                     
             elif data_selected.find("단기추세") != -1:
 
@@ -1333,7 +1333,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-단기추세 호출
-                    search.search(access_token, app_key, app_secret, '1', 'phills2')           
+                    search.search(access_token, app_key, app_secret, 'phills2', '1')           
 
             elif data_selected.find("투자혁명") != -1:
 
@@ -1347,7 +1347,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, '2', 'phills2')   
+                    search.search(access_token, app_key, app_secret, 'phills2', '2')   
 
             elif data_selected.find("파워급등주") != -1:
 
@@ -1361,7 +1361,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, '3', 'phills2')   
+                    search.search(access_token, app_key, app_secret, 'phills2', '3')   
 
             elif data_selected.find("파워종목") != -1:
 
@@ -1375,7 +1375,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, '4', 'phills2')                   
+                    search.search(access_token, app_key, app_secret, 'phills2', '4')                   
 
     if data_selected.find("초기화") != -1:
         context.bot.edit_message_text(text="초기화 진행합니다.",

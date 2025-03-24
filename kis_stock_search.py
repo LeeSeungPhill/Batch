@@ -82,7 +82,7 @@ def inquire_search_result(access_token, app_key, app_secret, id, seq):
     URL = f"{URL_BASE}/{PATH}"
     res = requests.get(URL, headers=headers, params=params, verify=False)
     ar = resp.APIResp(res)
-    ar.printAll()
+    # ar.printAll()
     return ar.getBody().output2
 
 async def main(telegram_text):

@@ -63,7 +63,7 @@ def inquire_search_title(access_token, app_key, app_secret, id):
     URL = f"{URL_BASE}/{PATH}"
     res = requests.get(URL, headers=headers, params=params, verify=False)
     ar = resp.APIResp(res)
-    ar.printAll()
+    # ar.printAll()
     return ar.getBody().output2
 
 cur01 = conn.cursor()
