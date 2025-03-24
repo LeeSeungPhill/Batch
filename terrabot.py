@@ -644,9 +644,15 @@ def callback_get(update, context) :
             print("g_buy_amount : ", str(g_buy_amount))
             print("g_buy_price : ", str(g_buy_price))
 
+            # 매수량, 매수금액 입력시 시장가 매수주문
+            if menuNum == "23":
+                ord_dvsn = "01"
+            else:
+                ord_dvsn = "00"    
+
             try:
                 # 매수
-                c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, "00", str(g_buy_amount), str(g_buy_price))
+                c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(g_buy_price))
             
                 if c['ODNO'] != "":
                     print("매수주문 완료")
@@ -685,9 +691,15 @@ def callback_get(update, context) :
             print("g_sell_amount : ", str(g_sell_amount))
             print("g_sell_price : ", str(g_sell_price))
 
+            # 매도량 입력시 시장가 매도주문
+            if menuNum == "33":
+                ord_dvsn = "01"
+            else:
+                ord_dvsn = "00"    
+
             try:
                 # 매도
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, "00", str(g_sell_amount), str(g_sell_price))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(g_sell_price))
             
                 if c['ODNO'] != "":
                     print("매도주문 완료")
@@ -734,21 +746,21 @@ def callback_get(update, context) :
             elif data_selected.find("종목손실금액") != -1:
                 menuNum = "21"
 
-                context.bot.edit_message_text(text="종목손실금액 기준 매수의 종목코드, 매수가를 입력하세요.",
+                context.bot.edit_message_text(text="종목손실금액 기준 매수의 종목코드, 매수가, 이탈가, 손절금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
             elif data_selected.find("매수예상금액") != -1:
                 menuNum = "22"
 
-                context.bot.edit_message_text(text="매수예상금액 기준 매수의 종목코드, 매수가를 입력하세요.",
+                context.bot.edit_message_text(text="매수예상금액 기준 매수의 종목코드, 매수가, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
             elif data_selected.find("매수량") != -1:
                 menuNum = "23"
 
-                context.bot.edit_message_text(text="매수량 기준 매수의 종목코드, 매수량을 입력하세요.",
+                context.bot.edit_message_text(text="매수량 기준 매수의 종목코드, 매수량, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
@@ -2100,10 +2112,12 @@ def echo(update, context):
                 chartReq = "0"
                 if len(user_text.split(",")) > 0:
                     
-                    commandBot = user_text.split(sep=',', maxsplit=2)
+                    commandBot = user_text.split(sep=',', maxsplit=4)
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수가
+                    print("commandBot[2] : ", commandBot[2])    # 이탈가
+                    print("commandBot[3] : ", commandBot[3])    # 손절금액
 
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
@@ -2111,49 +2125,91 @@ def echo(update, context):
                     # 매수가
                     buy_price = commandBot[1]
                     print("매수가 : " + format(int(buy_price), ',d'))
-                    cur21 = conn.cursor()
+
+                    if commandBot[2].isdecimal():
+                        # 이탈가
+                        loss_price = commandBot[2]
+                        print("이탈가 : " + format(int(loss_price), ',d'))
+
+                        if commandBot[3].isdecimal():
+                            # 손절금액
+                            item_loss_sum = commandBot[3]
+                            print("손절금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            n_buy_amount = item_loss_sum / (int(buy_price) - loss_price)
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(buy_price) * round(n_buy_amount)
+                            print("매수금액 : " + format(int(n_buy_sum), ',d'))
+
+                            # 매수 가능(현금) 조회
+                            b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                            print("매수 가능(현금) : " + format(int(b), ',d'));
+                            if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+
+                                g_buy_amount = round(n_buy_amount)
+                                g_buy_price = buy_price
+                                g_buy_code = code
+                                g_company = company
+                                
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(round(n_buy_amount)), ',d') + "주, 손절가 : " + format(loss_price, ',d') + "원, 종목손실금액 : " + format(int(item_loss_sum), ',d') + "원, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
+                                get_handler = CommandHandler('buy', get_command1)
+                                updater.dispatcher.add_handler(get_handler)
+
+                            else:
+                                print("매수 가능(현금) 부족")
+                                context.bot.send_message(chat_id=user_id, text="["+company + "] 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 매수 가능(현금) : " + format(int(b) - int(n_buy_sum), ',d') +"원 부족")
+
+                        else:
+                            print("손절금액 미존재")
+                            context.bot.send_message(chat_id=user_id, text=company + " : 손절금액 미존재")    
+                    else:
+                        print("이탈가 미존재")
+                        context.bot.send_message(chat_id=user_id, text=company + " : 이탈가 미존재")
+                    
+                    # cur21 = conn.cursor()
                     # 관심종목정보 조회 : 이탈가, 목표가
                     # 자산관리정보 조회 : 승률과 현금비중 값 비교하여 큰 값을 잔고금액의 현금비중액
                     # 시장레벨정보 조회 : 현금비중액=총자산금액 리스크율 계산하여 계좌손실금액, 종목손실금액(계좌손실금액/종목수) 기준 매수량(종목손실금액/(매수가-이탈가))
-                    cur21.execute("select A.leave_price, ROUND(B.buy_avail_cash*C.risk_rate*0.01/C.item_number, 0) as item_loss_sum from \"interestItem_interest_item\" A, (select row_number() over (order by id desc) as ROWNUM, prvs_rcdl_excc_amt, acct_no, case when cash_rate > COALESCE(market_ratio, 0) then ROUND(cash_rate*prvs_rcdl_excc_amt*0.01, 0) else ROUND(COALESCE(market_ratio, 0)*prvs_rcdl_excc_amt*0.01, 0) end as buy_avail_cash from \"stockFundMng_stock_fund_mng\" where acct_no = '"+str(acct_no)+"') B, (select acct_no, risk_rate, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '"+str(acct_no)+"' and aply_end_dt = '99991231') C where A.acct_no = B.acct_no and A.acct_no = C.acct_no and A.acct_no = '"+str(acct_no)+"' and B.rownum = 1 and code = '"+code+"'")
-                    result_four = cur21.fetchone()
-                    cur21.close()
+                    # cur21.execute("select A.leave_price, ROUND(B.buy_avail_cash*C.risk_rate*0.01/C.item_number, 0) as item_loss_sum from \"interestItem_interest_item\" A, (select row_number() over (order by id desc) as ROWNUM, prvs_rcdl_excc_amt, acct_no, case when cash_rate > COALESCE(market_ratio, 0) then ROUND(cash_rate*prvs_rcdl_excc_amt*0.01, 0) else ROUND(COALESCE(market_ratio, 0)*prvs_rcdl_excc_amt*0.01, 0) end as buy_avail_cash from \"stockFundMng_stock_fund_mng\" where acct_no = '"+str(acct_no)+"') B, (select acct_no, risk_rate, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '"+str(acct_no)+"' and aply_end_dt = '99991231') C where A.acct_no = B.acct_no and A.acct_no = C.acct_no and A.acct_no = '"+str(acct_no)+"' and B.rownum = 1 and code = '"+code+"'")
+                    # result_four = cur21.fetchone()
+                    # cur21.close()
 
-                    if result_four != None:
+                    # if result_four != None:
 
-                        # 손절가
-                        loss_price = result_four[0]
-                        print("손절가 : " + format(loss_price, ',d'))
-                        # 종목손실금액
-                        item_loss_sum = result_four[1]
-                        print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                        # 매수량
-                        n_buy_amount = item_loss_sum / (int(buy_price) - loss_price)
-                        print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                        # 매수금액
-                        n_buy_sum = int(buy_price) * round(n_buy_amount)
-                        print("매수금액 : " + format(int(n_buy_sum), ',d'))
+                    #     # 손절가
+                    #     loss_price = result_four[0]
+                    #     print("손절가 : " + format(loss_price, ',d'))
+                    #     # 종목손실금액
+                    #     item_loss_sum = result_four[1]
+                    #     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                    #     # 매수량
+                    #     n_buy_amount = item_loss_sum / (int(buy_price) - loss_price)
+                    #     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                    #     # 매수금액
+                    #     n_buy_sum = int(buy_price) * round(n_buy_amount)
+                    #     print("매수금액 : " + format(int(n_buy_sum), ',d'))
 
-                        # 매수 가능(현금) 조회
-                        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                        print("매수 가능(현금) : " + format(int(b), ',d'));
-                        if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+                    #     # 매수 가능(현금) 조회
+                    #     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                    #     print("매수 가능(현금) : " + format(int(b), ',d'));
+                    #     if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
 
-                            g_buy_amount = round(n_buy_amount)
-                            g_buy_price = buy_price
-                            g_buy_code = code
-                            g_company = company
+                    #         g_buy_amount = round(n_buy_amount)
+                    #         g_buy_price = buy_price
+                    #         g_buy_code = code
+                    #         g_company = company
                             
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(round(n_buy_amount)), ',d') + "주, 손절가 : " + format(loss_price, ',d') + "원, 종목손실금액 : " + format(int(item_loss_sum), ',d') + "원, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
-                            get_handler = CommandHandler('buy', get_command1)
-                            updater.dispatcher.add_handler(get_handler)
+                    #         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(round(n_buy_amount)), ',d') + "주, 손절가 : " + format(loss_price, ',d') + "원, 종목손실금액 : " + format(int(item_loss_sum), ',d') + "원, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
+                    #         get_handler = CommandHandler('buy', get_command1)
+                    #         updater.dispatcher.add_handler(get_handler)
 
-                        else:
-                            print("매수 가능(현금) 부족")
-                            context.bot.send_message(chat_id=user_id, text="["+company + "] 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 매수 가능(현금) : " + format(int(b) - int(n_buy_sum), ',d') +"원 부족")
-                    else:
-                        print("관심종목 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
+                    #     else:
+                    #         print("매수 가능(현금) 부족")
+                    #         context.bot.send_message(chat_id=user_id, text="["+company + "] 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 매수 가능(현금) : " + format(int(b) - int(n_buy_sum), ',d') +"원 부족")
+                    # else:
+                    #     print("관심종목 미존재")
+                    #     context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
                 else:
                     print("매수가 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 매수가 미존재")
@@ -2162,10 +2218,11 @@ def echo(update, context):
                 chartReq = "0"
                 if len(user_text.split(",")) > 0:
                     
-                    commandBot = user_text.split(sep=',', maxsplit=2)
+                    commandBot = user_text.split(sep=',', maxsplit=3)
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수가    
+                    print("commandBot[2] : ", commandBot[2])    # 매수금액
 
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
@@ -2173,56 +2230,89 @@ def echo(update, context):
                     # 매수가
                     buy_price = commandBot[1]
                     print("매수가 : " + format(int(buy_price), ',d'))
-                    cur22 = conn.cursor()
-                    # 보유종목 및 관심종목정보 존재여부 조회
-                    cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' union select code from \"interestItem_interest_item\" where acct_no = '"+str(acct_no)+"') A where A.code = '"+code+"'")
-                    result_four = cur22.fetchone()
-                    cur22.close()
 
-                    if result_four != None:
+                    if commandBot[2].isdecimal():
+                        buy_expect_sum = commandBot[2]
+                        print("매수금액 : " + format(buy_expect_sum, ',d'))
+                        # 매수량
+                        n_buy_amount = round(buy_expect_sum / int(buy_price))
+                        print("매수량 : " + format(int(n_buy_amount), ',d'))
+                        # 매수금액
+                        n_buy_sum = int(buy_price) * int(n_buy_amount)
+                        print("매수금액 : " + format(int(n_buy_sum), ',d'))
+
+                        # 매수 가능(현금) 조회
+                        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                        print("매수 가능(현금) : " + format(int(b), ',d'));
+                        if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+                                                        
+                            g_buy_amount = n_buy_amount
+                            g_buy_price = buy_price
+                            g_buy_code = code
+                            g_company = company
+                        
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(n_buy_amount), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
+                            get_handler = CommandHandler('buy', get_command1)
+                            updater.dispatcher.add_handler(get_handler)
+                        
+                        else:
+                            print("매수 가능(현금) 부족")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수금액 : " + format(n_buy_sum, ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+
+                    else:
+                        print("매수금액 미존재")
+                        context.bot.send_message(chat_id=user_id, text=company + " : 매수금액 미존재")   
+
+                    # cur22 = conn.cursor()
+                    # 보유종목 및 관심종목정보 존재여부 조회
+                    # cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' union select code from \"interestItem_interest_item\" where acct_no = '"+str(acct_no)+"') A where A.code = '"+code+"'")
+                    # result_four = cur22.fetchone()
+                    # cur22.close()
+
+                    # if result_four != None:
 
                         # 시가총액 기준 매수예상금액 설정
-                        if int(a['hts_avls']) > 5000:
-                            buy_expect_sum = 5000000
-                        elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 2000000
-                        else:
-                            buy_expect_sum = 3000000
+                        # if int(a['hts_avls']) > 5000:
+                        #     buy_expect_sum = 5000000
+                        # elif int(a['hts_avls']) < 2000:
+                        #     buy_expect_sum = 2000000
+                        # else:
+                        #     buy_expect_sum = 3000000
 
-                        print("매수예상금액 : " + format(buy_expect_sum, ',d'))
+                        # print("매수예상금액 : " + format(buy_expect_sum, ',d'))
 
-                        if buy_expect_sum > 0:
+                        # if buy_expect_sum > 0:
 
-                            # 매수량
-                            n_buy_amount = round(buy_expect_sum / int(buy_price))
-                            print("매수량 : " + format(int(n_buy_amount), ',d'))
-                            # 매수금액
-                            n_buy_sum = int(buy_price) * int(n_buy_amount)
-                            print("매수금액 : " + format(int(n_buy_sum), ',d'))
+                        #     # 매수량
+                        #     n_buy_amount = round(buy_expect_sum / int(buy_price))
+                        #     print("매수량 : " + format(int(n_buy_amount), ',d'))
+                        #     # 매수금액
+                        #     n_buy_sum = int(buy_price) * int(n_buy_amount)
+                        #     print("매수금액 : " + format(int(n_buy_sum), ',d'))
 
-                            # 매수 가능(현금) 조회
-                            b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                            print("매수 가능(현금) : " + format(int(b), ',d'));
-                            if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+                        #     # 매수 가능(현금) 조회
+                        #     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                        #     print("매수 가능(현금) : " + format(int(b), ',d'));
+                        #     if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
                                                             
-                                g_buy_amount = n_buy_amount
-                                g_buy_price = buy_price
-                                g_buy_code = code
-                                g_company = company
+                        #         g_buy_amount = n_buy_amount
+                        #         g_buy_price = buy_price
+                        #         g_buy_code = code
+                        #         g_company = company
                             
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(n_buy_amount), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
-                                get_handler = CommandHandler('buy', get_command1)
-                                updater.dispatcher.add_handler(get_handler)
+                        #         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(n_buy_amount), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
+                        #         get_handler = CommandHandler('buy', get_command1)
+                        #         updater.dispatcher.add_handler(get_handler)
                             
-                            else:
-                                    print("매수 가능(현금) 부족")
-                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수금액 : " + format(n_buy_sum, ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
-                        else:
-                            print("매수예상금액 미설정")
-                            context.bot.send_message(chat_id=user_id, text=company + " : 매수예상금액 미설정")
-                    else:
-                        print("보유종목 및 관심종목 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
+                        #     else:
+                        #             print("매수 가능(현금) 부족")
+                        #             context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수금액 : " + format(n_buy_sum, ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                        # else:
+                        #     print("매수예상금액 미설정")
+                        #     context.bot.send_message(chat_id=user_id, text=company + " : 매수예상금액 미설정")
+                    # else:
+                    #     print("보유종목 및 관심종목 미존재")
+                    #     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
                 else:
                     print("매수가 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 매수가 미존재")
@@ -2236,6 +2326,7 @@ def echo(update, context):
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수량
+                    print("commandBot[2] : ", commandBot[2])    # 매수금액
 
                 # 매수량 존재시
                 if commandBot[1].isdecimal():
@@ -2243,31 +2334,16 @@ def echo(update, context):
                     # 매수량
                     buy_amount = commandBot[1]
                     print("매수량 : " + format(int(buy_amount), ',d'))
-                    cur22 = conn.cursor()
-                    # 보유종목 및 관심종목정보 존재여부 조회
-                    cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' union select code from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "') A where A.code = '" + code + "'")
-                    result_four = cur22.fetchone()
-                    cur22.close()
+                     # 매수금액
+                    n_buy_sum = int(a['stck_prpr']) * int(buy_amount)
+                    print("현재가 : " + format(int(a['stck_prpr']), ',d'))
+                    print("매수금액 : " + format(int(n_buy_sum), ',d'))
 
-                    if result_four != None:
-
-                        # 매수금액
-                        n_buy_sum = int(a['stck_prpr']) * int(buy_amount)
-                        print("현재가 : " + format(int(a['stck_prpr']), ',d'))
-                        print("매수금액 : " + format(int(n_buy_sum), ',d'))
-
-                        # 시가총액 기준 매수예상금액 설정
-                        if int(a['hts_avls']) > 5000:
-                            buy_expect_sum = 5000000
-                        elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 2000000
-                        else:
-                            buy_expect_sum = 3000000
-
-                        print("매수예상금액 : " + format(buy_expect_sum, ',d'))
-
+                    if commandBot[2].isdecimal():
+                        buy_expect_sum = commandBot[2]
+                        print("매수금액 : " + format(buy_expect_sum, ',d'))
+                        
                         if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
-
                             # 매수 가능(현금) 조회
                             b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                             print("매수 가능(현금) : " + format(int(b), ',d'));
@@ -2285,12 +2361,63 @@ def echo(update, context):
                             else:
                                 print("매수 가능(현금) 부족")
                                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                        
                         else:
                             print("매수량 매수예상금액 초과")
                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                            
                     else:
-                        print("보유종목 및 관심종목 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
+                        print("매수금액 미존재")
+                        context.bot.send_message(chat_id=user_id, text=company + " : 매수금액 미존재")   
+                        
+                    # cur22 = conn.cursor()
+                    # # 보유종목 및 관심종목정보 존재여부 조회
+                    # cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' union select code from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "') A where A.code = '" + code + "'")
+                    # result_four = cur22.fetchone()
+                    # cur22.close()
+
+                    # if result_four != None:
+
+                    #     # 매수금액
+                    #     n_buy_sum = int(a['stck_prpr']) * int(buy_amount)
+                    #     print("현재가 : " + format(int(a['stck_prpr']), ',d'))
+                    #     print("매수금액 : " + format(int(n_buy_sum), ',d'))
+
+                    #     # 시가총액 기준 매수예상금액 설정
+                    #     if int(a['hts_avls']) > 5000:
+                    #         buy_expect_sum = 5000000
+                    #     elif int(a['hts_avls']) < 2000:
+                    #         buy_expect_sum = 2000000
+                    #     else:
+                    #         buy_expect_sum = 3000000
+
+                    #     print("매수예상금액 : " + format(buy_expect_sum, ',d'))
+
+                    #     if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
+
+                    #         # 매수 가능(현금) 조회
+                    #         b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                    #         print("매수 가능(현금) : " + format(int(b), ',d'));
+                    #         if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+
+                    #             g_buy_amount = buy_amount
+                    #             g_buy_price = int(a['stck_prpr'])
+                    #             g_buy_code = code
+                    #             g_company = company
+                                
+                    #             context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                    #             get_handler = CommandHandler('buy', get_command1)
+                    #             updater.dispatcher.add_handler(get_handler)
+
+                    #         else:
+                    #             print("매수 가능(현금) 부족")
+                    #             context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                    #     else:
+                    #         print("매수량 매수예상금액 초과")
+                    #         context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                    # else:
+                    #     print("보유종목 및 관심종목 미존재")
+                    #     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
                 else:
                     print("매수량 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 매수량 미존재")
@@ -2311,53 +2438,90 @@ def echo(update, context):
                     # 매수량
                     buy_amount = commandBot[1]
                     print("매수량 : " + format(int(buy_amount), ',d'))
-                    cur22 = conn.cursor()
-                    # 보유종목 및 관심종목정보 존재여부 조회
-                    cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' union select code from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "') A where A.code = '" + code + "'")
-                    result_four = cur22.fetchone()
-                    cur22.close()
+                    # 매수금액
+                    n_buy_sum = int(commandBot[2]) * int(buy_amount)
+                    print("매수금액 : " + format(int(n_buy_sum), ',d'))
 
-                    if result_four != None:
-
-                        # 매수금액
-                        n_buy_sum = int(commandBot[2]) * int(buy_amount)
-                        print("매수금액 : " + format(int(n_buy_sum), ',d'))
-
-                        # 시가총액 기준 매수예상금액 설정
-                        if int(a['hts_avls']) > 5000:
-                            buy_expect_sum = 5000000
-                        elif int(a['hts_avls']) < 2000:
-                            buy_expect_sum = 2000000
-                        else:
-                            buy_expect_sum = 3000000
-
-                        print("매수예상금액 : " + format(buy_expect_sum, ',d'))
-
-                        if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
-
-                            # 매수 가능(현금) 조회
-                            b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                            print("매수 가능(현금) : " + format(int(b), ',d'));
-                            if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
-
-                                g_buy_amount = buy_amount
-                                g_buy_price = int(commandBot[2])
-                                g_buy_code = code
-                                g_company = company
-                                
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
-                                get_handler = CommandHandler('buy', get_command1)
-                                updater.dispatcher.add_handler(get_handler)
-
-                            else:
-                                print("매수 가능(현금) 부족")
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
-                        else:
-                            print("매수량 매수예상금액 초과")
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                    # 시가총액 기준 매수예상금액 설정
+                    if int(a['hts_avls']) > 5000:
+                        buy_expect_sum = 5000000
+                    elif int(a['hts_avls']) < 2000:
+                        buy_expect_sum = 2000000
                     else:
-                        print("보유종목 및 관심종목 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
+                        buy_expect_sum = 3000000
+
+                    print("매수예상금액 : " + format(buy_expect_sum, ',d'))
+
+                    if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
+
+                        # 매수 가능(현금) 조회
+                        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                        print("매수 가능(현금) : " + format(int(b), ',d'));
+                        if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+
+                            g_buy_amount = buy_amount
+                            g_buy_price = int(commandBot[2])
+                            g_buy_code = code
+                            g_company = company
+                            
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                            get_handler = CommandHandler('buy', get_command1)
+                            updater.dispatcher.add_handler(get_handler)
+
+                        else:
+                            print("매수 가능(현금) 부족")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                    else:
+                        print("매수량 매수예상금액 초과")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+
+                    # cur22 = conn.cursor()
+                    # # 보유종목 및 관심종목정보 존재여부 조회
+                    # cur22.execute("select code from (select code from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' union select code from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "') A where A.code = '" + code + "'")
+                    # result_four = cur22.fetchone()
+                    # cur22.close()
+
+                    # if result_four != None:
+
+                    #     # 매수금액
+                    #     n_buy_sum = int(commandBot[2]) * int(buy_amount)
+                    #     print("매수금액 : " + format(int(n_buy_sum), ',d'))
+
+                    #     # 시가총액 기준 매수예상금액 설정
+                    #     if int(a['hts_avls']) > 5000:
+                    #         buy_expect_sum = 5000000
+                    #     elif int(a['hts_avls']) < 2000:
+                    #         buy_expect_sum = 2000000
+                    #     else:
+                    #         buy_expect_sum = 3000000
+
+                    #     print("매수예상금액 : " + format(buy_expect_sum, ',d'))
+
+                    #     if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
+
+                    #         # 매수 가능(현금) 조회
+                    #         b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                    #         print("매수 가능(현금) : " + format(int(b), ',d'));
+                    #         if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+
+                    #             g_buy_amount = buy_amount
+                    #             g_buy_price = int(commandBot[2])
+                    #             g_buy_code = code
+                    #             g_company = company
+                                
+                    #             context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                    #             get_handler = CommandHandler('buy', get_command1)
+                    #             updater.dispatcher.add_handler(get_handler)
+
+                    #         else:
+                    #             print("매수 가능(현금) 부족")
+                    #             context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                    #     else:
+                    #         print("매수량 매수예상금액 초과")
+                    #         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                    # else:
+                    #     print("보유종목 및 관심종목 미존재")
+                    #     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
                 else:
                     print("매수량 또는 매수가 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 매수량 또는 매수가 미존재")        
