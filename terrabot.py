@@ -1291,7 +1291,7 @@ def callback_get(update, context) :
 
     if data_selected.find("종목검색") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["거래폭발", "단기추세", "투자혁명", "취소"], data_selected)
+            button_list = build_button(["거래폭발", "단기추세", "투자혁명", "파워급등주", "파워종목", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="종목검색 메뉴를 선택해 주세요.",
@@ -1351,7 +1351,7 @@ def callback_get(update, context) :
 
             elif data_selected.find("파워급등주") != -1:
 
-                if len(data_selected.split(",")) == 3:
+                if len(data_selected.split(",")) == 2:
                     context.bot.edit_message_text(text="[종목검색-파워급등주]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
@@ -1365,7 +1365,7 @@ def callback_get(update, context) :
 
             elif data_selected.find("파워종목") != -1:
 
-                if len(data_selected.split(",")) == 4:
+                if len(data_selected.split(",")) == 2:
                     context.bot.edit_message_text(text="[종목검색-파워종목]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
