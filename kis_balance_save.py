@@ -89,7 +89,47 @@ if result_one == None:
                 cur02.execute(insert_query, record_to_insert)
                 conn.commit()
 
+        item_search4 = ka.inquire_search_result("phills2", "3")
+        number = 0
+        for i in item_search4:
 
+            number = number + 1
+        
+            # DB 연결된 커서의 쿼리 수행
+            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "파워급등주"))
+            # DB에서 하나의 결과값 가져오기
+            result_two3 = cur01.fetchone()
+
+            # DB 미존재시
+            if result_two3 == None:
+                # insert 쿼리
+                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                # insert 인자값 설정
+                record_to_insert = ([today, time, "파워급등주", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
+                # DB 연결된 커서의 쿼리 수행
+                cur02.execute(insert_query, record_to_insert)
+                conn.commit()
+
+        item_search5 = ka.inquire_search_result("phills2", "4")
+        number = 0
+        for i in item_search5:
+
+            number = number + 1
+        
+            # DB 연결된 커서의 쿼리 수행
+            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "파워종목"))
+            # DB에서 하나의 결과값 가져오기
+            result_two3 = cur01.fetchone()
+
+            # DB 미존재시
+            if result_two3 == None:
+                # insert 쿼리
+                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                # insert 인자값 설정
+                record_to_insert = ([today, time, "파워종목", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
+                # DB 연결된 커서의 쿼리 수행
+                cur02.execute(insert_query, record_to_insert)
+                conn.commit()
 
         # DB 연결된 커서 설정
         cur1 = conn.cursor()        
