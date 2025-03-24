@@ -30,6 +30,10 @@ elif arguments[1] == '1':
     search_name = "단기추세"
 elif arguments[1] == '2':
     search_name = "투자혁명"
+elif arguments[1] == '3':
+    search_name = "파워급등주"
+elif arguments[1] == '4':
+    search_name = "파워종목"        
 
 # 텔레그램봇 사용할 token
 if arguments[2] == 'chichipa':
@@ -78,7 +82,7 @@ def inquire_search_result(access_token, app_key, app_secret, id, seq):
     URL = f"{URL_BASE}/{PATH}"
     res = requests.get(URL, headers=headers, params=params, verify=False)
     ar = resp.APIResp(res)
-    #ar.printAll()
+    ar.printAll()
     return ar.getBody().output2
 
 async def main(telegram_text):
