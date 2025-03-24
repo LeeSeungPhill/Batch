@@ -27,6 +27,10 @@ def search(access_token, app_key, app_secret, search_choice, user_token):
         search_name = "단기추세"
     elif search_choice == '2':
         search_name = "투자혁명"
+    elif search_choice == '3':
+        search_name = "파워급등주"
+    elif search_choice == '4':
+        search_name = "파워종목"        
 
     # 텔레그램봇 사용할 token
     if user_token == 'chichipa':

@@ -1349,6 +1349,34 @@ def callback_get(update, context) :
                     # 종목검색-투자혁명 호출
                     search.search(access_token, app_key, app_secret, '2', 'phills2')   
 
+            elif data_selected.find("파워급등주") != -1:
+
+                if len(data_selected.split(",")) == 3:
+                    context.bot.edit_message_text(text="[종목검색-파워급등주]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+                    ac = account()
+                    access_token = ac['access_token']
+                    app_key = ac['app_key']
+                    app_secret = ac['app_secret']
+
+                    # 종목검색-투자혁명 호출
+                    search.search(access_token, app_key, app_secret, '3', 'phills2')   
+
+            elif data_selected.find("파워종목") != -1:
+
+                if len(data_selected.split(",")) == 4:
+                    context.bot.edit_message_text(text="[종목검색-파워종목]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+                    ac = account()
+                    access_token = ac['access_token']
+                    app_key = ac['app_key']
+                    app_secret = ac['app_secret']
+
+                    # 종목검색-투자혁명 호출
+                    search.search(access_token, app_key, app_secret, '4', 'phills2')                   
+
     if data_selected.find("초기화") != -1:
         context.bot.edit_message_text(text="초기화 진행합니다.",
                                       chat_id=update.callback_query.message.chat_id,
