@@ -74,7 +74,6 @@ def search(access_token, app_key, app_secret, user_token, search_choice):
 
     number = 0
     cur01 = conn.cursor()
-    cur02 = conn.cursor()
 
     for i in item_search:
 
@@ -91,27 +90,42 @@ def search(access_token, app_key, app_secret, user_token, search_choice):
         print("저가 : " + format(math.ceil(float(i['low'])), ',d'))     
         print("시가총액 : " + format(int(round(float(i['stotprice']))), ',d'))
     
-        # DB 연결된 커서의 쿼리 수행
-        cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, search_name))
-        # DB에서 하나의 결과값 가져오기
-        result_one = cur01.fetchone()
+        # 텔레그램 메시지 전송
+        telegram_text = "<" + search_name + "(" + str(number) + ")> " + i['name'] + "[" + i['code'] + "] 현재가 : " + format(math.ceil(float(i['price'])), ',d') + "원, 등략율 : " + str(round(float(i['chgrate']), 2)) + "%, 거래량 : " + format(math.ceil(float(i['acml_vol'])), ',d') + "주, 전일대비 : " + str(round(float(i['chgrate2']), 2)) + "%, 고가 : " + format(math.ceil(float(i['high'])), ',d') + "원, 저가 : " + format(math.ceil(float(i['low'])), ',d') + "원, 시가총액 : " + format(int(round(float(i['stotprice']))), ',d') + "억원"
+        # 텔레그램 메시지 전송
+        bot.send_message(chat_id="2147256258", text=telegram_text)
 
-        # DB 미존재시
-        if result_one == None:
-            # 텔레그램 메시지 전송
-            telegram_text = "<" + search_name + "(" + str(number) + ")> " + i['name'] + "[" + i['code'] + "] 현재가 : " + format(math.ceil(float(i['price'])), ',d') + "원, 등략율 : " + str(round(float(i['chgrate']), 2)) + "%, 거래량 : " + format(math.ceil(float(i['acml_vol'])), ',d') + "주, 전일대비 : " + str(round(float(i['chgrate2']), 2)) + "%, 고가 : " + format(math.ceil(float(i['high'])), ',d') + "원, 저가 : " + format(math.ceil(float(i['low'])), ',d') + "원, 시가총액 : " + format(int(round(float(i['stotprice']))), ',d') + "억원"
-            # 텔레그램 메시지 전송
-            bot.send_message(chat_id="2147256258", text=telegram_text)
-            # insert 쿼리
-            insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            # insert 인자값 설정
-            record_to_insert = ([today, time, search_name, i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), i['chgrate'], math.ceil(float(i['acml_vol'])), i['chgrate2'], int(round(float(i['stotprice']))), datetime.now()])
-            # DB 연결된 커서의 쿼리 수행
-            cur02.execute(insert_query, record_to_insert)
-            conn.commit()
-        else:
-            print("already exists")
+        ins_param1 = (
+            time,
+            math.ceil(float(i['low'])),
+            math.ceil(float(i['high'])), 
+            math.ceil(float(i['price'])),
+            i['chgrate'],
+            math.ceil(float(i['acml_vol'])),
+            i['chgrate2'],
+            int(round(float(i['stotprice']))), 
+            datetime.now(),
+            today,
+            search_name, 
+            i['code'],
+            today, 
+            time, 
+            search_name, 
+            i['code'], 
+            i['name'], 
+            math.ceil(float(i['low'])), 
+            math.ceil(float(i['high'])), 
+            math.ceil(float(i['price'])), 
+            i['chgrate'], 
+            math.ceil(float(i['acml_vol'])), 
+            i['chgrate2'], 
+            int(round(float(i['stotprice']))), 
+            datetime.now()
+        )
+
+        insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+        cur01.execute(insert_query, ins_param1)
+        conn.commit()
 
     cur01.close()
-    cur02.close()
     conn.close()
