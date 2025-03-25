@@ -26,25 +26,42 @@ if result_one == None:
         item_search1 = ka.inquire_search_result("phills2", "0")
         number = 0
         cur01 = conn.cursor()
-        cur02 = conn.cursor()
+
         for i in item_search1:
 
             number = number + 1
-        
-            # DB 연결된 커서의 쿼리 수행
-            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "거래폭발"))
-            # DB에서 하나의 결과값 가져오기
-            result_two1 = cur01.fetchone()
 
-            # DB 미존재시
-            if result_two1 == None:
-                # insert 쿼리
-                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # insert 인자값 설정
-                record_to_insert = ([today, time, "거래폭발", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur02.execute(insert_query, record_to_insert)
-                conn.commit()
+            ins_param1 = (
+                time,
+                math.ceil(float(i['low'])),
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])),
+                i['chgrate'],
+                math.ceil(float(i['acml_vol'])),
+                i['chgrate2'],
+                int(round(float(i['stotprice']))), 
+                datetime.now(),
+                today,
+                "거래폭발", 
+                i['code'],
+                today, 
+                time, 
+                "거래폭발", 
+                i['code'], 
+                i['name'], 
+                math.ceil(float(i['low'])), 
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])), 
+                i['chgrate'], 
+                math.ceil(float(i['acml_vol'])), 
+                i['chgrate2'], 
+                int(round(float(i['stotprice']))), 
+                datetime.now()
+            )
+
+            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+            cur01.execute(insert_query, ins_param1)
+            conn.commit()
 
         item_search2 = ka.inquire_search_result("phills2", "1")
         number = 0
@@ -52,21 +69,37 @@ if result_one == None:
 
             number = number + 1
         
-            # DB 연결된 커서의 쿼리 수행
-            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "단기추세"))
-            # DB에서 하나의 결과값 가져오기
-            result_two2 = cur01.fetchone()
+            ins_param1 = (
+                time,
+                math.ceil(float(i['low'])),
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])),
+                i['chgrate'],
+                math.ceil(float(i['acml_vol'])),
+                i['chgrate2'],
+                int(round(float(i['stotprice']))), 
+                datetime.now(),
+                today,
+                "단기추세", 
+                i['code'],
+                today, 
+                time, 
+                "단기추세", 
+                i['code'], 
+                i['name'], 
+                math.ceil(float(i['low'])), 
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])), 
+                i['chgrate'], 
+                math.ceil(float(i['acml_vol'])), 
+                i['chgrate2'], 
+                int(round(float(i['stotprice']))), 
+                datetime.now()
+            )
 
-            # DB 미존재시
-            if result_two2 == None:
-                # insert 쿼리
-                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # insert 인자값 설정
-                record_to_insert = ([today, time, "단기추세", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur02.execute(insert_query, record_to_insert)
-                conn.commit()
-
+            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+            cur01.execute(insert_query, ins_param1)
+            conn.commit()
 
         item_search3 = ka.inquire_search_result("phills2", "2")
         number = 0
@@ -74,20 +107,37 @@ if result_one == None:
 
             number = number + 1
         
-            # DB 연결된 커서의 쿼리 수행
-            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "투자혁명"))
-            # DB에서 하나의 결과값 가져오기
-            result_two3 = cur01.fetchone()
+            ins_param1 = (
+                time,
+                math.ceil(float(i['low'])),
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])),
+                i['chgrate'],
+                math.ceil(float(i['acml_vol'])),
+                i['chgrate2'],
+                int(round(float(i['stotprice']))), 
+                datetime.now(),
+                today,
+                "투자혁명", 
+                i['code'],
+                today, 
+                time, 
+                "투자혁명", 
+                i['code'], 
+                i['name'], 
+                math.ceil(float(i['low'])), 
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])), 
+                i['chgrate'], 
+                math.ceil(float(i['acml_vol'])), 
+                i['chgrate2'], 
+                int(round(float(i['stotprice']))), 
+                datetime.now()
+            )
 
-            # DB 미존재시
-            if result_two3 == None:
-                # insert 쿼리
-                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # insert 인자값 설정
-                record_to_insert = ([today, time, "투자혁명", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur02.execute(insert_query, record_to_insert)
-                conn.commit()
+            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+            cur01.execute(insert_query, ins_param1)
+            conn.commit()
 
         item_search4 = ka.inquire_search_result("phills2", "3")
         number = 0
@@ -95,41 +145,75 @@ if result_one == None:
 
             number = number + 1
         
-            # DB 연결된 커서의 쿼리 수행
-            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "파워급등주"))
-            # DB에서 하나의 결과값 가져오기
-            result_two3 = cur01.fetchone()
+            ins_param1 = (
+                time,
+                math.ceil(float(i['low'])),
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])),
+                i['chgrate'],
+                math.ceil(float(i['acml_vol'])),
+                i['chgrate2'],
+                int(round(float(i['stotprice']))), 
+                datetime.now(),
+                today,
+                "파워급등주", 
+                i['code'],
+                today, 
+                time, 
+                "파워급등주", 
+                i['code'], 
+                i['name'], 
+                math.ceil(float(i['low'])), 
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])), 
+                i['chgrate'], 
+                math.ceil(float(i['acml_vol'])), 
+                i['chgrate2'], 
+                int(round(float(i['stotprice']))), 
+                datetime.now()
+            )
 
-            # DB 미존재시
-            if result_two3 == None:
-                # insert 쿼리
-                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # insert 인자값 설정
-                record_to_insert = ([today, time, "파워급등주", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur02.execute(insert_query, record_to_insert)
-                conn.commit()
+            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+            cur01.execute(insert_query, ins_param1)
+            conn.commit()
 
         item_search5 = ka.inquire_search_result("phills2", "4")
         number = 0
         for i in item_search5:
 
             number = number + 1
-        
-            # DB 연결된 커서의 쿼리 수행
-            cur01.execute("select code from stock_search_form where code = %s and search_day = %s and search_name = %s", (i['code'], today, "파워종목"))
-            # DB에서 하나의 결과값 가져오기
-            result_two3 = cur01.fetchone()
 
-            # DB 미존재시
-            if result_two3 == None:
-                # insert 쿼리
-                insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # insert 인자값 설정
-                record_to_insert = ([today, time, "파워종목", i['code'], i['name'], math.ceil(float(i['low'])), math.ceil(float(i['high'])), math.ceil(float(i['price'])), int(round(float(i['chgrate']), 2)), math.ceil(float(i['acml_vol'])), int(round(float(i['chgrate2']), 2)), int(round(float(i['stotprice']))), datetime.datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur02.execute(insert_query, record_to_insert)
-                conn.commit()
+            ins_param1 = (
+                time,
+                math.ceil(float(i['low'])),
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])),
+                i['chgrate'],
+                math.ceil(float(i['acml_vol'])),
+                i['chgrate2'],
+                int(round(float(i['stotprice']))), 
+                datetime.now(),
+                today,
+                "파워종목", 
+                i['code'],
+                today, 
+                time, 
+                "파워종목", 
+                i['code'], 
+                i['name'], 
+                math.ceil(float(i['low'])), 
+                math.ceil(float(i['high'])), 
+                math.ceil(float(i['price'])), 
+                i['chgrate'], 
+                math.ceil(float(i['acml_vol'])), 
+                i['chgrate2'], 
+                int(round(float(i['stotprice']))), 
+                datetime.now()
+            )
+
+            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+            cur01.execute(insert_query, ins_param1)
+            conn.commit()
 
         # DB 연결된 커서 설정
         cur1 = conn.cursor()        
@@ -284,7 +368,6 @@ if result_one == None:
             conn.commit()
 
         cur01.close()
-        cur02.close()
         cur1.close()
         cur11.close()
         cur2.close()
@@ -294,7 +377,6 @@ if result_one == None:
 
     except Exception as ex:
         cur01.close()
-        cur02.close()
         cur1.close()
         cur11.close()
         cur2.close()
