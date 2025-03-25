@@ -53,12 +53,12 @@ elif arguments[1] == 'phills15':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
 elif arguments[1] == 'phills2':
     token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[1] == 'phills2':
-    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
+elif arguments[1] == 'phills75':
+    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
 elif arguments[1] == 'yh480825':
     token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
 else:
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"    
+    token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"    
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
@@ -1319,7 +1319,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-거래폭발 호출
-                    search.search(access_token, app_key, app_secret, 'phills2', '0')
+                    search.search(access_token, app_key, app_secret, arguments[1], '0')
                     
             elif data_selected.find("단기추세") != -1:
 
@@ -1333,7 +1333,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-단기추세 호출
-                    search.search(access_token, app_key, app_secret, 'phills2', '1')           
+                    search.search(access_token, app_key, app_secret, arguments[1], '1')           
 
             elif data_selected.find("투자혁명") != -1:
 
@@ -1347,7 +1347,7 @@ def callback_get(update, context) :
                     app_secret = ac['app_secret']
 
                     # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, 'phills2', '2')   
+                    search.search(access_token, app_key, app_secret, arguments[1], '2')   
 
             elif data_selected.find("파워급등주") != -1:
 
@@ -1360,8 +1360,8 @@ def callback_get(update, context) :
                     app_key = ac['app_key']
                     app_secret = ac['app_secret']
 
-                    # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, 'phills2', '3')   
+                    # 종목검색-파워급등주 호출
+                    search.search(access_token, app_key, app_secret, arguments[1], '3')   
 
             elif data_selected.find("파워종목") != -1:
 
@@ -1374,8 +1374,8 @@ def callback_get(update, context) :
                     app_key = ac['app_key']
                     app_secret = ac['app_secret']
 
-                    # 종목검색-투자혁명 호출
-                    search.search(access_token, app_key, app_secret, 'phills2', '4')                   
+                    # 종목검색-파워종목 호출
+                    search.search(access_token, app_key, app_secret, arguments[1], '4')                   
 
     if data_selected.find("초기화") != -1:
         context.bot.edit_message_text(text="초기화 진행합니다.",

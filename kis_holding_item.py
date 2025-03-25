@@ -31,10 +31,12 @@ elif arguments[1] == 'phills15':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
 elif arguments[1] == 'phills2':
     token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[1] == 'yh480825':
-    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"
-else:
+elif arguments[1] == 'phills75':
     token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
+elif arguments[1] == 'yh480825':
+    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
+else:
+    token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"    
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
