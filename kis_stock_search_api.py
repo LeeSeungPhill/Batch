@@ -12,7 +12,7 @@ URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 #conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
-def search(access_token, app_key, app_secret, search_choice, user_token):
+def search(access_token, app_key, app_secret, user_token, search_choice):
 
     today = datetime.now().strftime("%Y%m%d")
     time = datetime.now().strftime("%H%M")
@@ -63,12 +63,9 @@ def search(access_token, app_key, app_secret, search_choice, user_token):
         }
         PATH = "/uapi/domestic-stock/v1/quotations/psearch-result"
         URL = f"{URL_BASE}/{PATH}"
-        print("headers : ", headers)
-        print("params : ", params)
-        print("URL : ", URL)
         res = requests.get(URL, headers=headers, params=params, verify=False)
         ar = resp.APIResp(res)
-        ar.printAll()
+        #ar.printAll()
         return ar.getBody().output2
 
     item_search = inquire_search_result(access_token, app_key, app_secret, 'phills2', search_choice)  # 종목조건검색 조회
