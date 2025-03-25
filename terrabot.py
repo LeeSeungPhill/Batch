@@ -2164,7 +2164,7 @@ def echo(update, context):
                             item_loss_sum = commandBot[3]
                             print("손절금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
-                            n_buy_amount = item_loss_sum / (int(buy_price) - loss_price)
+                            n_buy_amount = int(item_loss_sum) / (int(buy_price) - int(loss_price))
                             print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(buy_price) * round(n_buy_amount)
@@ -2261,9 +2261,9 @@ def echo(update, context):
 
                     if commandBot[2].isdecimal():
                         buy_expect_sum = commandBot[2]
-                        print("매수금액 : " + format(buy_expect_sum, ',d'))
+                        print("매수금액 : " + format(int(buy_expect_sum), ',d'))
                         # 매수량
-                        n_buy_amount = round(buy_expect_sum / int(buy_price))
+                        n_buy_amount = round(int(buy_expect_sum) / int(buy_price))
                         print("매수량 : " + format(int(n_buy_amount), ',d'))
                         # 매수금액
                         n_buy_sum = int(buy_price) * int(n_buy_amount)
@@ -2369,9 +2369,9 @@ def echo(update, context):
 
                     if commandBot[2].isdecimal():
                         buy_expect_sum = commandBot[2]
-                        print("매수금액 : " + format(buy_expect_sum, ',d'))
+                        print("매수금액 : " + format(int(buy_expect_sum), ',d'))
                         
-                        if buy_expect_sum >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
+                        if int(buy_expect_sum) >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
                             # 매수 가능(현금) 조회
                             b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                             print("매수 가능(현금) : " + format(int(b), ',d'));
@@ -2382,7 +2382,7 @@ def echo(update, context):
                                 g_buy_code = code
                                 g_company = company
                                 
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(int(buy_expect_sum), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
                                 get_handler = CommandHandler('buy', get_command1)
                                 updater.dispatcher.add_handler(get_handler)
 
@@ -2392,7 +2392,7 @@ def echo(update, context):
                         
                         else:
                             print("매수량 매수예상금액 초과")
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(int(buy_expect_sum), ',d') + "원, " + format(int(buy_expect_sum) - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
                             
                     else:
                         print("매수금액 미존재")
