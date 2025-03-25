@@ -63,9 +63,12 @@ def search(access_token, app_key, app_secret, search_choice, user_token):
         }
         PATH = "/uapi/domestic-stock/v1/quotations/psearch-result"
         URL = f"{URL_BASE}/{PATH}"
+        print("headers : ", headers)
+        print("params : ", params)
+        print("URL : ", URL)
         res = requests.get(URL, headers=headers, params=params, verify=False)
         ar = resp.APIResp(res)
-        #ar.printAll()
+        ar.printAll()
         return ar.getBody().output2
 
     item_search = inquire_search_result(access_token, app_key, app_secret, 'phills2', search_choice)  # 종목조건검색 조회
