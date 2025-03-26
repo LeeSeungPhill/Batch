@@ -727,7 +727,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("매수") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["종목손실금액", "매수예상금액", "매수량", "매수가", "취소"], data_selected)
+            button_list = build_button(["손절금액", "매수금액", "현재가", "수량수가", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="매수 종류를 선택해 주세요.",
@@ -743,28 +743,28 @@ def callback_get(update, context) :
                                               message_id=update.callback_query.message.message_id)
                 return
 
-            elif data_selected.find("종목손실금액") != -1:
+            elif data_selected.find("손절금액") != -1:
                 menuNum = "21"
 
-                context.bot.edit_message_text(text="종목손실금액 기준 매수의 종목코드, 매수가, 이탈가, 손절금액을 입력하세요.",
+                context.bot.edit_message_text(text="종목손절금액 기준 매수의 종목코드, 매수가, 이탈가, 손절금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매수예상금액") != -1:
+            elif data_selected.find("매수금액") != -1:
                 menuNum = "22"
 
-                context.bot.edit_message_text(text="매수예상금액 기준 매수의 종목코드, 매수가, 매수금액을 입력하세요.",
+                context.bot.edit_message_text(text="매수금액 기준 매수의 종목코드, 매수가, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매수량") != -1:
+            elif data_selected.find("현재가") != -1:
                 menuNum = "23"
 
-                context.bot.edit_message_text(text="매수량 기준 매수의 종목코드, 매수량, 매수금액을 입력하세요.",
+                context.bot.edit_message_text(text="현재가 기준 매수의 종목코드, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매수가") != -1:
+            elif data_selected.find("수량수가") != -1:
                 menuNum = "24"
 
                 context.bot.edit_message_text(text="종목코드, 매수량, 매수가를 입력하세요.",
@@ -773,7 +773,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("매도") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["전체", "절반", "매도량", "매도가", "취소"], data_selected)
+            button_list = build_button(["전체", "절반", "현재가", "도량도가", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="매도 종류를 선택해 주세요.",
@@ -803,14 +803,14 @@ def callback_get(update, context) :
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매도량") != -1:
+            elif data_selected.find("현재가") != -1:
                 menuNum = "33"
 
-                context.bot.edit_message_text(text="매도량 기준 매도의 종목코드, 매도량을 입력하세요.",
+                context.bot.edit_message_text(text="현재가 기준 매도의 종목코드, 매도량을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매도가") != -1:
+            elif data_selected.find("도량도가") != -1:
                 menuNum = "34"
 
                 context.bot.edit_message_text(text="종목코드, 매도량, 매도가를 입력하세요.",
@@ -2154,11 +2154,13 @@ def echo(update, context):
                     buy_price = commandBot[1]
                     print("매수가 : " + format(int(buy_price), ',d'))
 
+                    # 이탈가 존재시
                     if commandBot[2].isdecimal():
                         # 이탈가
                         loss_price = commandBot[2]
                         print("이탈가 : " + format(int(loss_price), ',d'))
 
+                        # 손절금액 존재시
                         if commandBot[3].isdecimal():
                             # 손절금액
                             item_loss_sum = commandBot[3]
@@ -2250,7 +2252,7 @@ def echo(update, context):
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수가    
-                    print("commandBot[2] : ", commandBot[2])    # 매수금액
+                    print("commandBot[2] : ", commandBot[2])    # 매수예정금액
 
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
@@ -2259,9 +2261,10 @@ def echo(update, context):
                     buy_price = commandBot[1]
                     print("매수가 : " + format(int(buy_price), ',d'))
 
+                    # 매수예정금액 존재시
                     if commandBot[2].isdecimal():
                         buy_expect_sum = commandBot[2]
-                        print("매수금액 : " + format(int(buy_expect_sum), ',d'))
+                        print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
                         # 매수량
                         n_buy_amount = round(int(buy_expect_sum) / int(buy_price))
                         print("매수량 : " + format(int(n_buy_amount), ',d'))
@@ -2288,8 +2291,8 @@ def echo(update, context):
                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수금액 : " + format(n_buy_sum, ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
 
                     else:
-                        print("매수금액 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 매수금액 미존재")   
+                        print("매수예정금액 미존재")
+                        context.bot.send_message(chat_id=user_id, text=company + " : 매수예정금액 미존재")   
 
                     # cur22 = conn.cursor()
                     # 보유종목 및 관심종목정보 존재여부 조회
@@ -2353,50 +2356,43 @@ def echo(update, context):
                     commandBot = user_text.split(sep=',', maxsplit=2)
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
-                    print("commandBot[1] : ", commandBot[1])    # 매수량
-                    print("commandBot[2] : ", commandBot[2])    # 매수금액
+                    print("commandBot[1] : ", commandBot[1])    # 매수예정금액
 
-                # 매수량 존재시
+                # 매수예정금액 존재시
                 if commandBot[1].isdecimal():
 
+                    # 매수예정금액
+                    buy_expect_sum = commandBot[1]
+                    print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
                     # 매수량
-                    buy_amount = commandBot[1]
-                    print("매수량 : " + format(int(buy_amount), ',d'))
-                     # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * int(buy_amount)
-                    print("현재가 : " + format(int(a['stck_prpr']), ',d'))
+                    n_buy_amount = round(int(buy_expect_sum) / int(a['stck_prpr']))
+                    print("매수량 : " + format(int(n_buy_amount), ',d'))
+                    # 매수금액
+                    n_buy_sum = int(a['stck_prpr']) * int(n_buy_amount)
                     print("매수금액 : " + format(int(n_buy_sum), ',d'))
+                    
+                    # 매수 가능(현금) 조회
+                    b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                    print("매수 가능(현금) : " + format(int(b), ',d'));
+                    
+                    if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
 
-                    if commandBot[2].isdecimal():
-                        buy_expect_sum = commandBot[2]
-                        print("매수금액 : " + format(int(buy_expect_sum), ',d'))
+                        g_buy_amount = n_buy_amount
+                        g_buy_price = int(a['stck_prpr'])
+                        g_buy_code = code
+                        g_company = company
                         
-                        if int(buy_expect_sum) >= n_buy_sum: # 매수예상금액이 매수금액보다 큰 경우
-                            # 매수 가능(현금) 조회
-                            b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                            print("매수 가능(현금) : " + format(int(b), ',d'));
-                            if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " + format(int(n_buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                        get_handler = CommandHandler('buy', get_command1)
+                        updater.dispatcher.add_handler(get_handler)
 
-                                g_buy_amount = buy_amount
-                                g_buy_price = int(a['stck_prpr'])
-                                g_buy_code = code
-                                g_company = company
-                                
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(int(buy_expect_sum), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
-                                get_handler = CommandHandler('buy', get_command1)
-                                updater.dispatcher.add_handler(get_handler)
-
-                            else:
-                                print("매수 가능(현금) 부족")
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
-                        
-                        else:
-                            print("매수량 매수예상금액 초과")
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수예상금액 : " + format(int(buy_expect_sum), ',d') + "원, " + format(int(buy_expect_sum) - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
-                            
                     else:
-                        print("매수금액 미존재")
-                        context.bot.send_message(chat_id=user_id, text=company + " : 매수금액 미존재")   
+                        print("매수 가능(현금) 부족")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                    
+                else:
+                    print("매수예정금액 미존재")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 매수예정금액 미존재")   
                         
                     # cur22 = conn.cursor()
                     # # 보유종목 및 관심종목정보 존재여부 조회
@@ -2446,9 +2442,6 @@ def echo(update, context):
                     # else:
                     #     print("보유종목 및 관심종목 미존재")
                     #     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 및 관심종목 미존재")
-                else:
-                    print("매수량 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 매수량 미존재")
 
             elif menuNum == '24':
                 chartReq = "0"
