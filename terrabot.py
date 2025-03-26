@@ -2180,7 +2180,7 @@ def echo(update, context):
                                 g_buy_code = code
                                 g_company = company
                                 
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(round(n_buy_amount)), ',d') + "주, 손절가 : " + format(loss_price, ',d') + "원, 종목손실금액 : " + format(int(item_loss_sum), ',d') + "원, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(round(n_buy_amount)), ',d') + "주, 손절가 : " + format(int(loss_price), ',d') + "원, 종목손실금액 : " + format(int(item_loss_sum), ',d') + "원, 매수금액 : " + format(int(n_buy_sum), ',d') + "원 => /buy")
                                 get_handler = CommandHandler('buy', get_command1)
                                 updater.dispatcher.add_handler(get_handler)
 
