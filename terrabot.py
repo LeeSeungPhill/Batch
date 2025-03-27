@@ -647,31 +647,54 @@ def callback_get(update, context) :
             # 매수량, 매수금액 입력시 시장가 매수주문
             if menuNum == "23":
                 ord_dvsn = "01"
+                
+                try:
+                    # 매수
+                    c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(0))
+                
+                    if c['ODNO'] != "":
+                        print("매수주문 완료")
+                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(int(c['ODNO'])),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    else:
+                        print("매수주문 실패")
+                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    menuNum = "0"
+
+                except Exception as e:
+                    print('매수주문 오류.', e)
+                    menuNum = "0"
+                    context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 [매수주문 오류] - "+str(e),
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
             else:
                 ord_dvsn = "00"    
 
-            try:
-                # 매수
-                c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(g_buy_price))
-            
-                if c['ODNO'] != "":
-                    print("매수주문 완료")
-                    context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                  chat_id=update.callback_query.message.chat_id,
-                                                  message_id=update.callback_query.message.message_id)
-                else:
-                    print("매수주문 실패")
-                    context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
-                                                  chat_id=update.callback_query.message.chat_id,
-                                                  message_id=update.callback_query.message.message_id)
-                menuNum = "0"
+                try:
+                    # 매수
+                    c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(g_buy_price))
+                
+                    if c['ODNO'] != "":
+                        print("매수주문 완료")
+                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(int(c['ODNO'])),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    else:
+                        print("매수주문 실패")
+                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    menuNum = "0"
 
-            except Exception as e:
-                print('매수주문 오류.', e)
-                menuNum = "0"
-                context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 [매수주문 오류] - "+str(e),
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)
+                except Exception as e:
+                    print('매수주문 오류.', e)
+                    menuNum = "0"
+                    context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 [매수주문 오류] - "+str(e),
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
             
         else:
             context.bot.edit_message_text(text="처음 메뉴부터 매수 진행하세요.",
@@ -694,31 +717,53 @@ def callback_get(update, context) :
             # 매도량 입력시 시장가 매도주문
             if menuNum == "33":
                 ord_dvsn = "01"
+                try:
+                    # 매도
+                    c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(0))
+                
+                    if c['ODNO'] != "":
+                        print("매도주문 완료")
+                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(int(c['ODNO'])),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    else:
+                        print("매도주문 실패")
+                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    menuNum = "0"
+
+                except Exception as e:
+                    print('매도주문 오류.', e)
+                    menuNum = "0"
+                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
             else:
                 ord_dvsn = "00"    
 
-            try:
-                # 매도
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(g_sell_price))
-            
-                if c['ODNO'] != "":
-                    print("매도주문 완료")
-                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                  chat_id=update.callback_query.message.chat_id,
-                                                  message_id=update.callback_query.message.message_id)
-                else:
-                    print("매도주문 실패")
-                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
-                                                  chat_id=update.callback_query.message.chat_id,
-                                                  message_id=update.callback_query.message.message_id)
-                menuNum = "0"
+                try:
+                    # 매도
+                    c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(g_sell_price))
+                
+                    if c['ODNO'] != "":
+                        print("매도주문 완료")
+                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(int(c['ODNO'])),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    else:
+                        print("매도주문 실패")
+                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    menuNum = "0"
 
-            except Exception as e:
-                print('매도주문 오류.', e)
-                menuNum = "0"
-                context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)
+                except Exception as e:
+                    print('매도주문 오류.', e)
+                    menuNum = "0"
+                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
             
         else:
             context.bot.edit_message_text(text="처음 메뉴부터 매도 진행하세요.",
