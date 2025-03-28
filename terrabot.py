@@ -653,10 +653,30 @@ def callback_get(update, context) :
                     c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(0))
                 
                     if c['ODNO'] != "":
-                        print("매수주문 완료")
-                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+
+                        # 일별주문체결 조회
+                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO']))
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            print("매수주문 완료")
+
+                            context.bot.edit_message_text(text="[" + d_name + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(d_order_no),
+                                                        chat_id=update.callback_query.message.chat_id,
+                                                        message_id=update.callback_query.message.message_id)
                     else:
                         print("매수주문 실패")
                         context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
@@ -678,10 +698,30 @@ def callback_get(update, context) :
                     c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_buy_code, ord_dvsn, str(g_buy_amount), str(g_buy_price))
                 
                     if c['ODNO'] != "":
-                        print("매수주문 완료")
-                        context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+
+                        # 일별주문체결 조회
+                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO']))
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            print("매수주문 완료")
+
+                            context.bot.edit_message_text(text="[" + d_name + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : " + str(d_order_no),
+                                                        chat_id=update.callback_query.message.chat_id,
+                                                        message_id=update.callback_query.message.message_id)
                     else:
                         print("매수주문 실패")
                         context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
@@ -722,10 +762,31 @@ def callback_get(update, context) :
                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(0))
                 
                     if c['ODNO'] != "":
-                        print("매도주문 완료")
-                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+
+                        # 일별주문체결 조회
+                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO']))
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            print("매도주문 완료")
+
+                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                                                        chat_id=update.callback_query.message.chat_id,
+                                                        message_id=update.callback_query.message.message_id)
+                            
                     else:
                         print("매도주문 실패")
                         context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
@@ -747,10 +808,31 @@ def callback_get(update, context) :
                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, ord_dvsn, str(g_sell_amount), str(g_sell_price))
                 
                     if c['ODNO'] != "":
-                        print("매도주문 완료")
-                        context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(int(c['ODNO'])),
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+
+                        # 일별주문체결 조회
+                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO']))
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            print("매도주문 완료")
+
+                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                                                        chat_id=update.callback_query.message.chat_id,
+                                                        message_id=update.callback_query.message.message_id)
+
                     else:
                         print("매도주문 실패")
                         context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
@@ -1055,7 +1137,7 @@ def callback_get(update, context) :
                         d_order_dt = d['ord_dt'][i]
                         d_order_tmd = d['ord_tmd'][i]
                         d_name = d['prdt_name'][i]
-                        d_order_price = d['ord_unpr'][i]
+                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
                         d_order_amount = d['ord_qty'][i]
                         d_total_complete_qty = d['tot_ccld_qty'][i]
                         d_remain_qty = d['rmn_qty'][i]
@@ -1910,7 +1992,7 @@ def echo(update, context):
                             d_order_dt = d['ord_dt'][i]
                             d_order_tmd = d['ord_tmd'][i]
                             d_name = d['prdt_name'][i]
-                            d_order_price = d['ord_unpr'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
                             d_order_amount = d['ord_qty'][i]
                             d_total_complete_qty = d['tot_ccld_qty'][i]
                             d_remain_qty = d['rmn_qty'][i]
