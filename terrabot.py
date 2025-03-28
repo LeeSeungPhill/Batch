@@ -655,7 +655,7 @@ def callback_get(update, context) :
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO']))
+                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -700,7 +700,7 @@ def callback_get(update, context) :
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO']))
+                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -764,7 +764,7 @@ def callback_get(update, context) :
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO']))
+                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -810,7 +810,7 @@ def callback_get(update, context) :
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete((access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO']))
+                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
