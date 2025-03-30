@@ -108,6 +108,11 @@ def get_command2(update, context) :
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
+def get_command3(update, context) :
+    button_list = build_button(["전체매도", "절반매도", "취소"]) # make button list
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
+    update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup    
+
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
 
@@ -852,6 +857,102 @@ def callback_get(update, context) :
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id)                                                
 
+    elif data_selected.find("전체매도") != -1:
+
+        if menuNum != "0":
+            try:
+                # 전체매도
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, "00", str(g_sell_amount), str(g_sell_price))
+            
+                if c['ODNO'] != "":
+
+                    # 일별주문체결 조회
+                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                    for i, name in enumerate(d.index):
+                        d_order_no = int(d['odno'][i])
+                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                        d_order_dt = d['ord_dt'][i]
+                        d_order_tmd = d['ord_tmd'][i]
+                        d_name = d['prdt_name'][i]
+                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                        d_order_amount = d['ord_qty'][i]
+                        d_total_complete_qty = d['tot_ccld_qty'][i]
+                        d_remain_qty = d['rmn_qty'][i]
+                        d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                        print("매도주문 완료")
+
+                        context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+
+                else:
+                    print("매도주문 실패")
+                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
+                menuNum = "0"
+
+            except Exception as e:
+                print('매도주문 오류.', e)
+                menuNum = "0"
+                context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+
+
+    elif data_selected.find("절반매도") != -1:    
+
+        if menuNum != "0":
+            try:
+                # 절반매도
+                half_sell_amount = int(round(g_sell_amount/2))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, "00", str(half_sell_amount), str(g_sell_price))
+            
+                if c['ODNO'] != "":
+
+                    # 일별주문체결 조회
+                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                    for i, name in enumerate(d.index):
+                        d_order_no = int(d['odno'][i])
+                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                        d_order_dt = d['ord_dt'][i]
+                        d_order_tmd = d['ord_tmd'][i]
+                        d_name = d['prdt_name'][i]
+                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                        d_order_amount = d['ord_qty'][i]
+                        d_total_complete_qty = d['tot_ccld_qty'][i]
+                        d_remain_qty = d['rmn_qty'][i]
+                        d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                        print("매도주문 완료")
+
+                        context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+
+                else:
+                    print("매도주문 실패")
+                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
+                menuNum = "0"
+
+            except Exception as e:
+                print('매도주문 오류.', e)
+                menuNum = "0"
+                context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+
     elif data_selected.find("매수") != -1:
         if len(data_selected.split(",")) == 1:
             button_list = build_button(["손절금액", "매수금액", "현재가", "수량수가", "취소"], data_selected)
@@ -1294,8 +1395,15 @@ def callback_get(update, context) :
                     company = i[7] + "[" + i[6] + "]"
 
                     context.bot.send_message(chat_id=update.effective_chat.id,
-                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchage_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주)")
+                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchage_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
             
+                    g_sell_amount = purchage_amount
+                    g_sell_price = current_price
+                    g_sell_code = i[6]
+                    
+                    get_handler = CommandHandler('hsell', get_command3)
+                    updater.dispatcher.add_handler(get_handler)
+
             elif data_selected.find("개별조회") != -1:
                 menuNum = "15"
 
