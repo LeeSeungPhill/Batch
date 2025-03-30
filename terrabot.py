@@ -68,11 +68,14 @@ menuNum = "0"
 chartReq = "1"
 g_buy_code = ""
 g_sell_code = ""
+g_sell_code1 = ""
 g_company = ""
 g_buy_price = 0
 g_buy_amount = 0
 g_sell_price = 0
 g_sell_amount = 0
+g_sell_price1 = 0
+g_sell_amount1 = 0
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -628,6 +631,9 @@ def marketLevel_proc(access_token, app_key, app_secret, acct_no):
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
+    global g_sell_amount1
+    global g_sell_price1
+    global g_sell_code1
 
     print("callback0 : ", data_selected)
     if data_selected.find("취소") != -1:
@@ -858,9 +864,9 @@ def callback_get(update, context) :
                                           message_id=update.callback_query.message.message_id)                                                
 
     elif data_selected.find("전체매도") != -1:
-        print("g_sell_code : ", g_sell_code)
-        print("g_sell_price : ", g_sell_price)
-        print("g_sell_amount : ", g_sell_amount)
+        print("g_sell_code : ", g_sell_code1)
+        print("g_sell_amount : ", str(g_sell_amount1))
+        print("g_sell_price : ", str(g_sell_price1))
         if menuNum != "0":
             try:
                 # 전체매도
@@ -908,9 +914,9 @@ def callback_get(update, context) :
 
 
     elif data_selected.find("절반매도") != -1:    
-        print("g_sell_code : ", g_sell_code)
-        print("g_sell_price : ", g_sell_price)
-        print("g_sell_amount : ", g_sell_amount)
+        print("g_sell_code : ", g_sell_code1)
+        print("g_sell_amount : ", str(g_sell_amount1))
+        print("g_sell_price : ", str(g_sell_price1))
         if menuNum != "0":
             try:
                 # 절반매도
@@ -1401,9 +1407,9 @@ def callback_get(update, context) :
                     context.bot.send_message(chat_id=update.effective_chat.id,
                                                 text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchage_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
             
-                    g_sell_amount = purchage_amount
-                    g_sell_price = current_price
-                    g_sell_code = i[6]
+                    g_sell_amount1 = purchage_amount
+                    g_sell_price1 = current_price
+                    g_sell_code1 = i[6]
                     
                     get_handler = CommandHandler('hsell', get_command3)
                     updater.dispatcher.add_handler(get_handler)
