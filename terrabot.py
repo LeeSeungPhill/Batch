@@ -631,9 +631,9 @@ def marketLevel_proc(access_token, app_key, app_secret, acct_no):
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
-    global g_sell_amount1
-    global g_sell_price1
-    global g_sell_code1
+    # global g_sell_amount1
+    # global g_sell_price1
+    # global g_sell_code1
 
     print("callback0 : ", data_selected)
     if data_selected.find("취소") != -1:
@@ -1410,7 +1410,9 @@ def callback_get(update, context) :
                     g_sell_amount1 = purchage_amount
                     g_sell_price1 = current_price
                     g_sell_code1 = i[6]
-                    
+                    print("1 g_sell_amount1 : ",g_sell_amount1)
+                    print("1 g_sell_price1 : ",g_sell_price1)
+                    print("1 g_sell_code1 : ",g_sell_code1)
                     get_handler = CommandHandler('hsell', get_command3)
                     updater.dispatcher.add_handler(get_handler)
 
