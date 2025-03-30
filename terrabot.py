@@ -858,7 +858,9 @@ def callback_get(update, context) :
                                           message_id=update.callback_query.message.message_id)                                                
 
     elif data_selected.find("전체매도") != -1:
-
+        print("g_sell_code : ", g_sell_code)
+        print("g_sell_price : ", g_sell_price)
+        print("g_sell_amount : ", g_sell_amount)
         if menuNum != "0":
             try:
                 # 전체매도
@@ -906,7 +908,9 @@ def callback_get(update, context) :
 
 
     elif data_selected.find("절반매도") != -1:    
-
+        print("g_sell_code : ", g_sell_code)
+        print("g_sell_price : ", g_sell_price)
+        print("g_sell_amount : ", g_sell_amount)
         if menuNum != "0":
             try:
                 # 절반매도
