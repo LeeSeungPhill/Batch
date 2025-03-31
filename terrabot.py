@@ -68,14 +68,11 @@ menuNum = "0"
 chartReq = "1"
 g_buy_code = ""
 g_sell_code = ""
-g_sell_code1 = ""
 g_company = ""
 g_buy_price = 0
 g_buy_amount = 0
 g_sell_price = 0
 g_sell_amount = 0
-g_sell_price1 = 0
-g_sell_amount1 = 0
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -631,9 +628,6 @@ def marketLevel_proc(access_token, app_key, app_secret, acct_no):
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
-    # global g_sell_amount1
-    # global g_sell_price1
-    # global g_sell_code1
 
     print("callback0 : ", data_selected)
     if data_selected.find("취소") != -1:
@@ -864,18 +858,23 @@ def callback_get(update, context) :
                                           message_id=update.callback_query.message.message_id)                                                
 
     elif data_selected.find("전체매도") != -1:
-        print("g_sell_code : ", g_sell_code1)
-        print("g_sell_amount : ", str(g_sell_amount1))
-        print("g_sell_price : ", str(g_sell_price1))
-        if menuNum != "0":
+        if 'sell_code' in context.user_data and 'sell_price' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
+            sell_code = context.user_data['sell_code']
+            sell_price = context.user_data['sell_price']
+            sell_amount = context.user_data['sell_amount']
+            acct_no = context.user_data['acct_no']
+            access_token = context.user_data['access_token']
+            app_key = context.user_data['app_key']
+            app_secret = context.user_data['app_secret']
+
             try:
                 # 전체매도
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, "00", str(g_sell_amount), str(g_sell_price))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(sell_amount), str(sell_price))
             
                 if c['ODNO'] != "":
 
                     # 일별주문체결 조회
-                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
+                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, sell_code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -912,21 +911,26 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)
 
+    elif data_selected.find("절반매도") != -1:
 
-    elif data_selected.find("절반매도") != -1:    
-        print("g_sell_code : ", g_sell_code1)
-        print("g_sell_amount : ", str(g_sell_amount1))
-        print("g_sell_price : ", str(g_sell_price1))
-        if menuNum != "0":
+        if 'sell_code' in context.user_data and 'sell_price' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
+            sell_code = context.user_data['sell_code']
+            sell_price = context.user_data['sell_price']
+            sell_amount = context.user_data['sell_amount']
+            acct_no = context.user_data['acct_no']
+            access_token = context.user_data['access_token']
+            app_key = context.user_data['app_key']
+            app_secret = context.user_data['app_secret']
+
             try:
                 # 절반매도
-                half_sell_amount = int(round(g_sell_amount/2))
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), g_sell_code, "00", str(half_sell_amount), str(g_sell_price))
+                half_sell_amount = int(round(sell_amount/2))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(half_sell_amount), str(sell_price))
             
                 if c['ODNO'] != "":
 
                     # 일별주문체결 조회
-                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_sell_code, c['ODNO'])
+                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, sell_code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -1354,8 +1358,8 @@ def callback_get(update, context) :
                     purchase_price = i[0]
                     print("매입가 : " + format(int(purchase_price), ',d'))
                     # 매입수량
-                    purchage_amount = i[1]
-                    print("매입수량 : " + format(purchage_amount, ',d'))
+                    purchase_amount = i[1]
+                    print("매입수량 : " + format(purchase_amount, ',d'))
                     # 매입금액
                     purchase_sum = i[8]
                     print("매입금액 : " + format(purchase_sum, ',d'))
@@ -1402,17 +1406,19 @@ def callback_get(update, context) :
                         end_loss_price = 0    
                     print("최종이탈가 : " + format(end_loss_price, ',d'))
 
-                    company = i[7] + "[" + i[6] + "]"
+                    context.user_data['sell_amount'] = purchase_amount
+                    context.user_data['sell_price'] = current_price
+                    context.user_data['sell_code'] = i[6]
+                    context.user_data['acct_no'] = acct_no
+                    context.user_data['access_token'] = access_token
+                    context.user_data['app_key'] = app_key
+                    context.user_data['app_secret'] = app_secret
 
-                    context.bot.send_message(chat_id=update.effective_chat.id,
-                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchage_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
+                    company = i[7] + "[" + context.user_data['sell_code'] + "]"
             
-                    g_sell_amount1 = purchage_amount
-                    g_sell_price1 = current_price
-                    g_sell_code1 = i[6]
-                    print("1 g_sell_amount1 : ",g_sell_amount1)
-                    print("1 g_sell_price1 : ",g_sell_price1)
-                    print("1 g_sell_code1 : ",g_sell_code1)
+                    context.bot.send_message(chat_id=update.effective_chat.id,
+                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(context.user_data['sell_amount'], ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(context.user_data['sell_price'], ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
+            
                     get_handler = CommandHandler('hsell', get_command3)
                     updater.dispatcher.add_handler(get_handler)
 
@@ -2171,8 +2177,8 @@ def echo(update, context):
                         purchase_price = i[0]
                         print("매입가 : " + format(int(purchase_price), ',d'))
                         # 매입수량
-                        purchage_amount = i[1]
-                        print("매입수량 : " + format(purchage_amount, ',d'))
+                        purchase_amount = i[1]
+                        print("매입수량 : " + format(purchase_amount, ',d'))
                         # 매입금액
                         purchase_sum = i[8]
                         print("매입금액 : " + format(purchase_sum, ',d'))
@@ -2222,7 +2228,7 @@ def echo(update, context):
                         company = i[7] + "[" + i[6] + "]"
 
                         context.bot.send_message(chat_id=update.effective_chat.id,
-                                                    text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchage_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주)")
+                                                    text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(purchase_amount, ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주)")
                 else:
                     print("보유종목 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 미존재")   
