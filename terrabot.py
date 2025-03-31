@@ -645,10 +645,6 @@ def callback_get(update, context) :
             app_key = ac['app_key']
             app_secret = ac['app_secret']
 
-            print("g_buy_code : ", g_buy_code)
-            print("g_buy_amount : ", str(g_buy_amount))
-            print("g_buy_price : ", str(g_buy_price))
-
             # 매수량, 매수금액 입력시 시장가 매수주문
             if menuNum == "23":
                 ord_dvsn = "01"
@@ -755,10 +751,6 @@ def callback_get(update, context) :
             app_key = ac['app_key']
             app_secret = ac['app_secret']
 
-            print("g_sell_code : ", g_sell_code)
-            print("g_sell_amount : ", str(g_sell_amount))
-            print("g_sell_price : ", str(g_sell_price))
-
             # 매도량 입력시 시장가 매도주문
             if menuNum == "33":
                 ord_dvsn = "01"
@@ -858,9 +850,8 @@ def callback_get(update, context) :
                                           message_id=update.callback_query.message.message_id)                                                
 
     elif data_selected.find("전체매도") != -1:
-        if 'sell_code' in context.user_data and 'sell_price' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
+        if 'sell_code' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
             sell_code = context.user_data['sell_code']
-            sell_price = context.user_data['sell_price']
             sell_amount = context.user_data['sell_amount']
             acct_no = context.user_data['acct_no']
             access_token = context.user_data['access_token']
@@ -868,6 +859,11 @@ def callback_get(update, context) :
             app_secret = context.user_data['app_secret']
 
             try:
+                # 입력 종목코드 현재가 시세
+                a = inquire_price(access_token, app_key, app_secret, sell_code)
+                print("현재가0 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
+                sell_price = a['stck_prpr']
+                print("현재가1 : " + format(int(sell_price), ',d'))  # 현재가
                 # 전체매도
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(sell_amount), str(sell_price))
             
@@ -913,9 +909,8 @@ def callback_get(update, context) :
 
     elif data_selected.find("절반매도") != -1:
 
-        if 'sell_code' in context.user_data and 'sell_price' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
+        if 'sell_code' in context.user_data and 'sell_amount' in context.user_data and 'acct_no' in context.user_data and 'access_token' in context.user_data and 'app_key' in context.user_data and 'app_secret' in context.user_data:
             sell_code = context.user_data['sell_code']
-            sell_price = context.user_data['sell_price']
             sell_amount = context.user_data['sell_amount']
             acct_no = context.user_data['acct_no']
             access_token = context.user_data['access_token']
@@ -923,6 +918,11 @@ def callback_get(update, context) :
             app_secret = context.user_data['app_secret']
 
             try:
+                # 입력 종목코드 현재가 시세
+                a = inquire_price(access_token, app_key, app_secret, sell_code)
+                print("현재가0 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
+                sell_price = a['stck_prpr']
+                print("현재가1 : " + format(int(sell_price), ',d'))  # 현재가
                 # 절반매도
                 half_sell_amount = int(round(sell_amount/2))
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(half_sell_amount), str(sell_price))
@@ -1407,7 +1407,6 @@ def callback_get(update, context) :
                     print("최종이탈가 : " + format(end_loss_price, ',d'))
 
                     context.user_data['sell_amount'] = purchase_amount
-                    context.user_data['sell_price'] = current_price
                     context.user_data['sell_code'] = i[6]
                     context.user_data['acct_no'] = acct_no
                     context.user_data['access_token'] = access_token
@@ -1417,7 +1416,7 @@ def callback_get(update, context) :
                     company = i[7] + "[" + context.user_data['sell_code'] + "]"
             
                     context.bot.send_message(chat_id=update.effective_chat.id,
-                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(context.user_data['sell_amount'], ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(context.user_data['sell_price'], ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
+                                                text=company + " : 매입가-" + format(int(purchase_price), ',d') + "원, 매입수량-" + format(context.user_data['sell_amount'], ',d') + "주, 매입금액-" + format(purchase_sum, ',d') +"원, 현재가-" + format(current_price, ',d') + "원, 평가금액-" + format(eval_sum, ',d') + "원, 수익률(" + str(earning_rate) + ")%, 손수익금액(" + format(valuation_sum, ',d') + ")원, 저항가-" + format(sign_resist_price, ',d') + "원, 지지가-" + format(sign_support_price, ',d') + "원, 최종목표가-" + format(end_target_price, ',d') + "원, 최종이탈가-" + format(end_loss_price, ',d') + "원, 매도예정금액-" + format(sell_plan_sum, ',d') + "원(" + format(sell_plan_amount, ',d') + "주) => /hsell")
             
                     get_handler = CommandHandler('hsell', get_command3)
                     updater.dispatcher.add_handler(get_handler)
