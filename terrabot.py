@@ -933,8 +933,8 @@ def callback_get(update, context) :
                                                     message_id=update.callback_query.message.message_id)
 
                 else:
-                    print("전체매도 주문가능수량 부족")
-                    context.bot.edit_message_text(text="[" + sell_code + "] : 전체매도 주문가능수량 부족",
+                    print("전체매도 가능수량 부족")
+                    context.bot.edit_message_text(text="[" + sell_code + "] 매도량 : " + format(int(sell_amount), ',d') + "주, 매도가능수량 : " + format(int(ord_psbl_qty), ',d') + "주 전체매도 가능수량 부족",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)        
 
@@ -1016,8 +1016,8 @@ def callback_get(update, context) :
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
                 else:
-                    print("절반매도 주문가능수량 부족")
-                    context.bot.edit_message_text(text="[" + sell_code + "] : 절반매도 주문가능수량 부족",
+                    print("절반매도 가능수량 부족")
+                    context.bot.edit_message_text(text="[" + sell_code + "] 매도량 : " + format(int(half_sell_amount), ',d') + "주, 매도가능수량 : " + format(int(ord_psbl_qty), ',d') + "주 절반매도 가능수량 부족",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
                             
