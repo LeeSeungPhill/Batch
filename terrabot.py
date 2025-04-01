@@ -123,7 +123,7 @@ def get_command3(update, context) :
     button_list = [
         InlineKeyboardButton(f"전체매도 ({sell_amount}주)", callback_data=f"전체매도_{stock_code}_{sell_amount}"),
         InlineKeyboardButton(f"절반매도 ({int(round(sell_amount/2))}주)", callback_data=f"절반매도_{stock_code}_{sell_amount}"),
-        InlineKeyboardButton("취소", callback_data="cancel_sell")
+        InlineKeyboardButton("취소", callback_data="취소")
     ]
     show_markup = InlineKeyboardMarkup([button_list])
 
@@ -920,30 +920,30 @@ def callback_get(update, context) :
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            print("매도주문 완료")
+                            print("전체매도주문 완료")
 
-                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 전체매도주문 완료, 주문번호 : " + str(d_order_no),
                                                         chat_id=update.callback_query.message.chat_id,
                                                         message_id=update.callback_query.message.message_id)
 
                     else:
-                        print("매도주문 실패")
-                        context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 매도주문 실패",
+                        print("전체매도주문 실패")
+                        context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 전체매도주문 실패",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
 
                 else:
-                    print("주문가능수량 부족")
-                    context.bot.edit_message_text(text="[" + sell_code + "] : 주문가능수량 부족",
+                    print("전체매도 주문가능수량 부족")
+                    context.bot.edit_message_text(text="[" + sell_code + "] : 전체매도 주문가능수량 부족",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)        
 
                 menuNum = "0"
 
             except Exception as e:
-                print('매도주문 오류.', e)
+                print('전체매도주문 오류.', e)
                 menuNum = "0"
-                context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 [전체매도주문 오류] - " +str(e),
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)
 
@@ -1004,29 +1004,29 @@ def callback_get(update, context) :
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            print("매도주문 완료")
+                            print("절반매도주문 완료")
 
-                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : " + str(d_order_no),
+                            context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 절반매도주문 완료, 주문번호 : " + str(d_order_no),
                                                         chat_id=update.callback_query.message.chat_id,
                                                         message_id=update.callback_query.message.message_id)
 
                     else:
-                        print("매도주문 실패")
-                        context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 매도주문 실패",
+                        print("절반매도주문 실패")
+                        context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(half_sell_amount), ',d') + "주 절반매도주문 실패",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
                 else:
-                    print("주문가능수량 부족")
-                    context.bot.edit_message_text(text="[" + sell_code + "] : 주문가능수량 부족",
+                    print("절반매도 주문가능수량 부족")
+                    context.bot.edit_message_text(text="[" + sell_code + "] : 절반매도 주문가능수량 부족",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
                             
                 menuNum = "0"
 
             except Exception as e:
-                print('매도주문 오류.', e)
+                print('절반매도주문 오류.', e)
                 menuNum = "0"
-                context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
+                context.bot.edit_message_text(text="[" + sell_code + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(int(half_sell_amount), ',d') + "주 [절반매도주문 오류] - " +str(e),
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)
 
