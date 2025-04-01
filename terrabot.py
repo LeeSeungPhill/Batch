@@ -111,7 +111,7 @@ def get_command2(update, context) :
 def get_command3(update, context) :
     command_parts = update.message.text.split("_")
     if len(command_parts) < 3:
-        update.message.reply_text("잘못된 명령어 형식입니다. 예: /hsell_005930_10")
+        update.message.reply_text("잘못된 명령어 형식입니다.")
         return
 
     stock_code = command_parts[1]
@@ -1483,7 +1483,8 @@ def callback_get(update, context) :
                     context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주 => {sell_command}"))
             
                     command_pattern = f"매도_{i[6]}_{avail_amount}"
-                    updater.dispatcher.add_handler(CommandHandler(command_pattern, get_command3))
+                    get_handler = CommandHandler(command_pattern, get_command3)
+                    updater.dispatcher.add_handler(get_handler)
 
             elif data_selected.find("개별조회") != -1:
                 menuNum = "15"
