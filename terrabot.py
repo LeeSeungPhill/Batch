@@ -2399,6 +2399,10 @@ def echo(update, context):
                     print("commandBot[2] : ", commandBot[2])    # 이탈가
                     print("commandBot[3] : ", commandBot[3])    # 손절금액
 
+                    if not commandBot[0].isdecimal():
+                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
+                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거    
+
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
 
@@ -2506,6 +2510,10 @@ def echo(update, context):
                     print("commandBot[1] : ", commandBot[1])    # 매수가    
                     print("commandBot[2] : ", commandBot[2])    # 매수예정금액
 
+                    if not commandBot[0].isdecimal():
+                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
+                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
+
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
 
@@ -2610,6 +2618,10 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수예정금액
 
+                    if not commandBot[0].isdecimal():
+                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
+                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
+
                 # 매수예정금액 존재시
                 if commandBot[1].isdecimal():
 
@@ -2704,6 +2716,10 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수량
                     print("commandBot[1] : ", commandBot[2])    # 매수가
+
+                    if not commandBot[0].isdecimal():
+                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
+                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
 
                 # 매수량, 매수가 존재시
                 if commandBot[1].isdecimal() & commandBot[2].isdecimal():
