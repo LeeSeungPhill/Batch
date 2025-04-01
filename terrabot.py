@@ -1733,14 +1733,15 @@ def echo(update, context):
                 ext = user_text[:6] + " : 미존재 종목"
                 context.bot.send_message(chat_id=user_id, text=ext)
         else:
-            # 입력메시지가 종목명에 존재하는 경우
-            if len(stock_code[stock_code.company == user_text].values) > 0:
-                code = stock_code[stock_code.company == user_text].code.values[0].strip()  ## strip() : 공백제거
-                company = stock_code[stock_code.company == user_text].company.values[0].strip()  ## strip() : 공백제거
-            else:
-                code = ""
-                ext = user_text + " : 미존재 종목"
-                context.bot.send_message(chat_id=user_id, text=ext)
+            if not ',' in user_text:
+                # 입력메시지가 종목명에 존재하는 경우
+                if len(stock_code[stock_code.company == user_text].values) > 0:
+                    code = stock_code[stock_code.company == user_text].code.values[0].strip()  ## strip() : 공백제거
+                    company = stock_code[stock_code.company == user_text].company.values[0].strip()  ## strip() : 공백제거
+                else:
+                    code = ""
+                    ext = user_text + " : 미존재 종목"
+                    context.bot.send_message(chat_id=user_id, text=ext)
 
         if code != "":
 
