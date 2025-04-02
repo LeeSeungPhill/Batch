@@ -1808,15 +1808,15 @@ def echo(update, context):
                     ext = user_text + " : 미존재 종목"
                     context.bot.send_message(chat_id=user_id, text=ext)
             else:
-                user_text = user_text.split(',')[0].strip()  # ',' 기준으로 첫 번째 값만 사용
+                name_text = user_text.split(',')[0].strip()  # ',' 기준으로 첫 번째 값만 사용
 
                 # 입력메시지가 종목명에 존재하는 경우
-                if len(stock_code[stock_code.company == user_text].values) > 0:
-                    code = stock_code[stock_code.company == user_text].code.values[0].strip()  ## strip() : 공백제거
-                    company = stock_code[stock_code.company == user_text].company.values[0].strip()  ## strip() : 공백제거
+                if len(stock_code[stock_code.company == name_text].values) > 0:
+                    code = stock_code[stock_code.company == name_text].code.values[0].strip()  ## strip() : 공백제거
+                    company = stock_code[stock_code.company == name_text].company.values[0].strip()  ## strip() : 공백제거
                 else:
                     code = ""
-                    ext = user_text + " : 미존재 종목"
+                    ext = name_text + " : 미존재 종목"
                     context.bot.send_message(chat_id=user_id, text=ext)        
 
         if code != "":
@@ -2476,10 +2476,6 @@ def echo(update, context):
                     print("commandBot[2] : ", commandBot[2])    # 이탈가
                     print("commandBot[3] : ", commandBot[3])    # 손절금액
 
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거    
-
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
 
@@ -2587,10 +2583,6 @@ def echo(update, context):
                     print("commandBot[1] : ", commandBot[1])    # 매수가    
                     print("commandBot[2] : ", commandBot[2])    # 매수예정금액
 
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
-
                 # 매수가 존재시
                 if commandBot[1].isdecimal():
 
@@ -2695,10 +2687,6 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수예정금액
 
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
-
                 # 매수예정금액 존재시
                 if commandBot[1].isdecimal():
 
@@ -2793,10 +2781,6 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매수량
                     print("commandBot[1] : ", commandBot[2])    # 매수가
-
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
 
                 # 매수량, 매수가 존재시
                 if commandBot[1].isdecimal() & commandBot[2].isdecimal():
@@ -2901,10 +2885,6 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매도가
 
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
-
                 # 매도가 존재시
                 if commandBot[1].isdecimal():
 
@@ -2953,10 +2933,6 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매도가
 
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
-                
                 # 매도가 존재시
                 if commandBot[1].isdecimal():
 
@@ -3005,10 +2981,6 @@ def echo(update, context):
 
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매도량
-
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
 
                 # 매도량 존재시
                 if commandBot[1].isdecimal():
@@ -3061,10 +3033,6 @@ def echo(update, context):
                     print("commandBot[0] : ", commandBot[0])    # 종목코드
                     print("commandBot[1] : ", commandBot[1])    # 매도량
                     print("commandBot[2] : ", commandBot[2])    # 매도가
-
-                    if not commandBot[0].isdecimal():
-                        code = stock_code[stock_code.company == commandBot[0]].code.values[0].strip()  ## strip() : 공백제거    
-                        company = stock_code[stock_code.company == commandBot[0]].company.values[0].strip()  ## strip() : 공백제거  
 
                 # 매도량, 매도가 존재시
                 if commandBot[1].isdecimal() & commandBot[2].isdecimal():
