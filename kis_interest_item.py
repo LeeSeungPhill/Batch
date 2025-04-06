@@ -564,6 +564,7 @@ if result_one == None:
             if time > '1000' and time < '1430':
                 if round(float(a['prdy_vrss_vol_rate'])) > 100:
                     vol_appear = 1
+            vol_appear = 1 # 전일대비거래량비율 체크 제외(20250406)        
             print("vol_appear : " + str(vol_appear))
 
             n_buy_amount = 0
