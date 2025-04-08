@@ -677,8 +677,8 @@ def handle_interest_buy(update, context):
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     
     button_list = [
-        InlineKeyboardButton(f"전체매수 ({buy_price}원{buy_amount}주)", callback_data=f"전체매수_{stock_code}_{buy_price}_{buy_amount}"),
-        InlineKeyboardButton(f"절반매수 ({buy_price}원{int(round(buy_amount/2))}주)", callback_data=f"절반매수_{stock_code}_{buy_price}_{buy_amount}"),
+        InlineKeyboardButton(f"전체매수 ({buy_amount}주)", callback_data=f"전체매수_{stock_code}_{buy_price}_{buy_amount}"),
+        InlineKeyboardButton(f"절반매수 ({int(round(buy_amount/2))}주)", callback_data=f"절반매수_{stock_code}_{buy_price}_{buy_amount}"),
         InlineKeyboardButton("취소", callback_data="취소")
     ]
     show_markup = InlineKeyboardMarkup([button_list])
