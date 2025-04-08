@@ -61,7 +61,7 @@ def load_acct_info():
     global acct_info
     cur = conn.cursor()
     cur.execute(f"""
-        SELECT acct_no, access_token, app_key, app_secret
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (arguments[1],))
