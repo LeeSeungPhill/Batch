@@ -1893,63 +1893,30 @@ updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
 # 날짜형식 변환(년월)
 def get_date_str(s):
-    #print(s)
-    date_str = ''
-    if s == '2023/12 (IFRS별도)':
-        r = re.search("\d{4}/\d{2}", '2022/06(분기)')
-    elif s == '2022/03 (IFRS별도)':
-        r = re.search("\d{4}/\d{2}", '2022/09(분기)')
-    elif s == '2022/12 (IFRS별도)':
-        r = re.search("\d{4}/\d{2}", '2022/12(분기)')
-    elif s == '2023/03 (IFRS별도)':
-        r = re.search("\d{4}/\d{2}", '2023/03(분기)')
-    else:
-        r = re.search("\d{4}/\d{2}", s)
-
-    if r:
-        date_str = r.group()
-        date_str = date_str.replace('/', '-')
-    #print(date_str)
-    return date_str
+    r = re.search(r"\d{4}/\d{2}", s)
+    return r.group().replace('/', '-') if r else ''
 
 # 네이버 재무정보 조회
 def get_dividiend(code):
 
-    url_tmpl = 'http://companyinfo.stock.naver.com/company/cF1001.aspx?cmp_cd=%s&finGubun=%s'
-    url = url_tmpl % (code, 'IFRSS')
-    #print(url)
-
+    url = f'http://companyinfo.stock.naver.com/company/cF1001.aspx?cmp_cd={code}&finGubun=IFRSS'
     df = requests.get(url)
     financial_stmt = pd.read_html(df.text)
-
     dfs = financial_stmt[0]
 
-    dfs.drop('Unnamed: 9_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 10_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 11_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 12_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 13_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 14_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 15_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 16_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 17_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 18_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 19_level_0', axis=1, inplace=True, level=0)
-    dfs.drop('Unnamed: 20_level_0', axis=1, inplace=True, level=0)
+    # 불필요한 컬럼 제거
+    for i in range(9, 21):
+        col_name = f'Unnamed: {i}_level_0'
+        if col_name in dfs.columns.get_level_values(0):
+            dfs.drop(col_name, axis=1, inplace=True, level=0)
 
     dfs.columns = dfs.columns.droplevel(0)
-    cols = list(dfs.columns)
-
-    cols = [get_date_str(x) for x in cols]
-    dfs.columns = cols
+    dfs.columns = [get_date_str(x) for x in dfs.columns]
     dft = dfs.T
-    dft.index = pd.to_datetime(dft.index)
-
-    # remove if index is NaT
+    dft.index = pd.to_datetime(dft.index, errors='coerce')
     dft = dft[pd.notnull(dft.index)]
-    result = dft.fillna(0)
-    print(result)
-    return result
+    dft = dft.fillna(0)
+    return dft
 
 def initMenuNum():
     global menuNum
@@ -3098,7 +3065,7 @@ def echo(update, context):
 
     if not ',' in user_text:
         if len(code) > 0 and chartReq == "1":
-            dividend = get_dividiend(code)
+            data = get_dividiend(code)
 
     def get_chart(code):
         title = company + '[' + code + ']'
@@ -3152,12 +3119,39 @@ def echo(update, context):
 
         plt.savefig('/home/terra/Public/Batch/save1.png')
 
+    # --- 바 차트 생성 및 저장
+    def plot_financials_bar_chart(data, company_name):
+        plt.figure(figsize=(12, 8))
+        col_names = list(data.columns)
+
+        label_map = {
+            "매출액": 0,
+            "영업이익": 1,
+            "당기순이익": 4,
+        }
+
+        for i, (label, idx) in enumerate(label_map.items(), 1):
+            if idx >= len(col_names): continue
+            plt.subplot(3, 1, i)
+            colname = col_names[idx]
+            df_plot = data[[colname]].copy()
+            df_plot.columns = [label]
+            df_plot[label].plot(kind='bar')
+            plt.title(f"{company_name} - {label}")
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+
+        filename = f"/home/terra/Public/Batch/{company_name}_financials.png"
+        plt.savefig(filename)
+        plt.close()
+        return filename
+    
     def get_sales_sum(i):
 
         dict = {}
         count = 0
 
-        for x in dividend.index:
+        for x in data.index:
 
             # 연도 및 분기별 대상 count > 7, 연도별 대상 count > 3
             if count > 7:
@@ -3166,8 +3160,8 @@ def echo(update, context):
                 row = str(x)
                 idx = 0
 
-                for val in dividend[i]:
-                    dfrow = str(dividend[i].index[idx])
+                for val in data[i]:
+                    dfrow = str(data[i].index[idx])
 
                     if row[0:10] == dfrow[0:10]:
                         if idx > 3:
@@ -3218,6 +3212,9 @@ def echo(update, context):
                 text6 = text6+return_print("%s : %s" % (date, get_sales_sum(32)[date]))
 
             context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5+text6)
+
+            filename = plot_financials_bar_chart(data, company)
+            context.bot.send_photo(chat_id=user_id, photo=open(filename, 'rb'))
 
 # 텔레그램봇 응답 처리
 echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
