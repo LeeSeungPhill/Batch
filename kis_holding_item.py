@@ -53,10 +53,54 @@ async def send_telegram_message(telegram_text):
     chat_id = "2147256258"
     await bot.send_message(chat_id=chat_id, text=telegram_text)
 
-acct_no = None
-access_token = None
-app_key = None
-app_secret = None
+# 계정 정보 전역 변수
+acct_info = {}
+
+# 계정 정보 조회
+def load_acct_info():
+    global acct_info
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT acct_no, access_token, app_key, app_secret
+        FROM "stockAccount_stock_account"
+        WHERE nick_name = %s
+    """, (arguments[1],))
+    result = cur.fetchone()
+    cur.close()
+
+    if result:
+        YmdHMS = datetime.now()
+        validTokenDate = datetime.strptime(result[4], '%Y%m%d%H%M%S')
+        diff = YmdHMS - validTokenDate
+        #print("diff : " + str(diff.days))
+        if diff.days >= 1:  # 토큰 유효기간(1일) 만료 재발급
+            access_token = auth(result[2], result[3])
+            token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
+            print("new access_token : " + access_token)
+            # 계정정보 토큰값 변경
+            cur02 = conn.cursor()
+            update_query = "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s"
+            # update 인자값 설정
+            record_to_update = ([access_token, token_publ_date, datetime.now(), result[0]])
+            # DB 연결된 커서의 쿼리 수행
+            cur02.execute(update_query, record_to_update)
+            conn.commit()
+            cur02.close()
+
+            acct_info = {
+                "acct_no": result[0],
+                "access_token": access_token,
+                "app_key": result[2],
+                "app_secret": result[3],
+            }
+
+        else:
+            acct_info = {
+                "acct_no": result[0],
+                "access_token": result[1],
+                "app_key": result[2],
+                "app_secret": result[3],
+            }    
 
 async def get_command1(update: Update, context: ContextTypes.DEFAULT_TYPE) :
     command_parts = update.message.text.split("_")
@@ -96,11 +140,11 @@ async def callback_get(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         sell_code = parts[1]  # 종목 코드
         sell_amount = int(parts[2])  # 매도 수량
 
-        if acct_no and access_token and app_key and app_secret:
+        if acct_info['acct_no'] and acct_info['access_token'] and acct_info['app_key'] and acct_info['app_secret']:
             
             try:
                 # 계좌잔고 조회
-                e = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                e = stock_balance(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], acct_info['acct_no'], "")
 
                 ord_psbl_qty = 0
                 for j, name in enumerate(e.index):
@@ -111,16 +155,16 @@ async def callback_get(update: Update, context: ContextTypes.DEFAULT_TYPE) :
 
                 if ord_psbl_qty >= sell_amount:  # 주문가능수량이 매도수량보다 큰 경우
                     # 입력 종목코드 현재가 시세
-                    a = inquire_price(access_token, app_key, app_secret, sell_code)
+                    a = inquire_price(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], sell_code)
                     sell_price = a['stck_prpr']
                     print("현재가 : " + format(int(sell_price), ',d'))  # 현재가
                     # 전체매도
-                    c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(sell_amount), str(sell_price))
+                    c = order_cash(False, acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], str(acct_info['acct_no']), sell_code, "00", str(sell_amount), str(sell_price))
                 
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, sell_code, c['ODNO'])
+                        output1 = daily_order_complete(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], acct_info['acct_no'], sell_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -183,11 +227,11 @@ async def callback_get(update: Update, context: ContextTypes.DEFAULT_TYPE) :
         # 절반매도
         half_sell_amount = int(round(sell_amount/2))
 
-        if acct_no and access_token and app_key and app_secret:
+        if acct_info['acct_no'] and acct_info['access_token'] and acct_info['app_key'] and acct_info['app_secret']:
             
             try:
                 # 계좌잔고 조회
-                e = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                e = stock_balance(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], acct_info['acct_no'], "")
 
                 ord_psbl_qty = 0
                 for j, name in enumerate(e.index):
@@ -198,16 +242,16 @@ async def callback_get(update: Update, context: ContextTypes.DEFAULT_TYPE) :
 
                 if ord_psbl_qty >= half_sell_amount:  # 주문가능수량이 절반매도수량보다 큰 경우
                     # 입력 종목코드 현재가 시세
-                    a = inquire_price(access_token, app_key, app_secret, sell_code)
+                    a = inquire_price(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], sell_code)
                     sell_price = a['stck_prpr']
                     print("현재가 : " + format(int(sell_price), ',d'))  # 현재가
                     
-                    c = order_cash(False, access_token, app_key, app_secret, str(acct_no), sell_code, "00", str(half_sell_amount), str(sell_price))
+                    c = order_cash(False, acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], str(acct_info['acct_no']), sell_code, "00", str(half_sell_amount), str(sell_price))
                 
                     if c['ODNO'] != "":
 
                         # 일별주문체결 조회
-                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, sell_code, c['ODNO'])
+                        output1 = daily_order_complete(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], acct_info['acct_no'], sell_code, c['ODNO'])
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -327,7 +371,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     return pd.DataFrame(output)
 
 # 잔고정보 처리
-def balance_proc():
+def balance_proc(acct_no, access_token, app_key, app_secret):
     # 계좌잔고 조회
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
@@ -504,36 +548,14 @@ async def main():
     if result_one == None:
 
         # 계정정보 조회
-        cur01 = conn.cursor()
-        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date from \"stockAccount_stock_account\" where nick_name = '"+arguments[1]+"'")
-        result_two = cur01.fetchone()
-        cur01.close()
+        load_acct_info()
 
-        acct_no = result_two[0]
-        access_token = result_two[1]
-        app_key = result_two[2]
-        app_secret = result_two[3]
-
-        YmdHMS = datetime.now()
-        validTokenDate = datetime.strptime(result_two[4], '%Y%m%d%H%M%S')
-        diff = YmdHMS - validTokenDate
-        #print("diff : " + str(diff.days))
-        if diff.days >= 1:  # 토큰 유효기간(1일) 만료 재발급
-            access_token = auth(result_two[2], result_two[3])
-            token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
-            print("new access_token : " + access_token)
-            # 계정정보 토큰값 변경
-            cur02 = conn.cursor()
-            update_query = "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s"
-            # update 인자값 설정
-            record_to_update = ([access_token, token_publ_date, datetime.now(), acct_no])
-            # DB 연결된 커서의 쿼리 수행
-            cur02.execute(update_query, record_to_update)
-            conn.commit()
-            cur02.close()
+        app = Application.builder().token(token).build()
+        app.add_handler(CallbackQueryHandler(callback_get))
+        await app.run_polling()
 
         # 잔고정보 호출
-        balance_proc()
+        balance_proc(acct_info['acct_no'], acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'])
         #params = {'acct_no': str(acct_no), 'app_key': app_key, 'app_secret': app_secret, 'access_token': access_token}
         #url = 'http://phills2.gonetis.com:8000/stockBalance/balanceList'   # Django URL 주소
         #url = 'http://localhost:8000/stockBalance/balanceList'  # Django URL 주소
@@ -548,7 +570,7 @@ async def main():
 
         # 보유정보 조회
         cur03 = conn.cursor()
-        cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.earnings_rate as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)	and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y'")
+        cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_info['acct_no'])+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_info['acct_no'])+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.earnings_rate as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)	and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_info['acct_no'])+"' and proc_yn = 'Y'")
         result_three = cur03.fetchall()
         cur03.close()
 
@@ -557,7 +579,7 @@ async def main():
             print("종목코드 : " + i[0])
             print("종목명 : " + i[1])
 
-            a = inquire_price(access_token, app_key, app_secret, i[0])
+            a = inquire_price(acct_info['access_token'], acct_info['app_key'], acct_info['app_secret'], i[0])
             print("현재가 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
             print("최고가 : " + format(int(a['stck_hgpr']), ',d'))  # 최고가
             print("최저가 : " + format(int(a['stck_lwpr']), ',d'))  # 최저가
@@ -641,7 +663,7 @@ async def main():
             
             # 추적정보 조회(현재일 종목코드 기준)
             cur04 = conn.cursor()
-            cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+            cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_info['acct_no']) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
             result_four = cur04.fetchall()
             cur04.close()
 
@@ -666,7 +688,7 @@ async def main():
                             cur20 = conn.cursor()
                             insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
                             # insert 인자값 설정
-                            record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                            record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_info['acct_no']), today, i[0], trail_signal_code, str(acct_info['acct_no']), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
                             # DB 연결된 커서의 쿼리 수행
                             cur20.execute(insert_query0, record_to_insert0)
 
@@ -674,7 +696,7 @@ async def main():
                             cur2 = conn.cursor()
                             insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                             # insert 인자값 설정
-                            record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                            record_to_insert = ([acct_info['acct_no'], today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
                             # DB 연결된 커서의 쿼리 수행
                             cur2.execute(insert_query, record_to_insert)
                             conn.commit()
@@ -699,7 +721,7 @@ async def main():
                     cur20 = conn.cursor()
                     insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
                     # insert 인자값 설정
-                    record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                    record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_info['acct_no']), today, i[0], trail_signal_code, str(acct_info['acct_no']), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
                     # DB 연결된 커서의 쿼리 수행
                     cur20.execute(insert_query0, record_to_insert0)
 
@@ -707,7 +729,7 @@ async def main():
                     cur2 = conn.cursor()
                     insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                     # insert 인자값 설정
-                    record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                    record_to_insert = ([acct_info['acct_no'], today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
                     # DB 연결된 커서의 쿼리 수행
                     cur2.execute(insert_query, record_to_insert)
                     conn.commit()
