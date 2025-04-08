@@ -582,7 +582,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
@@ -601,7 +602,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
@@ -619,7 +621,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
@@ -640,7 +643,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
@@ -658,7 +662,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
@@ -676,7 +681,8 @@ if result_one == None:
                     item_loss_sum = i[8]
                     print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                     # 매수량
-                    n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
                     print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                     # 매수금액
                     n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
