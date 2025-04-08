@@ -643,26 +643,25 @@ def marketLevel_proc(access_token, app_key, app_secret, acct_no):
     cur200.close()        
 
 def handle_holding_sell(update, context):
-    user_id = update.effective_chat.id
-    user_text = update.message.text
+    command_parts = update.message.text.split("_")
+    if len(command_parts) < 3:
+        update.message.reply_text("잘못된 명령어 형식입니다.")
+        return
 
-    # 정규식 매칭: /HoldingSell_종목코드_수량
-    match = re.match(r"^/HoldingSell_(\w+)_([\d\.]+)", user_text)
-    if match:
-        stock_code = match.group(1)
-        sell_amount = match.group(2)
+    stock_code = command_parts[1]
+    sell_amount = int(command_parts[2])
+
+    button_list = build_button(["전체매도", "절반매도", "취소"]) # make button list
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     
-        button_list = build_button(["전체매도", "절반매도", "취소"]) # make button list
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
-        
-        button_list = [
-            InlineKeyboardButton(f"전체매도 ({sell_amount}주)", callback_data=f"전체매도_{stock_code}_{sell_amount}"),
-            InlineKeyboardButton(f"절반매도 ({int(round(sell_amount/2))}주)", callback_data=f"절반매도_{stock_code}_{sell_amount}"),
-            InlineKeyboardButton("취소", callback_data="취소")
-        ]
-        show_markup = InlineKeyboardMarkup([button_list])
+    button_list = [
+        InlineKeyboardButton(f"전체매도 ({sell_amount}주)", callback_data=f"전체매도_{stock_code}_{sell_amount}"),
+        InlineKeyboardButton(f"절반매도 ({int(round(sell_amount/2))}주)", callback_data=f"절반매도_{stock_code}_{sell_amount}"),
+        InlineKeyboardButton("취소", callback_data="취소")
+    ]
+    show_markup = InlineKeyboardMarkup([button_list])
 
-        update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup 
+    update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup 
 
 def callback_get(update, context) :
     data_selected = update.callback_query.data
