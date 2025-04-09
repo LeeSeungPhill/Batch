@@ -164,14 +164,6 @@ cur01.close()
 
 data0 = []
 for item in result_one:
-    print("name : ",item[0])
-    print("purchase_price : ",item[1])
-    print("purchase_amount : ",item[2])
-    print("purchase_sum : ",item[3])
-    print("current_price : ",item[4])
-    print("eval_sum : ",item[5])
-    print("earnings_rate : ",item[6])
-    print("valuation_sum : ",item[7])
 
     data0.append({
         '종목명': item[0],
@@ -190,9 +182,6 @@ result_two = cur02.fetchall()
 cur02.close()    
 
 for item in result_two:
-    print("total : ",item[0])
-    print("eval : ",item[1])
-    print("amount : ",item[2])
     
     data0.append({
         '종목명': '현금',
@@ -245,26 +234,20 @@ strt_dt = (st.date_input("시작일", datetime.today() - timedelta(days=30))).st
 end_dt = (st.date_input("종료일", datetime.today())).strftime("%Y%m%d")
 
 cur03 = conn.cursor()
-cur03.execute("select prvs_excc_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, dt from \"dly_acct_balance\" where acct = '" + str(acct_no) + "' and dt between '" + strt_dt + "' and '" + end_dt + "'")
+cur03.execute("select prvs_excc_amt, pchs_amt, evlu_amt, evlu_pfls_amt dt from \"dly_acct_balance\" where acct = '" + str(acct_no) + "' and dt between '" + strt_dt + "' and '" + end_dt + "'")
 result_three = cur03.fetchall()
 cur03.close() 
 
 data01 = []
 for item in result_three:
-    print("예수금 : ",item[0])
-    print("총구매금액 : ",item[1])
-    print("평가금액 : ",item[2])
-    print("수익금액 : ",item[3])
-    print("전체금액 : ",item[4])
-    print("일자 : ",item[5])
 
     data01.append({
         '예수금': int(item[0]),
         '총구매금액': int(item[1]),
         '평가금액': int(item[2]),
         '수익금액': float(item[3]),
-        '전체금액': int(item[4]),
-        '일자': item[5],
+        '전체금액': int(item[0]) + int(item[2]),
+        '일자': item[4],
     })
 
 df01 = pd.DataFrame(data01)
@@ -293,20 +276,6 @@ else:
 
     data1 = []
     for item in result1:
-        # print("trade_dt : ",item['trad_dt'])
-        # print("code : ",item['pdno'])
-        # print("name : ",item['prdt_name'])
-        # print("purchase_price : ",item['pchs_unpr'])
-        # print("holding_qty : ",item['hldg_qty'])
-        # print("sell_price : ",item['sll_pric'])
-        # print("buy_qty : ",item['buy_qty'])
-        # print("buy_amt : ",item['buy_amt'])
-        # print("sell_qty : ",item['sll_qty'])
-        # print("sell_amt : ",item['sll_amt'])
-        # print("profit_loss_rate : ",item['pfls_rt'])
-        # print("profit_loss_amt : ",item['rlzt_pfls'])
-        # print("trade_tax : ",item['tl_tax'])
-        # print("trade_fee : ",item['fee'])
 
         data1.append({
             '거래일자': item['trad_dt'],
@@ -360,13 +329,6 @@ else:
 
     data2 = []
     for item in result2:
-        # print("trade_dt : ",item['trad_dt'])
-        # print("buy_amt : ",item['buy_amt'])
-        # print("sell_amt : ",item['sll_amt'])
-        # print("profit_loss_rate : ",item['pfls_rt'])
-        # print("profit_loss_amt : ",item['rlzt_pfls'])
-        # print("trade_tax : ",item['tl_tax'])
-        # print("trade_fee : ",item['fee'])
 
         data2.append({
             '거래일자': item['trad_dt'],
