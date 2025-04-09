@@ -3119,7 +3119,7 @@ def echo(update, context):
 
         plt.savefig('/home/terra/Public/Batch/save1.png')
 
-    # --- 바 차트 생성 및 저장
+    # 바 차트 생성 및 저장
     def plot_financials_bar_chart(data, company_name):
         plt.figure(figsize=(12, 8))
         col_names = list(data.columns)
@@ -3136,12 +3136,14 @@ def echo(update, context):
             colname = col_names[idx]
             df_plot = data[[colname]].copy()
             df_plot.columns = [label]
-            df_plot[label].plot(kind='bar')
+            # 가로축 라벨: 년월 형식으로 변경
+            x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
+            plt.bar(x_labels, df_plot[label])
             plt.title(f"{company_name} - {label}")
             plt.xticks(rotation=45)
             plt.tight_layout()
 
-        filename = f"/home/terra/Public/Batch/{company_name}_financials.png"
+        filename = f"/home/terra/Public/Batch/financials/{company_name}.png"
         plt.savefig(filename)
         plt.close()
         return filename
