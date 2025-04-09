@@ -234,7 +234,7 @@ strt_dt = (st.date_input("시작일", datetime.today() - timedelta(days=30))).st
 end_dt = (st.date_input("종료일", datetime.today())).strftime("%Y%m%d")
 
 cur03 = conn.cursor()
-cur03.execute("select prvs_excc_amt, pchs_amt, evlu_amt, evlu_pfls_amt dt from \"dly_acct_balance\" where acct = '" + str(acct_no) + "' and dt between '" + strt_dt + "' and '" + end_dt + "'")
+cur03.execute("select prvs_excc_amt, pchs_amt, evlu_amt, evlu_pfls_amt, dt from \"dly_acct_balance\" where acct = '" + str(acct_no) + "' and dt between '" + strt_dt + "' and '" + end_dt + "'")
 result_three = cur03.fetchall()
 cur03.close() 
 
