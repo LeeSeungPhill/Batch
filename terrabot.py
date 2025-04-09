@@ -1936,14 +1936,14 @@ def get_stock_summary(code):
         pbr_tag = soup.select_one('table.per_table tr:nth-child(10) td')
         result['PBR'] = pbr_tag.text.strip() if pbr_tag else 'N/A'
 
-        # 시가배당률
+        # 배당수익률
         yield_tag = soup.select_one('table.per_table tr:nth-child(12) td')
-        result['시가배당률'] = yield_tag.text.strip() if yield_tag else 'N/A'
+        result['배당수익률'] = yield_tag.text.strip() if yield_tag else 'N/A'
     except Exception as e:
         result = {
             '시가총액': 'N/A',
             'PBR': 'N/A',
-            '시가배당률': 'N/A'
+            '배당수익률': 'N/A'
         }
 
     return result
@@ -3151,8 +3151,9 @@ def echo(update, context):
 
     # 바 차트 생성 및 저장
     def plot_financials_bar_chart(data, company_name):
-        plt.figure(figsize=(12, 8))
+
         col_names = list(data.columns)
+        plt.figure(figsize=(12, 4 * len(label_map)))
 
         label_map = {
             "매출액": 0,
@@ -3167,11 +3168,16 @@ def echo(update, context):
             df_plot = data[[colname]].copy()
             df_plot.columns = [label]
 
-            x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
+             # 날짜 레이블 포맷: 인덱스에 따라 연도 또는 연월
+            if idx < 4:
+                x_labels = [d.strftime('%Y') for d in df_plot.index]
+            else:
+                x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
+
             values = df_plot[label].values
             colors = ['red' if val >= 0 else 'blue' for val in values]
 
-            ax = plt.subplot(3, 1, i)
+            ax = plt.subplot(len(label_map), 1, i)
             ax.bar(x_labels, values, color=colors)
             ax.set_title(f"{company_name} - {label}")
             ax.tick_params(axis='x', rotation=45)
@@ -3182,35 +3188,6 @@ def echo(update, context):
         plt.close()
         return filename
     
-    def get_sales_sum(i):
-
-        dict = {}
-        count = 0
-
-        for x in data.index:
-
-            # 연도 및 분기별 대상 count > 7, 연도별 대상 count > 3
-            if count > 7:
-                break
-            else:
-                row = str(x)
-                idx = 0
-
-                for val in data[i]:
-                    dfrow = str(data[i].index[idx])
-
-                    if row[0:10] == dfrow[0:10]:
-                        if idx > 3:
-                            dict["[" + dfrow[0:7] + "]"] = format(int(val), ',d')
-                        else:
-                            dict[dfrow[0:7]] = format(int(val), ',d')
-
-                    idx += 1
-
-                count += 1
-
-        return dict
-
     def return_print(*message):
         io = StringIO()
         print(*message, file=io)
