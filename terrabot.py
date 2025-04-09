@@ -3152,14 +3152,14 @@ def echo(update, context):
     # 바 차트 생성 및 저장
     def plot_financials_bar_chart(data, company_name):
 
-        col_names = list(data.columns)
-        plt.figure(figsize=(12, 4 * len(label_map)))
-
         label_map = {
             "매출액": 0,
             "영업이익": 1,
             "당기순이익": 4,
         }
+
+        col_names = list(data.columns)
+        plt.figure(figsize=(12, 4 * len(label_map)))
 
         for i, (label, idx) in enumerate(label_map.items(), 1):
             if idx >= len(col_names): continue
