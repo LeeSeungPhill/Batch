@@ -3159,29 +3159,42 @@ def echo(update, context):
         }
 
         col_names = list(data.columns)
-        plt.figure(figsize=(12, 4 * len(label_map)))
+        annual_cols = col_names[:4]
+        quarter_cols = col_names[4:8]  # 최대 8개 컬럼 사용
 
-        for i, (label, idx) in enumerate(label_map.items(), 1):
-            if idx >= len(col_names): continue
+        fig, axes = plt.subplots(len(label_map), 2, figsize=(16, 5 * len(label_map)))
 
-            colname = col_names[idx]
-            df_plot = data[[colname]].copy()
-            df_plot.columns = [label]
+        for i, (label, idx) in enumerate(label_map.items()):
+            if idx >= len(col_names):
+                continue
 
-             # 날짜 레이블 포맷: 인덱스에 따라 연도 또는 연월
-            if idx < 4:
-                x_labels = [d.strftime('%Y') for d in df_plot.index]
-            else:
-                x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
+            annual_col = annual_cols[idx] if idx < len(annual_cols) else None
+            quarter_col = quarter_cols[idx] if idx < len(quarter_cols) else None
 
-            values = df_plot[label].values
-            colors = ['red' if val >= 0 else 'blue' for val in values]
+            # 연간 바 차트
+            if annual_col:
+                ydata = data[[annual_col]].copy()
+                ydata.columns = [label]
+                x_labels = [d.strftime('%Y') for d in ydata.index]
+                y_values = ydata[label].values
+                colors = ['red' if v >= 0 else 'blue' for v in y_values]
 
-            ax = plt.subplot(len(label_map), 1, i)
-            ax.bar(x_labels, values, color=colors)
-            ax.set_title(f"{company_name} - {label}")
-            ax.tick_params(axis='x', rotation=45)
+                axes[i][0].bar(x_labels, y_values, color=colors)
+                axes[i][0].set_title(f"[연간] {company_name} - {label}")
+                axes[i][0].tick_params(axis='x', rotation=45)
 
+            # 분기 바 차트
+            if quarter_col:
+                qdata = data[[quarter_col]].copy()
+                qdata.columns = [label]
+                x_labels = [d.strftime('%Y-%m') for d in qdata.index]
+                y_values = qdata[label].values
+                colors = ['red' if v >= 0 else 'blue' for v in y_values]
+
+                axes[i][1].bar(x_labels, y_values, color=colors)
+                axes[i][1].set_title(f"[분기] {company_name} - {label}")
+                axes[i][1].tick_params(axis='x', rotation=45)
+    
         plt.tight_layout()
         filename = f"/home/terra/Public/Batch/financials/{company_name}.png"
         plt.savefig(filename)
