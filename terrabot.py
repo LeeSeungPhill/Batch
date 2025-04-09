@@ -1949,14 +1949,11 @@ def get_stock_summary(code):
                 label = th.text.strip()
                 value = td.text.strip()
 
-                if 'PBR' in label:
-                    # 예: "1.17배 | 58,789원"
+                if 'PBR' in label and 'BPS' in label:
                     parts = value.split('|')
                     if len(parts) == 2:
                         summary['PBR'] = parts[0].strip()
-                        summary['BPS'] = parts[1].strip()
-                    else:
-                        summary['PBR'] = value.strip()
+                        summary['BPS'] = parts[1].strip().split('(')[0].strip()
                 elif '배당수익률' in label:
                     summary['배당수익률'] = value.strip()
 
