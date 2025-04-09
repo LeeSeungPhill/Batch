@@ -21,6 +21,7 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import kis_stock_search_api as search
 import os
+from bs4 import BeautifulSoup
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -1918,6 +1919,35 @@ def get_dividiend(code):
     dft = dft.fillna(0)
     return dft
 
+def get_stock_summary(code):
+    url = f'https://finance.naver.com/item/main.naver?code={code}'
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    res = requests.get(url, headers=headers)
+    soup = BeautifulSoup(res.text, 'html.parser')
+
+    result = {}
+
+    try:
+        # 시가총액
+        market_cap_tag = soup.select_one('em#_market_sum')
+        result['시가총액'] = market_cap_tag.text.strip().replace('\n', '') if market_cap_tag else 'N/A'
+
+        # PBR
+        pbr_tag = soup.select_one('table.per_table tr:nth-child(10) td')
+        result['PBR'] = pbr_tag.text.strip() if pbr_tag else 'N/A'
+
+        # 시가배당률
+        yield_tag = soup.select_one('table.per_table tr:nth-child(12) td')
+        result['시가배당률'] = yield_tag.text.strip() if yield_tag else 'N/A'
+    except Exception as e:
+        result = {
+            '시가총액': 'N/A',
+            'PBR': 'N/A',
+            '시가배당률': 'N/A'
+        }
+
+    return result
+
 def initMenuNum():
     global menuNum
     global chartReq
@@ -3132,17 +3162,21 @@ def echo(update, context):
 
         for i, (label, idx) in enumerate(label_map.items(), 1):
             if idx >= len(col_names): continue
-            plt.subplot(3, 1, i)
+
             colname = col_names[idx]
             df_plot = data[[colname]].copy()
             df_plot.columns = [label]
-            # 가로축 라벨: 년월 형식으로 변경
-            x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
-            plt.bar(x_labels, df_plot[label])
-            plt.title(f"{company_name} - {label}")
-            plt.xticks(rotation=45)
-            plt.tight_layout()
 
+            x_labels = [d.strftime('%Y-%m') for d in df_plot.index]
+            values = df_plot[label].values
+            colors = ['red' if val >= 0 else 'blue' for val in values]
+
+            ax = plt.subplot(3, 1, i)
+            ax.bar(x_labels, values, color=colors)
+            ax.set_title(f"{company_name} - {label}")
+            ax.tick_params(axis='x', rotation=45)
+
+        plt.tight_layout()
         filename = f"/home/terra/Public/Batch/financials/{company_name}.png"
         plt.savefig(filename)
         plt.close()
@@ -3188,32 +3222,13 @@ def echo(update, context):
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
             text0 = return_print("<" + company + ">")
-            text1 = return_print("[매출액]")
-            for date in get_sales_sum(0).keys():
-                #print("%s : %s" % (date, get_sales_sum(0)[date]))
-                text1 = text1+return_print("%s : %s" % (date, get_sales_sum(0)[date]))
-            text2 = return_print("[영업이익]")
-            for date in get_sales_sum(1).keys():
-                #print("%s : %s" % (date, get_sales_sum(1)[date]))
-                text2 = text2+return_print("%s : %s" % (date, get_sales_sum(1)[date]))
-            text3 = return_print("[당기순이익]")
-            for date in get_sales_sum(4).keys():
-                #print("%s : %s" % (date, get_sales_sum(4)[date]))
-                text3 = text3+return_print("%s : %s" % (date, get_sales_sum(4)[date]))
-            text4 = return_print("[BPS(원)]")
-            for date in get_sales_sum(27).keys():
-                #print("%s : %s" % (date, get_sales_sum(27)[date]))
-                text4 = text4+return_print("%s : %s" % (date, get_sales_sum(27)[date]))
-            text5 = return_print("[현금DPS(원)]")
-            for date in get_sales_sum(29).keys():
-                #print("%s : %s" % (date, get_sales_sum(29)[date]))
-                text5 = text5+return_print("%s : %s" % (date, get_sales_sum(29)[date]))
-            text6 = return_print("[발행주식수(보통주)]")
-            for date in get_sales_sum(32).keys():
-                #print("%s : %s" % (date, get_sales_sum(32)[date]))
-                text6 = text6+return_print("%s : %s" % (date, get_sales_sum(32)[date]))
+            summary = get_stock_summary(code)
+            text1 = return_print("[요약 지표]")
+            text1 += return_print(f"PBR : {summary['PBR']}")
+            text1 += return_print(f"시가배당률 : {summary['시가배당률']}")
+            text1 += return_print(f"시가총액 : {summary['시가총액']}")
 
-            context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5+text6)
+            context.bot.send_message(chat_id=user_id, text=text0+text1)
 
             filename = plot_financials_bar_chart(data, company)
             context.bot.send_photo(chat_id=user_id, photo=open(filename, 'rb'))
