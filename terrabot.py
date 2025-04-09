@@ -1925,28 +1925,32 @@ def get_stock_summary(code):
     res = requests.get(url, headers=headers)
     soup = BeautifulSoup(res.text, 'html.parser')
 
-    result = {}
+    summary = {}
 
     try:
         # 시가총액
-        market_cap_tag = soup.select_one('em#_market_sum')
-        result['시가총액'] = market_cap_tag.text.strip().replace('\n', '') if market_cap_tag else 'N/A'
+        market_cap = soup.select_one('em#_market_sum')
+        summary['시가총액'] = market_cap.text.strip().replace('\n', '').replace('\t', '') if market_cap else 'N/A'
 
-        # PBR
-        pbr_tag = soup.select_one('table.per_table tr:nth-child(10) td')
-        result['PBR'] = pbr_tag.text.strip() if pbr_tag else 'N/A'
+        # PBR, EPS, 배당수익률
+        table = soup.select_one('table.per_table')
+        if table:
+            rows = table.select('tr')
+            for row in rows:
+                th = row.select_one('th')
+                td = row.select_one('td')
+                if th and td:
+                    label = th.text.strip()
+                    value = td.text.strip()
 
-        # 배당수익률
-        yield_tag = soup.select_one('table.per_table tr:nth-child(12) td')
-        result['배당수익률'] = yield_tag.text.strip() if yield_tag else 'N/A'
+                    if 'PBR' in label:
+                        summary['PBR'] = value
+                    elif '배당수익률' in label:
+                        summary['배당수익률'] = value
     except Exception as e:
-        result = {
-            '시가총액': 'N/A',
-            'PBR': 'N/A',
-            '배당수익률': 'N/A'
-        }
+        summary['error'] = str(e)
 
-    return result
+    return summary
 
 def initMenuNum():
     global menuNum
@@ -3195,14 +3199,14 @@ def echo(update, context):
             get_chart(code)
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
-            # text0 = return_print("<" + company + ">")
-            # summary = get_stock_summary(code)
-            # text1 = return_print("[요약 지표]")
-            # text1 += return_print(f"PBR : {summary['PBR']}")
-            # text1 += return_print(f"시가배당률 : {summary['시가배당률']}")
-            # text1 += return_print(f"시가총액 : {summary['시가총액']}")
+            summary = get_stock_summary(code)
 
-            # context.bot.send_message(chat_id=user_id, text=text0+text1)
+            summary_text = f"[{company} - 주요 지표]\n"
+            summary_text += f"시가총액: {summary.get('시가총액', 'N/A')}\n"
+            summary_text += f"PBR: {summary.get('PBR', 'N/A')}\n"
+            summary_text += f"배당수익률: {summary.get('배당수익률', 'N/A')}\n"
+
+            context.bot.send_message(chat_id=user_id, text=summary_text)
 
             filename = plot_financials_bar_chart(data, company)
             context.bot.send_photo(chat_id=user_id, photo=open(filename, 'rb'))
