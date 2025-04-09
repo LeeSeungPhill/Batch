@@ -3198,14 +3198,14 @@ def echo(update, context):
             get_chart(code)
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
-            text0 = return_print("<" + company + ">")
-            summary = get_stock_summary(code)
-            text1 = return_print("[요약 지표]")
-            text1 += return_print(f"PBR : {summary['PBR']}")
-            text1 += return_print(f"시가배당률 : {summary['시가배당률']}")
-            text1 += return_print(f"시가총액 : {summary['시가총액']}")
+            # text0 = return_print("<" + company + ">")
+            # summary = get_stock_summary(code)
+            # text1 = return_print("[요약 지표]")
+            # text1 += return_print(f"PBR : {summary['PBR']}")
+            # text1 += return_print(f"시가배당률 : {summary['시가배당률']}")
+            # text1 += return_print(f"시가총액 : {summary['시가총액']}")
 
-            context.bot.send_message(chat_id=user_id, text=text0+text1)
+            # context.bot.send_message(chat_id=user_id, text=text0+text1)
 
             filename = plot_financials_bar_chart(data, company)
             context.bot.send_photo(chat_id=user_id, photo=open(filename, 'rb'))
