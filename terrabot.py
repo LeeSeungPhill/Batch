@@ -3152,35 +3152,32 @@ def echo(update, context):
     # 바 차트 생성 및 저장
     def plot_financials_bar_chart(data, company_name):
 
+        plt.figure(figsize=(12, 8))
+        col_names = list(data.columns)
+
         label_map = {
             "매출액": 0,
             "영업이익": 1,
             "당기순이익": 4,
         }
 
-        col_names = list(data.columns)
-        annual_cols = col_names[:4]  # 왼쪽 4개만 연간으로 처리
-
-        fig, axes = plt.subplots(len(label_map), 1, figsize=(14, 5 * len(label_map)))
-
-        if len(label_map) == 1:
-            axes = [axes]  # axes가 1개일 경우 리스트로 변환
-
-        for i, (label, idx) in enumerate(label_map.items()):
-            if idx >= len(annual_cols):
+        for i, (label, idx) in enumerate(label_map.items(), 1):
+            if idx >= len(col_names):
                 continue
 
-            col = annual_cols[idx]
-            ydata = data[[col]].copy()
-            ydata.columns = [label]
+            colname = col_names[idx]
+            df_plot = data[[colname]].copy()
+            df_plot.columns = [label]
 
-            x_labels = [d.strftime('%Y') for d in ydata.index]
-            y_values = ydata[label].values
-            colors = ['red' if v >= 0 else 'blue' for v in y_values]
+            values = df_plot[label].values
+            x_pos = range(len(values))  # 고유한 x 인덱스
+            x_labels = df_plot.index.strftime('%Y-%m')  # 중복 없이 표시
+            colors = ['red' if v >= 0 else 'blue' for v in values]
 
-            axes[i].bar(x_labels, y_values, color=colors)
-            axes[i].set_title(f"{company_name} - {label} (연간)")
-            axes[i].tick_params(axis='x', rotation=45)
+            plt.subplot(3, 1, i)
+            plt.bar(x_pos, values, color=colors)
+            plt.title(f"{company_name} - {label}")
+            plt.xticks(x_pos, x_labels, rotation=45)
 
         plt.tight_layout()
         filename = f"/home/terra/Public/Batch/financials/{company_name}.png"
