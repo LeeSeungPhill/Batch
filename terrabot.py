@@ -1930,23 +1930,36 @@ def get_stock_summary(code):
     try:
         # 시가총액
         market_cap = soup.select_one('em#_market_sum')
-        summary['시가총액'] = market_cap.text.strip().replace('\n', '').replace('\t', '') if market_cap else 'N/A'
+        if market_cap:
+            value = market_cap.text.strip().replace('\n', '').replace('\t', '').replace(',', '')
+            summary['시가총액'] = f"{int(value):,}억원"  # 숫자 + 억원
+        else:
+            summary['시가총액'] = 'N/A'
 
-        # PBR, EPS, 배당수익률
+        # PBR, BPS, 배당수익률
         table = soup.select_one('table.per_table')
         if table:
             rows = table.select('tr')
             for row in rows:
                 th = row.select_one('th')
                 td = row.select_one('td')
-                if th and td:
-                    label = th.text.strip()
-                    value = td.text.strip()
+                if not th or not td:
+                    continue
 
-                    if 'PBR' in label:
-                        summary['PBR'] = value
-                    elif '배당수익률' in label:
-                        summary['배당수익률'] = value
+                label = th.text.strip()
+                value = td.text.strip()
+
+                if 'PBR' in label:
+                    # 예: "1.17배 | 58,789원"
+                    parts = value.split('|')
+                    if len(parts) == 2:
+                        summary['PBR'] = parts[0].strip()
+                        summary['BPS'] = parts[1].strip()
+                    else:
+                        summary['PBR'] = value.strip()
+                elif '배당수익률' in label:
+                    summary['배당수익률'] = value.strip()
+
     except Exception as e:
         summary['error'] = str(e)
 
@@ -3189,11 +3202,6 @@ def echo(update, context):
         plt.close()
         return filename
     
-    def return_print(*message):
-        io = StringIO()
-        print(*message, file=io)
-        return io.getvalue()
-
     if not ',' in user_text:
         if len(code) > 0 and chartReq == "1":
             get_chart(code)
@@ -3202,9 +3210,10 @@ def echo(update, context):
             summary = get_stock_summary(code)
 
             summary_text = f"[{company} - 주요 지표]\n"
-            summary_text += f"시가총액: {summary.get('시가총액', 'N/A')}\n"
-            summary_text += f"PBR: {summary.get('PBR', 'N/A')}\n"
-            summary_text += f"배당수익률: {summary.get('배당수익률', 'N/A')}\n"
+            summary_text += f"• 시가총액: {summary.get('시가총액', 'N/A')}\n"
+            summary_text += f"• PBR: {summary.get('PBR', 'N/A')}\n"
+            summary_text += f"• BPS: {summary.get('BPS', 'N/A')}\n"
+            summary_text += f"• 배당수익률: {summary.get('배당수익률', 'N/A')}\n"
 
             context.bot.send_message(chat_id=user_id, text=summary_text)
 
