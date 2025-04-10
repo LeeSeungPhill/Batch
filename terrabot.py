@@ -22,6 +22,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import kis_stock_search_api as search
 import os
 from bs4 import BeautifulSoup
+import time
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -129,6 +130,31 @@ def get_command3(update, context) :
     show_markup = InlineKeyboardMarkup([button_list])
 
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup    
+
+# ngrok URL 가져오기
+def get_ngrok_url(retries=5, delay=2):
+    url = "http://localhost:4040/api/tunnels"
+    for _ in range(retries):
+        try:
+            response = requests.get(url)
+            tunnels = response.json()['tunnels']
+            for tunnel in tunnels:
+                if tunnel['proto'] == 'https':
+                    return tunnel['public_url']
+        except Exception as e:
+            print(f"Waiting for ngrok... ({e})")
+            time.sleep(delay)
+    return None
+
+def get_command_info(update, context) :
+    ngrok_url = get_ngrok_url()
+    if ngrok_url:
+        message = f"Streamlit 대시보드가 열렸습니다!\n => [접속하기]({ngrok_url})"
+        update.message.reply_text(message)
+        return
+    else:
+        update.message.reply_text("ngrok URL을 가져오지 못했습니다.")
+        return
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -1845,6 +1871,10 @@ def callback_get(update, context) :
 
 get_handler = CommandHandler('fund', get_command)
 updater.dispatcher.add_handler(get_handler)
+
+get_handler_info = CommandHandler('info', get_command_info)
+updater.dispatcher.add_handler(get_handler_info)
+
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
 # 날짜형식 변환(년월)
