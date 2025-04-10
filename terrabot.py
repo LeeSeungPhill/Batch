@@ -21,7 +21,7 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import kis_stock_search_api as search
 import os
-from bs4 import BeautifulSoup
+from dateutil.relativedelta import relativedelta
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -198,6 +198,30 @@ def inquire_price(access_token, app_key, app_secret, code):
     ar = resp.APIResp(res)
 
     return ar.getBody().output
+
+# 예탁원정보(배당일정)
+def dividend_schedule(access_token, app_key, app_secret, strt_dt, code):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "HHKDB669102C0",
+               "custtype": "P"}
+    params = {
+            'CTS' : "",
+            'GB1' : "0",                                # 0:배당전체, 1:결산배당, 2:중간배당
+            'F_DT' : strt_dt,                           # 조회시작일자(8자리)
+            'E_DT' : datetime.now().strftime('%Y%m%d'), # 조회종료일자(8자리)
+            'SHT_CD': code,
+            'HIGH_GB': ""
+    }
+    PATH = "uapi/domestic-stock/v1/ksdinfo/dividend"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output1    
 
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
@@ -1394,22 +1418,8 @@ def callback_get(update, context) :
                 cur200.close()
 
                 for i in result_two00:
-                    print("종목코드 : " + i[0])
-                    print("종목명 : " + i[1])
-                    print("돌파가 : " + format(int(i[2]), ',d'))
-                    print("이탈가 : " + format(int(i[3]), ',d'))
-                    print("저항가 : " + format(int(i[4]), ',d'))
-                    print("지지가 : " + format(int(i[5]), ',d'))
-                    print("추세상단가 : " + format(int(i[6]), ',d'))
-                    print("추세하단가 : " + format(int(i[7]), ',d'))
-                    print("매수예정금액 : " + format(int(i[8]), ',d'))
 
                     a = inquire_price(access_token, app_key, app_secret, i[0])
-                    print("현재가 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
-                    print("최고가 : " + format(int(a['stck_hgpr']), ',d'))  # 최고가
-                    print("최저가 : " + format(int(a['stck_lwpr']), ',d'))  # 최저가
-                    print("누적거래량 : " + format(int(a['acml_vol']), ',d'))  # 누적거래량
-                    print("전일대비거래량비율 : " + a['prdy_vrss_vol_rate'])  # 전일대비거래량비율
 
                     company = i[1] + "[" + i[0] + "]"
 
@@ -1919,49 +1929,6 @@ def get_dividiend(code):
     dft = dft.fillna(0)
     return dft
 
-def get_stock_summary(code):
-    url = f'https://finance.naver.com/item/main.naver?code={code}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, 'html.parser')
-
-    summary = {}
-
-    try:
-        # 시가총액
-        market_cap = soup.select_one('em#_market_sum')
-        if market_cap:
-            value = market_cap.text.strip().replace('\n', '').replace('\t', '').replace(',', '')
-            summary['시가총액'] = f"{int(value):,}억원"  # 숫자 + 억원
-        else:
-            summary['시가총액'] = 'N/A'
-
-        # PBR, BPS, 배당수익률
-        table = soup.select_one('table.per_table')
-        if table:
-            rows = table.select('tr')
-            for row in rows:
-                th = row.select_one('th')
-                td = row.select_one('td')
-                if not th or not td:
-                    continue
-
-                label = th.text.strip()
-                value = td.text.strip()
-
-                if 'PBR' in label and 'BPS' in label:
-                    parts = value.split('|')
-                    if len(parts) == 2:
-                        summary['PBR'] = parts[0].strip()
-                        summary['BPS'] = parts[1].strip().split('(')[0].strip()
-                elif '배당수익률' in label:
-                    summary['배당수익률'] = value.strip()
-
-    except Exception as e:
-        summary['error'] = str(e)
-
-    return summary
-
 def initMenuNum():
     global menuNum
     global chartReq
@@ -1979,6 +1946,35 @@ def echo(update, context):
     global g_sell_code
     global g_company
     global chartReq
+
+    # 주식 현재가
+    stck_prpr = ''
+    # 전일 대비율
+    prdy_ctrt = ''
+    # 누적 거래량
+    acml_vol = ''
+    # 전일 대비 거래량 비율
+    prdy_vrss_vol_rate = ''
+    # HTS 시가총액
+    hts_avls = ''
+    # PBR
+    pbr = ''
+    # BPS
+    bps = ''
+    # 기준일
+    record_date = ''
+    # 배당종류
+    divi_kind = ''
+    # 현금배당금
+    per_sto_divi_amt = ''
+    # 현금배당률(%)
+    divi_rate = ''
+    # 주식배당률(%)
+    stk_divi_rate = ''
+    # 배당금지급일
+    divi_pay_dt = ''
+    # 주식배당지급일
+    stk_div_pay_dt = ''
 
     chartReq = "1"
 
@@ -2036,12 +2032,25 @@ def echo(update, context):
 
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
-        print("현재가 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
-        print("최고가 : " + format(int(a['stck_hgpr']), ',d'))  # 최고가
-        print("최저가 : " + format(int(a['stck_lwpr']), ',d'))  # 최저가
-        print("누적거래량 : " + format(int(a['acml_vol']), ',d'))  # 누적거래량
-        print("전일대비거래량비율 : " + a['prdy_vrss_vol_rate'])  # 전일대비거래량비율
-        print("시가총액 : " + format(int(a['hts_avls']), ',d')) # 시가총액
+        stck_prpr = a['stck_prpr']                      # 현재가
+        prdy_ctrt = a['prdy_ctrt']                      # 전일 대비율
+        acml_vol = a['acml_vol']                        # 누적거래량
+        prdy_vrss_vol_rate = a['prdy_vrss_vol_rate']    # 전일 대비 거래량 비율
+        hts_avls = a['hts_avls']                        # 시가총액
+        pbr = a['pbr']
+        bps = a['bps']
+
+        strt_dt = (datetime.now() - relativedelta(years=1)).strftime('%Y%m%d')
+
+        # 예탁원정보(배당일정)
+        dividend = dividend_schedule(access_token, app_key, app_secret, strt_dt, code)
+        record_date = dividend['record_date']               # 기준일
+        divi_kind = dividend['divi_kind']                   # 배당종류
+        per_sto_divi_amt = dividend['per_sto_divi_amt']     # 현금배당금
+        divi_rate = dividend['divi_rate']                   # 현금배당률(%)
+        stk_divi_rate = dividend['stk_divi_rate']           # 주식배당률(%)
+        divi_pay_dt = dividend['divi_pay_dt']               # 배당금지급일
+        stk_div_pay_dt = dividend['stk_div_pay_dt']         # 주식배당지급일
 
         print("menuNum : ", menuNum)
 
@@ -2056,16 +2065,6 @@ def echo(update, context):
             if len(result_two00) > 0:
                 
                 for i in result_two00:
-                    print("종목코드 : " + i[0])
-                    print("종목명 : " + i[1])
-                    print("돌파가 : " + format(int(i[2]), ',d'))
-                    print("이탈가 : " + format(int(i[3]), ',d'))
-                    print("저항가 : " + format(int(i[4]), ',d'))
-                    print("지지가 : " + format(int(i[5]), ',d'))
-                    print("추세상단가 : " + format(int(i[6]), ',d'))
-                    print("추세하단가 : " + format(int(i[7]), ',d'))
-                    print("매수예정금액 : " + format(int(i[8]), ',d'))
-
                     company = i[1] + "[" + i[0] + "]"
 
                     context.bot.send_message(chat_id=update.effective_chat.id, text=company + " : 현재가-" + format(int(a['stck_prpr']), ',d') + "원, 고가-" + format(int(a['stck_hgpr']), ',d') + "원, 저가-" + format(int(a['stck_lwpr']), ',d') + "원, 거래량-" + format(int(a['acml_vol']), ',d') + "주, 거래대비-" + a['prdy_vrss_vol_rate'] + "%, 돌파가-" + format(int(i[2]), ',d') + "원, 이탈가-" + format(int(i[3]), ',d') + "원, 저항가-" + format(int(i[4]), ',d') + "원, 지지가-" + format(int(i[5]), ',d') + "원, 추세상단가-" + format(int(i[6]), ',d') + "원, 추세하단가-" + format(int(i[7]), ',d') + "원, 매수예정금액-" + format(int(i[8]), ',d') + "원")
@@ -3204,13 +3203,14 @@ def echo(update, context):
             get_chart(code)
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
-            summary = get_stock_summary(code)
-
             summary_text = f"[{company} - 주요 지표]\n"
-            summary_text += f"• 시가총액: {summary.get('시가총액', 'N/A')}\n"
-            summary_text += f"• PBR: {summary.get('PBR', 'N/A')}\n"
-            summary_text += f"• BPS: {summary.get('BPS', 'N/A')}\n"
-            summary_text += f"• 배당수익률: {summary.get('배당수익률', 'N/A')}\n"
+            summary_text += f"• 현재가:{stck_prpr}, 등락률:{prdy_ctrt}, 전일비:{prdy_vrss_vol_rate}, 거래량:{acml_vol}\n"
+            summary_text += f"• 시가총액: {hts_avls}\n"
+            summary_text += f"• PBR: {pbr}\n"
+            summary_text += f"• BPS: {bps}\n"
+            summary_text += f"• 현금배당률: {divi_rate}\n"
+            summary_text += f"• 주식배당률: {stk_divi_rate}\n"
+            summary_text += f"• 배당기준일: {record_date}\n"
 
             context.bot.send_message(chat_id=user_id, text=summary_text)
 
