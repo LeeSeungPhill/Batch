@@ -21,7 +21,7 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import kis_stock_search_api as search
 import os
-from dateutil.relativedelta import relativedelta
+from bs4 import BeautifulSoup
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -198,30 +198,6 @@ def inquire_price(access_token, app_key, app_secret, code):
     ar = resp.APIResp(res)
 
     return ar.getBody().output
-
-# 예탁원정보(배당일정)
-def dividend_schedule(access_token, app_key, app_secret, strt_dt, code):
-
-    headers = {"Content-Type": "application/json",
-               "authorization": f"Bearer {access_token}",
-               "appKey": app_key,
-               "appSecret": app_secret,
-               "tr_id": "HHKDB669102C0",
-               "custtype": "P"}
-    params = {
-            'CTS' : "",
-            'GB1' : "0",                                # 0:배당전체, 1:결산배당, 2:중간배당
-            'F_DT' : strt_dt,                           # 조회시작일자(8자리)
-            'E_DT' : datetime.now().strftime('%Y%m%d'), # 조회종료일자(8자리)
-            'SHT_CD': code,
-            'HIGH_GB': ""
-    }
-    PATH = "uapi/domestic-stock/v1/ksdinfo/dividend"
-    URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
-    ar = resp.APIResp(res)
-
-    return ar.getBody().output1    
 
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
@@ -414,13 +390,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
         u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
 
-    print("총평가금액 : " + format(int(u_tot_evlu_amt), ',d'))       
-    print("예수금총금액 : " + format(int(u_dnca_tot_amt), ',d'))
-    print("순자산금액(세금비용 제외) : " + format(int(u_nass_amt), ',d'))
-    print("가수도 정산 금액 : " + format(int(u_prvs_rcdl_excc_amt), ',d'))
-    print("유저 평가 금액 : " + format(int(u_scts_evlu_amt), ',d'))
-    print("자산 증감액 : " + format(int(u_asst_icdc_amt), ',d'))
-
     # 자산정보 조회
     cur100 = conn.cursor()
     cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
@@ -519,13 +488,6 @@ def fund_proc(access_token, app_key, app_secret, acct_no):
         u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])      # 가수도 정산 금액
         u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
         u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
-
-    print("총평가금액 : " + format(int(u_tot_evlu_amt), ',d'))       
-    print("예수금총금액 : " + format(int(u_dnca_tot_amt), ',d'))
-    print("순자산금액(세금비용 제외) : " + format(int(u_nass_amt), ',d'))
-    print("가수도 정산 금액 : " + format(int(u_prvs_rcdl_excc_amt), ',d'))
-    print("유저 평가 금액 : " + format(int(u_scts_evlu_amt), ',d'))
-    print("자산 증감액 : " + format(int(u_asst_icdc_amt), ',d'))
 
     # 자산정보 조회
     cur100 = conn.cursor()
@@ -1749,17 +1711,6 @@ def callback_get(update, context) :
         cur300.close()
         
         for i in result_three00:
-            print("승률 : " + str(i[0]))
-            print("현금비중 : " + str(i[1]))
-            print("총평가금액 : " + format(int(i[2]), ',d'))
-            print("현금액 : " + format(int(i[3]), ',d'))
-            print("예수금 : " + format(int(i[4]), ',d'))
-            print("가수금 : " + format(int(i[5]), ',d'))
-            print("순자산 : " + format(int(i[6]), ',d'))
-            print("평가금 : " + format(int(i[7]), ',d'))
-            print("증감액 : " + format(int(i[8]), ',d'))
-            print("매도예정금 : " + format(int(i[9]), ',d'))
-            print("매수예정금 : " + format(int(i[10]), ',d'))
 
             context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액-" + format(int(i[2]), ',d') + "원, 현금액-" + format(int(i[3]), ',d') + "원, 현금비중[" + str(i[0]) + "%], 예수금-"+format(int(i[4]), ',d') + "원, 가수금-" + format(int(i[5]), ',d') + "원, 순자산-" + format(int(i[6]), ',d') + "원, 평가금-" + format(int(i[7]), ',d') + "원, 증감액(" + format(int(i[8]), ',d') + ")원, 승률[" + str(i[0]) + "%], 매도예정금-" + format(int(i[9]), ',d') + "원, 매수예정금-" + format(int(i[10]), ',d') + "원")        
 
@@ -1794,12 +1745,6 @@ def callback_get(update, context) :
         cur400.close()
         
         for i in result_four00:
-            print("시장레벨번호 : " + str(i[0]))
-            print("총자산 : " + format(int(i[1]), ',d'))
-            print("리스크 : " + str(i[2]))
-            print("리스크금액 : " + format(int(i[3]), ',d'))
-            print("종목수 : " + str(i[4]))
-            print("종목리스크 : " + format(int(i[3]/i[4]), ',d'))
 
             context.bot.send_message(chat_id=update.effective_chat.id, text="시장레벨번호[" + str(i[0]) + "], 총자산-" + format(int(i[1]), ',d') + "원, 리스크[" + str(i[2]) + "%], 리스크금액-"+format(int(i[3]), ',d') + "원, 종목수[" + format(int(i[4]), ',d') + "개], 종목리스크-" + format(int(i[3]/i[4]), ',d') + "원")        
 
@@ -1929,6 +1874,25 @@ def get_dividiend(code):
     dft = dft.fillna(0)
     return dft
 
+def get_dividend_yield(code):
+    url = f'https://finance.naver.com/item/main.naver?code={code}'
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    res = requests.get(url, headers=headers)
+    soup = BeautifulSoup(res.text, 'html.parser')
+
+    table = soup.select_one('table.per_table')
+    if not table:
+        return None
+
+    rows = table.select('tr')
+    for row in rows:
+        th = row.select_one('th')
+        td = row.select_one('td')
+        if th and '배당수익률' in th.text:
+            return td.text.strip()
+
+    return None
+
 def initMenuNum():
     global menuNum
     global chartReq
@@ -1961,20 +1925,6 @@ def echo(update, context):
     pbr = ''
     # BPS
     bps = ''
-    # 기준일
-    record_date = ''
-    # 배당종류
-    divi_kind = ''
-    # 현금배당금
-    per_sto_divi_amt = ''
-    # 현금배당률(%)
-    divi_rate = ''
-    # 주식배당률(%)
-    stk_divi_rate = ''
-    # 배당금지급일
-    divi_pay_dt = ''
-    # 주식배당지급일
-    stk_div_pay_dt = ''
 
     chartReq = "1"
 
@@ -2039,18 +1989,6 @@ def echo(update, context):
         hts_avls = a['hts_avls']                        # 시가총액
         pbr = a['pbr']
         bps = a['bps']
-
-        strt_dt = (datetime.now() - relativedelta(years=1)).strftime('%Y%m%d')
-
-        # 예탁원정보(배당일정)
-        dividend = dividend_schedule(access_token, app_key, app_secret, strt_dt, code)
-        record_date = dividend['record_date']               # 기준일
-        divi_kind = dividend['divi_kind']                   # 배당종류
-        per_sto_divi_amt = dividend['per_sto_divi_amt']     # 현금배당금
-        divi_rate = dividend['divi_rate']                   # 현금배당률(%)
-        stk_divi_rate = dividend['stk_divi_rate']           # 주식배당률(%)
-        divi_pay_dt = dividend['divi_pay_dt']               # 배당금지급일
-        stk_div_pay_dt = dividend['stk_div_pay_dt']         # 주식배당지급일
 
         print("menuNum : ", menuNum)
 
@@ -3204,13 +3142,13 @@ def echo(update, context):
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
             summary_text = f"[{company} - 주요 지표]\n"
-            summary_text += f"• 현재가:{stck_prpr}, 등락률:{prdy_ctrt}, 전일비:{prdy_vrss_vol_rate}, 거래량:{acml_vol}\n"
-            summary_text += f"• 시가총액: {hts_avls}\n"
+            summary_text += f"• 현재가:{format(int(stck_prpr), ',d')}원, 등락률:{prdy_ctrt}%, 전일비:{prdy_vrss_vol_rate}%, 거래량:{format(int(acml_vol), ',d')}주\n"
+            summary_text += f"• 시가총액: {format(int(hts_avls), ',d')}억원\n"
             summary_text += f"• PBR: {pbr}\n"
-            summary_text += f"• BPS: {bps}\n"
-            summary_text += f"• 현금배당률: {divi_rate}\n"
-            summary_text += f"• 주식배당률: {stk_divi_rate}\n"
-            summary_text += f"• 배당기준일: {record_date}\n"
+            summary_text += f"• BPS: {format(int(bps), ',d')}\n"
+
+            dividend_rate = get_dividend_yield(code)
+            summary_text += f"• 배당수익률: {dividend_rate}\n"
 
             context.bot.send_message(chat_id=user_id, text=summary_text)
 
