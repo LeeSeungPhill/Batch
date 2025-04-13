@@ -7,6 +7,8 @@ import kis_api_resp as resp
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import altair as alt
+import plotly.graph_objects as go
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -205,18 +207,34 @@ else:
     if st.button('데이터프레임 보기0'):
         st.dataframe(df0)
 
-    df_pie = df0[df0['평가금액'] > 0]
-    
-    fig = px.pie(
-        df_pie,
-        names='종목명',
-        values='평가금액',
-        title='종목별 평가금액 비율',
-        hole=0.4  # 도넛 형태 (없애려면 0으로)
+    df_pie = df0[df0['평가금액'] > 0].copy()
+
+    # 레이블 생성: 종목명 (매입단가) or 종목명 (평가금액)
+    def format_label(row):
+        if row['종목명'] == '현금':
+            return f"{row['종목명']} ({row['평가금액']:,.0f}원)"
+        else:
+            profit_rate = f"{row['손익률(%)']:+.2f}%"
+            return f"{row['종목명']} (매입가 {row['매입단가']:,.0f}원, 손익률 {profit_rate})"
+
+    df_pie['종목명'] = df_pie.apply(format_label, axis=1)
+    df_pie['custom_평가금액'] = df_pie['평가금액'].apply(lambda x: f"{x:,.0f}원")
+
+    # 도넛 차트 생성
+    fig = go.Figure(
+        data=[go.Pie(
+            labels=df_pie['종목명'],
+            values=df_pie['평가금액'],
+            hole=0.4,
+            customdata=df_pie[['custom_평가금액']],
+            hovertemplate='<b>%{label}</b><br><span style="color:red">평가금액: %{customdata[0]}</span><extra></extra>'
+        )]
     )
 
-    # Streamlit에 그래프 출력
-    st.plotly_chart(fig)    
+    fig.update_layout(title='종목별 평가금액 비율')
+
+    # Streamlit에 출력
+    st.plotly_chart(fig)
 
 code = ""
 # selected_date = st.slider(
@@ -308,17 +326,41 @@ else:
         df1['거래일자'] = pd.to_datetime(df1['거래일자'], errors='coerce')
         df1 = df1.dropna(subset=['거래일자'])
         df1 = df1.sort_values(by='거래일자')
+
         종목리스트 = df1['종목명'].unique()
         선택종목 = st.selectbox("종목을 선택하세요", 종목리스트)
+
         선택_df = df1[df1['종목명'] == 선택종목].copy()
         선택_df = 선택_df.sort_values(by='거래일자')
         선택_df['누적손익금액'] = 선택_df['손익금액'].cumsum()
-        st.subheader(f"{선택종목} - 누적 손익금액")
-        st.line_chart(선택_df.set_index('거래일자')[['누적손익금액']])
-        st.subheader(f"{선택종목} - 일자별 매입단가")
-        st.line_chart(선택_df.set_index('거래일자')[['매입단가']])
-        st.subheader(f"{선택종목} - 일자별 보유수량")
-        st.line_chart(선택_df.set_index('거래일자')[['보유수량']])
+
+        # 누적손익금액 - 왼쪽 Y축 (라인)
+        profit_line = alt.Chart(선택_df).mark_line(color='red', strokeWidth=2).encode(
+            x=alt.X('거래일자:T', title='거래일자'),
+            y=alt.Y('누적손익금액:Q', title='누적손익금액', axis=alt.Axis(titleColor='red')),
+            tooltip=['거래일자:T', '누적손익금액:Q']
+        )
+
+        # 보유수량 - 오른쪽 Y축 (바 차트 + 오른쪽 axis)
+        qty_bar = alt.Chart(선택_df).mark_bar(color='gray', opacity=0.5).encode(
+            x='거래일자:T',
+            y=alt.Y('보유수량:Q', axis=alt.Axis(title='보유수량', titleColor='gray', orient='right')),
+            tooltip=['거래일자:T', '보유수량:Q']
+        )
+
+        # 결합 차트
+        combined_chart = alt.layer(
+            profit_line,
+            qty_bar
+        ).resolve_scale(
+            y='independent'
+        ).properties(
+            width=800,
+            height=400,
+            title=f"{선택종목} - 누적손익금액(좌) & 보유수량(우)"
+        )
+
+        st.altair_chart(combined_chart, use_container_width=True)
 
 # 기간별손익일별합산조회
 result2 = inquire_period_profit(access_token, app_key, app_secret, code, strt_dt, end_dt)    
@@ -362,8 +404,28 @@ else:
         # 	st.dataframe(df.sort_values('petal_length',ascending=False))
 
         df2['거래일자'] = pd.to_datetime(df2['거래일자'])
-        df2 = df2.dropna(subset=['거래일자'])               # 거래일자 존재하는 대상
+        df2 = df2.dropna(subset=['거래일자'])
         df2 = df2.sort_values(by='거래일자')
-        df2 = df2[df2['손익금액'] != 0]                     # 실제 손익금액 존재하는 대상
-        df2['누적손익금액'] = df2['손익금액'].cumsum()       # 누적 손익금액 계산
-        st.line_chart(df2.set_index('거래일자')[['누적손익금액']])
+        df2 = df2[df2['손익금액'] != 0]
+
+        # 누적 손익금액 계산
+        df2['누적손익금액'] = df2['손익금액'].cumsum()
+
+        # Altair 바 차트 생성 - 누적손익금액 기준
+        bar_chart = alt.Chart(df2).mark_bar().encode(
+            x=alt.X('거래일자:T', axis=alt.Axis(title='거래일자')),
+            y=alt.Y('누적손익금액:Q', axis=alt.Axis(title='누적 손익금액 (₩)')),
+            color=alt.condition(
+                alt.datum['누적손익금액'] > 0,
+                alt.value('steelblue'),  # 이익
+                alt.value('tomato')      # 손실
+            ),
+            tooltip=['거래일자:T', '누적손익금액:Q']
+        ).properties(
+            width=800,
+            height=400,
+            title='거래일자별 누적 손익금액 바 차트'
+        )
+
+        # Streamlit에 표시
+        st.altair_chart(bar_chart, use_container_width=True)
