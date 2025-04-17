@@ -9,6 +9,9 @@ import streamlit as st
 import plotly.express as px
 import altair as alt
 import plotly.graph_objects as go
+from st_aggrid import AgGrid
+from st_aggrid.grid_options_builder import GridOptionsBuilder
+from st_aggrid.shared import JsCode
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -109,6 +112,45 @@ def inquire_period_trade_profit(access_token, app_key, app_secret, code, strt_dt
         print("기간별매매손익현황조회 중 오류 발생:", e)
         return []
 
+# 기간별매매손익현황 합산조회
+def inquire_period_trade_profit_sum(access_token, app_key, app_secret, strt_dt, end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8715R",
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,            # 종합계좌번호
+            'SORT_DVSN': "01",          # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'ACNT_PRDT_CD': "01",
+            'CBLC_DVSN': "00",
+            'PDNO': "",                 # ""공란입력 시, 전체
+            'INQR_STRT_DT': strt_dt,    # 조회시작일(8자리) 
+            'INQR_END_DT': end_dt,      # 조회종료일(8자리)
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-period-trade-profit"
+    URL = f"{URL_BASE}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output2이 있는지 확인
+        body = ar.getBody()
+        if hasattr(body, 'output2'):
+            return body.output2
+        else:
+            print("기간별매매손익현황 합산조회 응답이 없습니다.")
+            return []  # 혹은 None
+
+    except Exception as e:
+        print("기간별매매손익현황 합산조회 중 오류 발생:", e)
+        return []
+
 # 기간별손익일별합산조회
 def inquire_period_profit(access_token, app_key, app_secret, code, strt_dt, end_dt):
 
@@ -150,6 +192,7 @@ def inquire_period_profit(access_token, app_key, app_secret, code, strt_dt, end_
         return []
 
 nickname = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
+# nickname = ['yh480825']
 my_choice = st.selectbox('닉네임을 선택하세요', nickname)   
 
 ac = account(my_choice)
@@ -203,22 +246,77 @@ if df0.empty:
 else:
     # Streamlit 앱 구성
     st.title("잔고정보 조회")
+
+    # 전체 평가금액 기준 비중 계산
+    df0['비중(%)'] = df0['평가금액'] / df0['평가금액'].sum() * 100
+
+    # 비중 순으로 정렬
+    df0.sort_values(by='비중(%)', ascending=False, inplace=True)
+
+    # 순서 컬럼 추가 (1부터 시작)
+    df0.insert(0, '순서', range(1, len(df0) + 1))
+
     # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-    if st.button('데이터프레임 보기0'):
-        st.dataframe(df0)
+    if st.button('잔고정보 상세 데이터'):
+        
+        df_display = df0.copy().reset_index(drop=True)
+
+        # Grid 옵션 생성
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        # 페이지당 20개 표시
+        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+        # 컬럼 폭 자동 맞춤
+        gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+        number_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toLocaleString();
+            }
+        """)
+
+        percent_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toFixed(2) + '%';
+            }
+        """)
+
+        # 숫자 포맷을 적용할 컬럼들 설정
+        for col in ['매입단가', '매입수량', '매입금액', '현재가', '평가금액', '손익금액']:
+            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+
+        gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+        gb.configure_column('비중(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+
+        grid_options = gb.build()
+
+        # AgGrid를 통해 데이터 출력
+        AgGrid(
+            df_display,
+            gridOptions=grid_options,
+            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True
+        )
 
     df_pie = df0[df0['평가금액'] > 0].copy()
 
     # 레이블 생성: 종목명 (매입단가) or 종목명 (평가금액)
     def format_label(row):
         if row['종목명'] == '현금':
-            return f"{row['종목명']} ({row['평가금액']:,.0f}원)"
+            return f"{row['비중(%)']:.1f}% {row['종목명']} ({row['평가금액']:,.0f}원)"
         else:
             profit_rate = f"{row['손익률(%)']:+.2f}%"
-            return f"{row['종목명']} (매입가 {row['매입단가']:,.0f}원, 손익률 {profit_rate})"
+            return f"{row['비중(%)']:.1f}% {row['종목명']} (매입가 {row['매입단가']:,.0f}원, 손익률 {profit_rate})"
 
     df_pie['종목명'] = df_pie.apply(format_label, axis=1)
     df_pie['custom_평가금액'] = df_pie['평가금액'].apply(lambda x: f"{x:,.0f}원")
+
+    df_pie.sort_values(by='비중(%)', ascending=False, inplace=True)
 
     # 도넛 차트 생성
     fig = go.Figure(
@@ -259,13 +357,17 @@ cur03.close()
 data01 = []
 for item in result_three:
 
+    전체금액 = float(item[0]) + float(item[2])  # 예수금 + 평가금액
+    예수금 = float(item[0])
+
     data01.append({
-        '예수금': int(item[0]),
-        '총구매금액': int(item[1]),
-        '평가금액': int(item[2]),
-        '수익금액': float(item[3]),
-        '전체금액': int(item[0]) + int(item[2]),
         '일자': item[4],
+        '전체금액': 전체금액,
+        '총구매금액': float(item[1]),
+        '평가금액': float(item[2]),
+        '수익금액': float(item[3]),
+        '예수금': 예수금,
+        '예수금비율(%)': (예수금 / 전체금액 * 100) if 전체금액 > 0 else 0,
     })
 
 df01 = pd.DataFrame(data01)
@@ -274,16 +376,75 @@ if df01.empty:
     st.warning("조회된 데이터가 없습니다. 조건을 확인해주세요.")
 else:
     # Streamlit 앱 구성
-    st.title("기간별 잔고 현황 조회")
+    st.title("기간별 잔고현황 조회")
+
+    df01['일자'] = pd.to_datetime(df01['일자'])
+
     # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-    if st.button('데이터프레임 보기01'):
-        st.dataframe(df01)
+    if st.button('기간별 잔고현황 상세 데이터'):
+
+        df_display = df01.copy().reset_index(drop=True)
+
+        # Grid 옵션 생성
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        # 페이지당 20개 표시
+        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+        # 컬럼 폭 자동 맞춤
+        gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+        # 날짜 포맷 지정 (YYYY-MM-DD)
+        date_formatter = JsCode("""
+            function(params) {
+                const date = new Date(params.value);
+                return date.toISOString().split('T')[0];
+            }
+        """)
+
+        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+        number_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toLocaleString();
+            }
+        """)
+
+        percent_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toFixed(2) + '%';
+            }
+        """)
+
+        gb.configure_column("일자", type=["dateColumn"], cellRenderer=date_formatter)
+
+        # 숫자 포맷을 적용할 컬럼들 설정
+        for col in ['전체금액', '총구매금액', '평가금액', '수익금액', '예수금']:
+            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+
+        gb.configure_column('예수금비율(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+
+        grid_options = gb.build()
+
+        # AgGrid를 통해 데이터 출력
+        AgGrid(
+            df_display,
+            gridOptions=grid_options,
+            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True
+        )
 
     df01['일자'] = pd.to_datetime(df01['일자'])
     df01 = df01.dropna(subset=['일자'])               
     df01 = df01.sort_values(by='일자')
-    df01 = df01[df01['전체금액'] != 0]                
-    st.line_chart(df01.set_index('일자')[['전체금액']])        
+    df01 = df01[df01['전체금액'] != 0]
+    # 인덱스를 'YYYY-MM-DD' 문자열로 포맷
+    df01['일자_str'] = df01['일자'].dt.strftime('%Y-%m-%d')
+    df01.set_index('일자_str', inplace=True)                
+    
+    st.line_chart(df01[['전체금액']])       
 
 # 기간별매매손익현황조회
 result1 = inquire_period_trade_profit(access_token, app_key, app_secret, code, strt_dt, end_dt)   
@@ -297,19 +458,16 @@ else:
 
         data1.append({
             '거래일자': item['trad_dt'],
-            '종목코드': item['pdno'],
             '종목명': item['prdt_name'],
             '매입단가': float(item['pchs_unpr']),
             '보유수량': float(item['hldg_qty']),
-            '매도단가': item['sll_pric'],
-            '매수수량': item['buy_qty'],
-            '매수금액': item['buy_amt'],
-            '매도수량': item['sll_qty'],
-            '매도금액': item['sll_amt'],
-            '손익률(%)': item['pfls_rt'],
+            '매도단가': float(item['sll_pric']),
+            '매수수량': float(item['buy_qty']),
+            '매도수량': float(item['sll_qty']),
+            '손익률(%)': float(item['pfls_rt']),
             '손익금액': float(item['rlzt_pfls']),
-            '거래세': item['tl_tax'],
-            '수수료': item['fee'],
+            '거래세': float(item['tl_tax']),
+            '수수료': float(item['fee']),
         })
 
     df1 = pd.DataFrame(data1)
@@ -318,10 +476,65 @@ else:
         st.warning("기간별매매손익현황조회된 데이터가 없습니다. 조건을 확인해주세요.")
     else:
         # Streamlit 앱 구성
-        st.title("기간별 매매 손익 현황 조회")
+        st.title("기간별 매매 손익현황 조회")
+
+        df1['거래일자'] = pd.to_datetime(df1['거래일자'])
+
         # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-        if st.button('데이터프레임 보기1'):
-            st.dataframe(df1)
+        if st.button('기간별 매매 손익현황 상세 데이터'):
+
+            df_display = df1.copy().reset_index(drop=True)
+
+            # Grid 옵션 생성
+            gb = GridOptionsBuilder.from_dataframe(df_display)
+            # 페이지당 20개 표시
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+            # 컬럼 폭 자동 맞춤
+            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+            # 날짜 포맷 지정 (YYYY-MM-DD)
+            date_formatter = JsCode("""
+                function(params) {
+                    const date = new Date(params.value);
+                    return date.toISOString().split('T')[0];
+                }
+            """)
+
+            # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+            number_format_js = JsCode("""
+                function(params) {
+                    if (params.value === null || params.value === undefined) {
+                        return '';
+                    }
+                    return params.value.toLocaleString();
+                }
+            """)
+
+            percent_format_js = JsCode("""
+                function(params) {
+                    if (params.value === null || params.value === undefined) {
+                        return '';
+                    }
+                    return params.value.toFixed(2) + '%';
+                }
+            """)
+
+            gb.configure_column("거래일자", type=["dateColumn"], cellRenderer=date_formatter)
+
+            # 숫자 포맷을 적용할 컬럼들 설정
+            for col in ['매입단가', '보유수량', '매도단가', '매수수량', '매도수량', '손익금액', '거래세', '수수료']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+
+            gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+
+            grid_options = gb.build()
+
+            # AgGrid를 통해 데이터 출력
+            AgGrid(
+                df_display,
+                gridOptions=grid_options,
+                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                allow_unsafe_jscode=True
+            )
 
         df1['거래일자'] = pd.to_datetime(df1['거래일자'], errors='coerce')
         df1 = df1.dropna(subset=['거래일자'])
@@ -336,16 +549,22 @@ else:
 
         # 누적손익금액 - 왼쪽 Y축 (라인)
         profit_line = alt.Chart(선택_df).mark_line(color='red', strokeWidth=2).encode(
-            x=alt.X('거래일자:T', title='거래일자'),
+            x=alt.X('거래일자:T', title='거래일자', axis=alt.Axis(format='%Y-%m-%d')),
             y=alt.Y('누적손익금액:Q', title='누적손익금액', axis=alt.Axis(titleColor='red')),
-            tooltip=['거래일자:T', '누적손익금액:Q']
+            tooltip=[
+                alt.Tooltip('거래일자:T', format='%Y-%m-%d'),
+                alt.Tooltip('누적손익금액:Q', format=',')
+            ]
         )
 
         # 보유수량 - 오른쪽 Y축 (바 차트 + 오른쪽 axis)
         qty_bar = alt.Chart(선택_df).mark_bar(color='gray', opacity=0.5).encode(
-            x='거래일자:T',
+            x=alt.X('거래일자:T', axis=alt.Axis(format='%Y-%m-%d')),
             y=alt.Y('보유수량:Q', axis=alt.Axis(title='보유수량', titleColor='gray', orient='right')),
-            tooltip=['거래일자:T', '보유수량:Q']
+            tooltip=[
+                alt.Tooltip('거래일자:T', format='%Y-%m-%d'),
+                alt.Tooltip('보유수량:Q', format=',')
+            ]
         )
 
         # 결합 차트
@@ -374,25 +593,79 @@ else:
 
         data2.append({
             '거래일자': item['trad_dt'],
-            '매수금액': item['buy_amt'],
-            '매도금액': item['sll_amt'],
-            # '손익률(%)': item['pfls_rt'],
+            '매수금액': float(item['buy_amt']),
+            '매도금액': float(item['sll_amt']),
+            '손익률(%)': float(item['pfls_rt']),
             '손익금액': float(item['rlzt_pfls']),
-            # '거래세': item['tl_tax'],
-            # '수수료': item['fee'],
+            '거래세': float(item['tl_tax']),
+            '수수료': float(item['fee']),
         })
 
     df2 = pd.DataFrame(data2)
 
-    if df1.empty:
+    if df2.empty:
         st.warning("기간별손익일별합산조회된 데이터가 없습니다. 조건을 확인해주세요.")
     else:
         # Streamlit 앱 구성
-        st.title("기간별 손익 일별 합산 조회")
+        st.title("기간별 손익 일별합산 조회")
+
+        df2['거래일자'] = pd.to_datetime(df2['거래일자'])
 
         # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-        if st.button('데이터프레임 보기2'):
-            st.dataframe(df2)
+        if st.button('기간별 손익 일별합산 상세 데이터'):
+            
+            df_display = df2.copy().reset_index(drop=True)
+
+            # Grid 옵션 생성
+            gb = GridOptionsBuilder.from_dataframe(df_display)
+            # 페이지당 20개 표시
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+            # 컬럼 폭 자동 맞춤
+            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+            # 날짜 포맷 지정 (YYYY-MM-DD)
+            date_formatter = JsCode("""
+                function(params) {
+                    const date = new Date(params.value);
+                    return date.toISOString().split('T')[0];
+                }
+            """)
+
+            # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+            number_format_js = JsCode("""
+                function(params) {
+                    if (params.value === null || params.value === undefined) {
+                        return '';
+                    }
+                    return params.value.toLocaleString();
+                }
+            """)
+
+            percent_format_js = JsCode("""
+                function(params) {
+                    if (params.value === null || params.value === undefined) {
+                        return '';
+                    }
+                    return params.value.toFixed(2) + '%';
+                }
+            """)
+
+            gb.configure_column("거래일자", type=["dateColumn"], cellRenderer=date_formatter)
+
+            # 숫자 포맷을 적용할 컬럼들 설정
+            for col in ['매수금액', '매도금액', '손익금액', '거래세', '수수료']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+
+            gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+
+            grid_options = gb.build()
+
+            # AgGrid를 통해 데이터 출력
+            AgGrid(
+                df_display,
+                gridOptions=grid_options,
+                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                allow_unsafe_jscode=True
+            )
 
         # 라디오버튼 선택
         # status = st.radio('정렬을 선택하세요', ['오름차순정렬', '내림차순정렬'])
@@ -413,14 +686,17 @@ else:
 
         # Altair 바 차트 생성 - 누적손익금액 기준
         bar_chart = alt.Chart(df2).mark_bar().encode(
-            x=alt.X('거래일자:T', axis=alt.Axis(title='거래일자')),
+            x=alt.X('거래일자:T', title='거래일자', axis=alt.Axis(format='%Y-%m-%d')),
             y=alt.Y('누적손익금액:Q', axis=alt.Axis(title='누적 손익금액 (₩)')),
             color=alt.condition(
                 alt.datum['누적손익금액'] > 0,
                 alt.value('steelblue'),  # 이익
                 alt.value('tomato')      # 손실
             ),
-            tooltip=['거래일자:T', '누적손익금액:Q']
+            tooltip=[
+                alt.Tooltip('거래일자:T', format='%Y-%m-%d'),
+                alt.Tooltip('누적손익금액:Q', format=',')
+            ]
         ).properties(
             width=800,
             height=400,
@@ -429,3 +705,65 @@ else:
 
         # Streamlit에 표시
         st.altair_chart(bar_chart, use_container_width=True)
+
+# 기간별손익 합산조회
+result3 = inquire_period_trade_profit_sum(access_token, app_key, app_secret, strt_dt, end_dt)        
+
+if not result3:
+    print("손익합산조회 결과가 없습니다.")
+else:
+
+    data3 = []
+    
+    data3.append({
+        '매수정산금액 합계': float(result3['buy_excc_amt_smtl']),    # 매수정산금액 합계
+        '매도정산금액 합계': float(result3['sll_excc_amt_smtl']),    # 매도정산금액 합계
+        '총정산금액': float(result3['tot_excc_amt']),                # 총정산금액
+        '총실현손익': float(result3['tot_rlzt_pfls']),        # 총실현손익
+        '총수수료': float(result3['tot_fee']),                       # 총수수료
+        '총제세금': float(result3['tot_tltx']),                      # 총제세금
+    })
+
+    df3 = pd.DataFrame(data3)
+
+    if df3.empty:
+        st.warning("손익합산조회된 데이터가 없습니다. 조건을 확인해주세요.")
+    else:
+        # Streamlit 앱 구성
+        st.title("손익 합산 조회")
+
+        # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
+        if st.button('손익 합산 상세 데이터'):
+
+            df_display = df3.copy().reset_index(drop=True)
+
+            # Grid 옵션 생성
+            gb = GridOptionsBuilder.from_dataframe(df_display)
+            # 페이지당 20개 표시
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+            # 컬럼 폭 자동 맞춤
+            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+
+            # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+            number_format_js = JsCode("""
+                function(params) {
+                    if (params.value === null || params.value === undefined) {
+                        return '';
+                    }
+                    return params.value.toLocaleString();
+                }
+            """)
+
+            # 숫자 포맷을 적용할 컬럼들 설정
+            for col in ['매수정산금액 합계', '매도정산금액 합계', '총정산금액', '총실현손익', '총수수료', '총제세금']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+
+            grid_options = gb.build()
+
+            # AgGrid를 통해 데이터 출력
+            AgGrid(
+                df_display,
+                gridOptions=grid_options,
+                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                allow_unsafe_jscode=True
+            )
