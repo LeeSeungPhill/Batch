@@ -267,6 +267,21 @@ else:
         gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
         # 컬럼 폭 자동 맞춤
         gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+        # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
+        auto_size_columns_js = JsCode("""
+            function(params) {
+                let allColumnIds = [];
+                params.columnApi.getAllColumns().forEach(function(column) {
+                    allColumnIds.push(column.getColId());
+                });
+                params.columnApi.autoSizeColumns(allColumnIds);
+            }
+        """)
+        gb.configure_grid_options(
+            domLayout='autoHeight',  # 높이 자동 조정
+            onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
+        )
+
         # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
         number_format_js = JsCode("""
             function(params) {
@@ -299,7 +314,8 @@ else:
         AgGrid(
             df_display,
             gridOptions=grid_options,
-            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
             allow_unsafe_jscode=True
         )
 
@@ -391,6 +407,21 @@ else:
         gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
         # 컬럼 폭 자동 맞춤
         gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+        # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
+        auto_size_columns_js = JsCode("""
+            function(params) {
+                let allColumnIds = [];
+                params.columnApi.getAllColumns().forEach(function(column) {
+                    allColumnIds.push(column.getColId());
+                });
+                params.columnApi.autoSizeColumns(allColumnIds);
+            }
+        """)
+        gb.configure_grid_options(
+            domLayout='autoHeight',  # 높이 자동 조정
+            onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
+        )
+
         # 날짜 포맷 지정 (YYYY-MM-DD)
         date_formatter = JsCode("""
             function(params) {
@@ -432,7 +463,8 @@ else:
         AgGrid(
             df_display,
             gridOptions=grid_options,
-            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
             allow_unsafe_jscode=True
         )
 
@@ -491,6 +523,21 @@ else:
             gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
             # 컬럼 폭 자동 맞춤
             gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+            # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
+            auto_size_columns_js = JsCode("""
+                function(params) {
+                    let allColumnIds = [];
+                    params.columnApi.getAllColumns().forEach(function(column) {
+                        allColumnIds.push(column.getColId());
+                    });
+                    params.columnApi.autoSizeColumns(allColumnIds);
+                }
+            """)
+            gb.configure_grid_options(
+                domLayout='autoHeight',  # 높이 자동 조정
+                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
+            )
+
             # 날짜 포맷 지정 (YYYY-MM-DD)
             date_formatter = JsCode("""
                 function(params) {
@@ -532,7 +579,8 @@ else:
             AgGrid(
                 df_display,
                 gridOptions=grid_options,
-                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
                 allow_unsafe_jscode=True
             )
 
@@ -622,6 +670,21 @@ else:
             gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
             # 컬럼 폭 자동 맞춤
             gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+            # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
+            auto_size_columns_js = JsCode("""
+                function(params) {
+                    let allColumnIds = [];
+                    params.columnApi.getAllColumns().forEach(function(column) {
+                        allColumnIds.push(column.getColId());
+                    });
+                    params.columnApi.autoSizeColumns(allColumnIds);
+                }
+            """)
+            gb.configure_grid_options(
+                domLayout='autoHeight',  # 높이 자동 조정
+                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
+            )
+
             # 날짜 포맷 지정 (YYYY-MM-DD)
             date_formatter = JsCode("""
                 function(params) {
@@ -663,7 +726,8 @@ else:
             AgGrid(
                 df_display,
                 gridOptions=grid_options,
-                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
                 allow_unsafe_jscode=True
             )
 
@@ -744,6 +808,21 @@ else:
             # 컬럼 폭 자동 맞춤
             gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
 
+           # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
+            auto_size_columns_js = JsCode("""
+                function(params) {
+                    let allColumnIds = [];
+                    params.columnApi.getAllColumns().forEach(function(column) {
+                        allColumnIds.push(column.getColId());
+                    });
+                    params.columnApi.autoSizeColumns(allColumnIds);
+                }
+            """)
+            gb.configure_grid_options(
+                domLayout='autoHeight',  # 높이 자동 조정
+                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
+            )
+
             # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
             number_format_js = JsCode("""
                 function(params) {
@@ -764,6 +843,7 @@ else:
             AgGrid(
                 df_display,
                 gridOptions=grid_options,
-                fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
                 allow_unsafe_jscode=True
             )
