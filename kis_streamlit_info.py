@@ -296,7 +296,6 @@ else:
         }
     """)
 
-    # 숫자 포맷을 적용할 컬럼들 설정
     for col, width in column_widths.items():
         if col in ['손익률(%)', '비중(%)']:
             gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
@@ -391,41 +390,28 @@ else:
     # Streamlit 앱 구성
     st.title("기간별 잔고현황 조회")
 
-    df01['일자'] = pd.to_datetime(df01['일자'])
+    df01['일자'] = pd.to_datetime(df01['일자']).dt.strftime('%Y-%m-%d')
 
     # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
     if st.button('기간별 잔고현황 상세 데이터'):
 
-        df_display = df01.copy().reset_index(drop=True)
+        df_display = df01.sort_values(by='일자', ascending=False).copy().reset_index(drop=True)
 
         # Grid 옵션 생성
         gb = GridOptionsBuilder.from_dataframe(df_display)
         # 페이지당 20개 표시
-        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-        # 컬럼 폭 자동 맞춤
-        gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
-        # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
-        auto_size_columns_js = JsCode("""
-            function(params) {
-                let allColumnIds = [];
-                params.columnApi.getAllColumns().forEach(function(column) {
-                    allColumnIds.push(column.getColId());
-                });
-                params.columnApi.autoSizeColumns(allColumnIds);
-            }
-        """)
-        gb.configure_grid_options(
-            domLayout='autoHeight',  # 높이 자동 조정
-            onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
-        )
+        gb.configure_pagination(enabled=True, paginationPageSize=20)
+        gb.configure_grid_options(domLayout='normal')
 
-        # 날짜 포맷 지정 (YYYY-MM-DD)
-        date_formatter = JsCode("""
-            function(params) {
-                const date = new Date(params.value);
-                return date.toISOString().split('T')[0];
-            }
-        """)
+        column_widths = {
+            '일자': 80,
+            '전체금액': 100,
+            '총구매금액': 100,
+            '평가금액': 100,
+            '수익금액': 80,
+            '예수금': 100,
+            '예수금비율(%)': 70
+        }
 
         # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
         number_format_js = JsCode("""
@@ -446,13 +432,13 @@ else:
             }
         """)
 
-        gb.configure_column("일자", type=["dateColumn"], cellRenderer=date_formatter)
-
-        # 숫자 포맷을 적용할 컬럼들 설정
-        for col in ['전체금액', '총구매금액', '평가금액', '수익금액', '예수금']:
-            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
-
-        gb.configure_column('예수금비율(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+        for col, width in column_widths.items():
+            if col in ['예수금비율(%)',]:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
+            elif col in ['전체금액', '총구매금액', '평가금액', '수익금액', '예수금']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+            else:
+                gb.configure_column(col, width=width)
 
         grid_options = gb.build()
 
@@ -460,9 +446,9 @@ else:
         AgGrid(
             df_display,
             gridOptions=grid_options,
-            # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
-            fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
-            allow_unsafe_jscode=True
+            fit_columns_on_grid_load=False,   # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True,
+            use_container_width=True,
         )
 
     df01['일자'] = pd.to_datetime(df01['일자'])
@@ -507,41 +493,32 @@ else:
         # Streamlit 앱 구성
         st.title("기간별 매매 손익현황 조회")
 
-        df1['거래일자'] = pd.to_datetime(df1['거래일자'])
+        df1['거래일자'] = pd.to_datetime(df1['거래일자']).dt.strftime('%Y-%m-%d')
 
         # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
         if st.button('기간별 매매 손익현황 상세 데이터'):
 
-            df_display = df1.copy().reset_index(drop=True)
+            df_display = df1.sort_values(by='거래일자', ascending=False).copy().reset_index(drop=True)
 
             # Grid 옵션 생성
             gb = GridOptionsBuilder.from_dataframe(df_display)
             # 페이지당 20개 표시
-            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-            # 컬럼 폭 자동 맞춤
-            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
-            # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
-            auto_size_columns_js = JsCode("""
-                function(params) {
-                    let allColumnIds = [];
-                    params.columnApi.getAllColumns().forEach(function(column) {
-                        allColumnIds.push(column.getColId());
-                    });
-                    params.columnApi.autoSizeColumns(allColumnIds);
-                }
-            """)
-            gb.configure_grid_options(
-                domLayout='autoHeight',  # 높이 자동 조정
-                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
-            )
+            gb.configure_pagination(enabled=True, paginationPageSize=20)
+            gb.configure_grid_options(domLayout='normal')
 
-            # 날짜 포맷 지정 (YYYY-MM-DD)
-            date_formatter = JsCode("""
-                function(params) {
-                    const date = new Date(params.value);
-                    return date.toISOString().split('T')[0];
-                }
-            """)
+            column_widths = {
+                '거래일자': 80,
+                '종목명': 140,
+                '매입단가': 80,
+                '보유수량': 70,
+                '매도단가': 80,
+                '매수수량': 70,
+                '매도수량': 70,
+                '손익률(%)': 70,
+                '손익금액': 100,
+                '거래세': 60,
+                '수수료': 60
+            }
 
             # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
             number_format_js = JsCode("""
@@ -562,13 +539,13 @@ else:
                 }
             """)
 
-            gb.configure_column("거래일자", type=["dateColumn"], cellRenderer=date_formatter)
-
-            # 숫자 포맷을 적용할 컬럼들 설정
-            for col in ['매입단가', '보유수량', '매도단가', '매수수량', '매도수량', '손익금액', '거래세', '수수료']:
-                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
-
-            gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
+            for col, width in column_widths.items():
+                if col in ['손익률(%)',]:
+                    gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
+                elif col in ['매입단가', '보유수량', '매도단가', '매수수량', '매도수량', '손익금액', '거래세', '수수료']:
+                    gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+                else:
+                    gb.configure_column(col, width=width)
 
             grid_options = gb.build()
 
@@ -576,9 +553,9 @@ else:
             AgGrid(
                 df_display,
                 gridOptions=grid_options,
-                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
-                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
-                allow_unsafe_jscode=True
+                fit_columns_on_grid_load=False,   # 화면 로드시 자동 폭 맞춤
+                allow_unsafe_jscode=True,
+                use_container_width=True,
             )
 
         df1['거래일자'] = pd.to_datetime(df1['거래일자'], errors='coerce')
@@ -654,41 +631,28 @@ else:
         # Streamlit 앱 구성
         st.title("기간별 손익 일별합산 조회")
 
-        df2['거래일자'] = pd.to_datetime(df2['거래일자'])
+        df2['거래일자'] = pd.to_datetime(df2['거래일자']).dt.strftime('%Y-%m-%d')
 
         # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
         if st.button('기간별 손익 일별합산 상세 데이터'):
             
-            df_display = df2.copy().reset_index(drop=True)
+            df_display = df2.sort_values(by='거래일자', ascending=False).copy().reset_index(drop=True)
 
             # Grid 옵션 생성
             gb = GridOptionsBuilder.from_dataframe(df_display)
             # 페이지당 20개 표시
-            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-            # 컬럼 폭 자동 맞춤
-            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
-            # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
-            auto_size_columns_js = JsCode("""
-                function(params) {
-                    let allColumnIds = [];
-                    params.columnApi.getAllColumns().forEach(function(column) {
-                        allColumnIds.push(column.getColId());
-                    });
-                    params.columnApi.autoSizeColumns(allColumnIds);
-                }
-            """)
-            gb.configure_grid_options(
-                domLayout='autoHeight',  # 높이 자동 조정
-                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
-            )
+            gb.configure_pagination(enabled=True, paginationPageSize=20)
+            gb.configure_grid_options(domLayout='normal')
 
-            # 날짜 포맷 지정 (YYYY-MM-DD)
-            date_formatter = JsCode("""
-                function(params) {
-                    const date = new Date(params.value);
-                    return date.toISOString().split('T')[0];
-                }
-            """)
+            column_widths = {
+                '거래일자': 80,
+                '매수금액': 100,
+                '매도금액': 100,
+                '손익률(%)': 70,
+                '손익금액': 100,
+                '거래세': 60,
+                '수수료': 60
+            }
 
             # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
             number_format_js = JsCode("""
@@ -709,23 +673,23 @@ else:
                 }
             """)
 
-            gb.configure_column("거래일자", type=["dateColumn"], cellRenderer=date_formatter)
-
-            # 숫자 포맷을 적용할 컬럼들 설정
-            for col in ['매수금액', '매도금액', '손익금액', '거래세', '수수료']:
-                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
-
-            gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
-
+            for col, width in column_widths.items():
+                if col in ['손익률(%)',]:
+                    gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
+                elif col in ['매수금액', '매도금액', '손익금액', '거래세', '수수료']:
+                    gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+                else:
+                    gb.configure_column(col, width=width)
+            
             grid_options = gb.build()
 
             # AgGrid를 통해 데이터 출력
             AgGrid(
                 df_display,
                 gridOptions=grid_options,
-                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
-                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
-                allow_unsafe_jscode=True
+                fit_columns_on_grid_load=False,   # 화면 로드시 자동 폭 맞춤
+                allow_unsafe_jscode=True,
+                use_container_width=True,
             )
 
         # 라디오버튼 선택
