@@ -256,68 +256,65 @@ else:
     # 순서 컬럼 추가 (1부터 시작)
     df0.insert(0, '순서', range(1, len(df0) + 1))
 
-    # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-    if st.button('잔고정보 상세 데이터'):
-        
-        df_display = df0.copy().reset_index(drop=True)
+    df_display = df0.copy().reset_index(drop=True)
 
-        # Grid 옵션 생성
-        gb = GridOptionsBuilder.from_dataframe(df_display)
-        # 페이지당 20개 표시
-        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-        # 컬럼 폭 자동 맞춤
-        gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
-        # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
-        auto_size_columns_js = JsCode("""
-            function(params) {
-                let allColumnIds = [];
-                params.columnApi.getAllColumns().forEach(function(column) {
-                    allColumnIds.push(column.getColId());
-                });
-                params.columnApi.autoSizeColumns(allColumnIds);
+    # Grid 옵션 생성
+    gb = GridOptionsBuilder.from_dataframe(df_display)
+    # 페이지당 20개 표시
+    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
+    gb.configure_grid_options(domLayout='autoHeight')
+
+    column_widths = {
+        '순서': 40,
+        '종목명': 140,
+        '매입단가': 80,
+        '매입수량': 70,
+        '매입금액': 100,
+        '현재가': 80,
+        '평가금액': 100,
+        '손익률(%)': 70,
+        '손익금액': 100,
+        '비중(%)': 70
+    }
+
+    # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+    number_format_js = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) {
+                return '';
             }
-        """)
-        gb.configure_grid_options(
-            domLayout='autoHeight',  # 높이 자동 조정
-            onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
-        )
+            return params.value.toLocaleString();
+        }
+    """)
 
-        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
-        number_format_js = JsCode("""
-            function(params) {
-                if (params.value === null || params.value === undefined) {
-                    return '';
-                }
-                return params.value.toLocaleString();
+    percent_format_js = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) {
+                return '';
             }
-        """)
+            return params.value.toFixed(2) + '%';
+        }
+    """)
 
-        percent_format_js = JsCode("""
-            function(params) {
-                if (params.value === null || params.value === undefined) {
-                    return '';
-                }
-                return params.value.toFixed(2) + '%';
-            }
-        """)
+    # 숫자 포맷을 적용할 컬럼들 설정
+    for col, width in column_widths.items():
+        if col in ['손익률(%)', '비중(%)']:
+            gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
+        elif col in ['매입단가', '매입수량', '매입금액', '현재가', '평가금액', '손익금액']:
+            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+        else:
+            gb.configure_column(col, width=width)
+    
+    grid_options = gb.build()
 
-        # 숫자 포맷을 적용할 컬럼들 설정
-        for col in ['매입단가', '매입수량', '매입금액', '현재가', '평가금액', '손익금액']:
-            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
-
-        gb.configure_column('손익률(%)', type=['numericColumn'], cellRenderer=percent_format_js)
-        gb.configure_column('비중(%)', type=['numericColumn'], cellRenderer=percent_format_js)
-
-        grid_options = gb.build()
-
-        # AgGrid를 통해 데이터 출력
-        AgGrid(
-            df_display,
-            gridOptions=grid_options,
-            # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
-            fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
-            allow_unsafe_jscode=True
-        )
+    # AgGrid를 통해 데이터 출력
+    AgGrid(
+        df_display,
+        gridOptions=grid_options,
+        fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+        allow_unsafe_jscode=True,
+        use_container_width=True,
+    )
 
     df_pie = df0[df0['평가금액'] > 0].copy()
 
@@ -796,54 +793,42 @@ else:
         # Streamlit 앱 구성
         st.title("손익 합산 조회")
 
-        # 버튼을 클릭하면, 데이터프레임이 보이도록 만들기.
-        if st.button('손익 합산 상세 데이터'):
+        df_display = df3.copy().reset_index(drop=True)
 
-            df_display = df3.copy().reset_index(drop=True)
+        # Grid 옵션 생성
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        gb.configure_pagination(enabled=False) 
+        gb.configure_grid_options(domLayout='autoHeight')
 
-            # Grid 옵션 생성
-            gb = GridOptionsBuilder.from_dataframe(df_display)
-            # 페이지당 20개 표시
-            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-            # 컬럼 폭 자동 맞춤
-            gb.configure_grid_options(domLayout='autoHeight', autoSizeColumns=True)
+        column_widths = {
+            '매수정산금액 합계': 100,
+            '매도정산금액 합계': 100,
+            '총정산금액': 120,
+            '총실현손익': 80,
+            '총수수료': 60,
+            '총제세금': 60,
+        }
 
-           # 열 제목 길이에 따라 폭 자동 조절을 위한 이벤트 등록
-            auto_size_columns_js = JsCode("""
-                function(params) {
-                    let allColumnIds = [];
-                    params.columnApi.getAllColumns().forEach(function(column) {
-                        allColumnIds.push(column.getColId());
-                    });
-                    params.columnApi.autoSizeColumns(allColumnIds);
+        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+        number_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
                 }
-            """)
-            gb.configure_grid_options(
-                domLayout='autoHeight',  # 높이 자동 조정
-                onFirstDataRendered=auto_size_columns_js  # 열 폭 자동 조정
-            )
+                return params.value.toLocaleString();
+            }
+        """)
 
-            # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
-            number_format_js = JsCode("""
-                function(params) {
-                    if (params.value === null || params.value === undefined) {
-                        return '';
-                    }
-                    return params.value.toLocaleString();
-                }
-            """)
+        # 숫자 포맷을 적용할 컬럼들 설정
+        for col, width in column_widths.items():
+            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
 
-            # 숫자 포맷을 적용할 컬럼들 설정
-            for col in ['매수정산금액 합계', '매도정산금액 합계', '총정산금액', '총실현손익', '총수수료', '총제세금']:
-                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js)
+        grid_options = gb.build()
 
-            grid_options = gb.build()
-
-            # AgGrid를 통해 데이터 출력
-            AgGrid(
-                df_display,
-                gridOptions=grid_options,
-                # fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
-                fit_columns_on_grid_load=False,   # JS에서 autoSizeColumns 사용
-                allow_unsafe_jscode=True
-            )
+        # AgGrid를 통해 데이터 출력
+        AgGrid(
+            df_display,
+            gridOptions=grid_options,
+            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True,
+        )
