@@ -261,8 +261,8 @@ else:
     # Grid 옵션 생성
     gb = GridOptionsBuilder.from_dataframe(df_display)
     # 페이지당 20개 표시
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-    gb.configure_grid_options(domLayout='autoHeight')
+    gb.configure_pagination(enabled=True, paginationPageSize=20)
+    gb.configure_grid_options(domLayout='normal')
 
     column_widths = {
         '순서': 40,
@@ -311,7 +311,7 @@ else:
     AgGrid(
         df_display,
         gridOptions=grid_options,
-        fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+        fit_columns_on_grid_load=False,  # 화면 로드시 자동 폭 맞춤
         allow_unsafe_jscode=True,
         use_container_width=True,
     )
@@ -829,6 +829,6 @@ else:
         AgGrid(
             df_display,
             gridOptions=grid_options,
-            fit_columns_on_grid_load=True,  # 화면 로드시 자동 폭 맞춤
+            fit_columns_on_grid_load=False, 
             allow_unsafe_jscode=True,
         )
