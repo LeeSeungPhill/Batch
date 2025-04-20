@@ -73,6 +73,45 @@ def account(nickname):
 
     return account_rtn
 
+# 계좌잔고 조회
+def stock_balance(access_token, app_key, app_secret, acct_no):
+    
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8434R"} 
+    params = {
+                "CANO": acct_no,                # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
+                'ACNT_PRDT_CD': '01',           # 계좌상품코드 계좌번호 체계(8-2)의 뒤 2자리
+                'AFHR_FLPR_YN': 'N',            # 시간외단일가, 거래소여부 N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓)
+                'OFL_YN': '',                   # 오프라인여부 공란(Default)
+                'INQR_DVSN': '02',              # 조회구분 01 : 대출일별, 02 : 종목별
+                'UNPR_DVSN': '01',              # 단가구분 01 : 기본값 
+                'FUND_STTL_ICLD_YN': 'N',       # 펀드결제분포함여부 N : 포함하지 않음, Y : 포함
+                'FNCG_AMT_AUTO_RDPT_YN': 'N',   # 융자금액자동상환여부 N : 기본값
+                'PRCS_DVSN': '01',              # 처리구분 00 : 전일매매포함, 01 : 전일매매미포함
+                'CTX_AREA_FK100': '',
+                'CTX_AREA_NK100': ''
+            }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
+    URL = f"{URL_BASE}/{PATH}"
+    
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+        
+        body = ar.getBody()
+
+        output1 = body.output1 if hasattr(body, 'output1') else []
+        output2 = body.output2 if hasattr(body, 'output2') else {}
+
+        return output1, output2
+    
+    except Exception as e:
+        print("계좌잔고조회 중 오류 발생:", e)
+        return []
+
 # 기간별매매손익현황조회
 def inquire_period_trade_profit(access_token, app_key, app_secret, code, strt_dt, end_dt):
 
@@ -190,6 +229,52 @@ def inquire_period_profit(access_token, app_key, app_secret, code, strt_dt, end_
     except Exception as e:
         print("기간별손익일별합산조회 중 오류 발생:", e)
         return []
+    
+# 일별주문체결조회
+def get_my_complete(access_token, app_key, app_secret, acct_no, strt_dt, end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC0081R",
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,            # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
+            'ACNT_PRDT_CD':"01",        # 계좌상품코드 계좌번호 체계(8-2)의 뒤 2자리
+            'SORT_DVSN': "01",          # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'INQR_STRT_DT': strt_dt,    # 조회시작일(8자리) 
+            'INQR_END_DT': end_dt,      # 조회종료일(8자리)
+            'SLL_BUY_DVSN_CD': "00",    # 매도매수구분코드 00 : 전체 / 01 : 매도 / 02 : 매수
+            'PDNO': "",                 # 종목번호(6자리) ""공란입력 시, 전체
+            'ORD_GNO_BRNO': "",         # 주문채번지점번호 ""공란입력 시, 전체
+            'ODNO': "",                 # 주문번호 ""공란입력 시, 전체
+            'CCLD_DVSN': "00",          # 체결구분 00 전체, 01 체결, 02 미체결
+            'INQR_DVSN': "00",          # 조회구분 00 역순, 01 정순
+            'INQR_DVSN_1': "",          # 조회구분1 없음: 전체, 1: ELW, 2: 프리보드
+            'INQR_DVSN_3': "00",        # 조회구분3 00 전체, 01 현금, 02 신용, 03 담보, 04 대주, 05 대여, 06 자기융자신규/상환, 07 유통융자신규/상환
+            'EXCG_ID_DVSN_CD': "KRX",   # 거래소ID구분코드 KRX : KRX, NXT : NXT
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+    URL = f"{URL_BASE}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output1이 있는지 확인
+        body = ar.getBody()
+        if hasattr(body, 'output1'):
+            return body.output1
+        else:
+            print("일별주문체결조회 응답이 없습니다.")
+            return []  # 혹은 None
+
+    except Exception as e:
+        print("일별주문체결조회 중 오류 발생:", e)
+        return []
 
 nickname = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
 # nickname = ['yh480825']
@@ -201,150 +286,149 @@ access_token = ac['access_token']
 app_key = ac['app_key']
 app_secret = ac['app_secret']
 
-# 잔고정보 조회
-cur01 = conn.cursor()
-cur01.execute("select name, purchase_price, purchase_amount, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "'")
-result_one = cur01.fetchall()
-cur01.close()
+# 계좌잔고 조회
+result0 = stock_balance(access_token, app_key, app_secret, acct_no)
 
-data0 = []
-for item in result_one:
-
-    data0.append({
-        '종목명': item[0],
-        '매입단가': float(item[1]),
-        '매입수량': float(item[2]),
-        '매입금액': float(item[3]),
-        '현재가': float(item[4]),
-        '평가금액': float(item[5]),
-        '손익률(%)': float(item[6]),
-        '손익금액': float(item[7]),
-    })
-
-cur02 = conn.cursor()
-cur02.execute("select tot_evlu_amt, scts_evlu_amt, prvs_rcdl_excc_amt  from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
-result_two = cur02.fetchall()
-cur02.close()    
-
-for item in result_two:
-    
-    data0.append({
-        '종목명': '현금',
-        '매입단가': 0,
-        '매입수량': 0,
-        '매입금액': 0,
-        '현재가': 0,
-        '평가금액': float(item[2]),
-        '손익률(%)': 0,
-        '손익금액': 0,
-    })
-
-df0 = pd.DataFrame(data0)
-
-if df0.empty:
-    st.warning("조회된 데이터가 없습니다. 조건을 확인해주세요.")
+if not result0:
+    print("계좌잔고 조회 결과가 없습니다.")
 else:
-    # Streamlit 앱 구성
-    st.title("잔고정보 조회")
-
-    # 전체 평가금액 기준 비중 계산
-    df0['비중(%)'] = df0['평가금액'] / df0['평가금액'].sum() * 100
-
-    # 비중 순으로 정렬
-    df0.sort_values(by='비중(%)', ascending=False, inplace=True)
-
-    # 순서 컬럼 추가 (1부터 시작)
-    df0.insert(0, '순서', range(1, len(df0) + 1))
-
-    df_display = df0.copy().reset_index(drop=True)
-
-    # Grid 옵션 생성
-    gb = GridOptionsBuilder.from_dataframe(df_display)
-    # 페이지당 20개 표시
-    gb.configure_pagination(enabled=True, paginationPageSize=20)
-    gb.configure_grid_options(domLayout='normal')
-
-    column_widths = {
-        '순서': 40,
-        '종목명': 140,
-        '매입단가': 80,
-        '매입수량': 70,
-        '매입금액': 100,
-        '현재가': 80,
-        '평가금액': 100,
-        '손익률(%)': 70,
-        '손익금액': 100,
-        '비중(%)': 70
-    }
-
-    # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
-    number_format_js = JsCode("""
-        function(params) {
-            if (params.value === null || params.value === undefined) {
-                return '';
-            }
-            return params.value.toLocaleString();
-        }
-    """)
-
-    percent_format_js = JsCode("""
-        function(params) {
-            if (params.value === null || params.value === undefined) {
-                return '';
-            }
-            return params.value.toFixed(2) + '%';
-        }
-    """)
-
-    for col, width in column_widths.items():
-        if col in ['손익률(%)', '비중(%)']:
-            gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
-        elif col in ['매입단가', '매입수량', '매입금액', '현재가', '평가금액', '손익금액']:
-            gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
-        else:
-            gb.configure_column(col, width=width)
+    output1, output2 = result0
+    data0 = []
     
-    grid_options = gb.build()
+    # output1: 종목별 잔고
+    if output1:
+        for item in output1:
 
-    # AgGrid를 통해 데이터 출력
-    AgGrid(
-        df_display,
-        gridOptions=grid_options,
-        fit_columns_on_grid_load=False,  # 화면 로드시 자동 폭 맞춤
-        allow_unsafe_jscode=True,
-        use_container_width=True,
-    )
+            data0.append({
+                '종목명': item['prdt_name'],
+                '매입단가': float(item['pchs_avg_pric']),
+                '매입수량': float(item['hldg_qty']),
+                '매입금액': float(item['pchs_amt']),
+                '현재가': float(item['prpr']),
+                '평가금액': float(item['evlu_amt']),
+                '손익률(%)': float(item['evlu_pfls_rt']),
+                '손익금액': float(item['evlu_pfls_amt']),
+            })
 
-    df_pie = df0[df0['평가금액'] > 0].copy()
+    # output2: 예수금 정보 → '현금' 항목으로 추가
+    if output2[0] and 'prvs_rcdl_excc_amt' in output2[0]:
+        data0.append({
+            '종목명': '현금',
+            '매입단가': 0,
+            '매입수량': 0,
+            '매입금액': 0,
+            '현재가': 0,
+            '평가금액': float(output2[0]['prvs_rcdl_excc_amt']),
+            '손익률(%)': 0,
+            '손익금액': 0,
+        })       
 
-    # 레이블 생성: 종목명 (매입단가) or 종목명 (평가금액)
-    def format_label(row):
-        if row['종목명'] == '현금':
-            return f"{row['비중(%)']:.1f}% {row['종목명']} ({row['평가금액']:,.0f}원)"
-        else:
-            profit_rate = f"{row['손익률(%)']:+.2f}%"
-            return f"{row['비중(%)']:.1f}% {row['종목명']} (매입가 {row['매입단가']:,.0f}원, 손익률 {profit_rate})"
+    df0 = pd.DataFrame(data0)
 
-    df_pie['종목명'] = df_pie.apply(format_label, axis=1)
-    df_pie['custom_평가금액'] = df_pie['평가금액'].apply(lambda x: f"{x:,.0f}원")
+    if df0.empty:
+        st.warning("조회된 데이터가 없습니다. 조건을 확인해주세요.")
+    else:
+        # Streamlit 앱 구성
+        st.title("잔고정보 조회")
 
-    df_pie.sort_values(by='비중(%)', ascending=False, inplace=True)
+        # 전체 평가금액 기준 비중 계산
+        df0['비중(%)'] = df0['평가금액'] / df0['평가금액'].sum() * 100
 
-    # 도넛 차트 생성
-    fig = go.Figure(
-        data=[go.Pie(
-            labels=df_pie['종목명'],
-            values=df_pie['평가금액'],
-            hole=0.4,
-            customdata=df_pie[['custom_평가금액']],
-            hovertemplate='<b>%{label}</b><br><span style="color:red">평가금액: %{customdata[0]}</span><extra></extra>'
-        )]
-    )
+        # 비중 순으로 정렬
+        df0.sort_values(by='비중(%)', ascending=False, inplace=True)
 
-    fig.update_layout(title='종목별 평가금액 비율')
+        # 순서 컬럼 추가 (1부터 시작)
+        df0.insert(0, '순서', range(1, len(df0) + 1))
 
-    # Streamlit에 출력
-    st.plotly_chart(fig)
+        df_display = df0.copy().reset_index(drop=True)
+
+        # Grid 옵션 생성
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        # 페이지당 20개 표시
+        gb.configure_pagination(enabled=True, paginationPageSize=20)
+        gb.configure_grid_options(domLayout='normal')
+
+        column_widths = {
+            '순서': 40,
+            '종목명': 140,
+            '매입단가': 80,
+            '매입수량': 70,
+            '매입금액': 100,
+            '현재가': 80,
+            '평가금액': 100,
+            '손익률(%)': 70,
+            '손익금액': 100,
+            '비중(%)': 70
+        }
+
+        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+        number_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toLocaleString();
+            }
+        """)
+
+        percent_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toFixed(2) + '%';
+            }
+        """)
+
+        for col, width in column_widths.items():
+            if col in ['손익률(%)', '비중(%)']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=percent_format_js, width=width)
+            elif col in ['매입단가', '매입수량', '매입금액', '현재가', '평가금액', '손익금액']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+            else:
+                gb.configure_column(col, width=width)
+        
+        grid_options = gb.build()
+
+        # AgGrid를 통해 데이터 출력
+        AgGrid(
+            df_display,
+            gridOptions=grid_options,
+            fit_columns_on_grid_load=False,  # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True,
+            use_container_width=True,
+        )
+
+        df_pie = df0[df0['평가금액'] > 0].copy()
+
+        # 레이블 생성: 종목명 (매입단가) or 종목명 (평가금액)
+        def format_label(row):
+            if row['종목명'] == '현금':
+                return f"{row['비중(%)']:.1f}% {row['종목명']} ({row['평가금액']:,.0f}원)"
+            else:
+                profit_rate = f"{row['손익률(%)']:+.2f}%"
+                return f"{row['비중(%)']:.1f}% {row['종목명']} (매입가 {row['매입단가']:,.0f}원, 손익률 {profit_rate})"
+
+        df_pie['종목명'] = df_pie.apply(format_label, axis=1)
+        df_pie['custom_평가금액'] = df_pie['평가금액'].apply(lambda x: f"{x:,.0f}원")
+
+        df_pie.sort_values(by='비중(%)', ascending=False, inplace=True)
+
+        # 도넛 차트 생성
+        fig = go.Figure(
+            data=[go.Pie(
+                labels=df_pie['종목명'],
+                values=df_pie['평가금액'],
+                hole=0.4,
+                customdata=df_pie[['custom_평가금액']],
+                hovertemplate='<b>%{label}</b><br><span style="color:red">평가금액: %{customdata[0]}</span><extra></extra>'
+            )]
+        )
+
+        fig.update_layout(title='종목별 평가금액 비율')
+
+        # Streamlit에 출력
+        st.plotly_chart(fig)
 
 code = ""
 # selected_date = st.slider(
@@ -796,3 +880,90 @@ else:
             fit_columns_on_grid_load=False, 
             allow_unsafe_jscode=True,
         )
+
+# 일별주문체결조회
+result4 = get_my_complete(access_token, app_key, app_secret, acct_no, strt_dt, end_dt)
+
+if not result4:
+    print("일별주문체결조회 결과가 없습니다.")
+else:
+
+    data4 = []
+    for item in result4:
+
+        data4.append({
+            '주문일자': item['ord_dt'],
+            '주문시각': item['ord_tmd'],
+            '종목명': item['prdt_name'],
+            '주문번호': float(item['odno']) if item['odno'] != "" else "",
+            '원주문번호': float(item['orgn_odno']) if item['orgn_odno'] != "" else "",
+            '주문유형': item['sll_buy_dvsn_cd_name'],
+            '주문단가': float(item['ord_unpr']),
+            '주문수량': float(item['ord_qty']),
+            '체결단가': float(item['avg_prvs']),
+            '체결수량': float(item['tot_ccld_qty']),
+            '잔여수량': float(item['rmn_qty']),
+            '체결금액': float(item['tot_ccld_amt'])
+        })
+
+    df4 = pd.DataFrame(data4)
+
+    if df4.empty:
+        st.warning("일별주문체결조회된 데이터가 없습니다. 조건을 확인해주세요.")
+    else:
+        # Streamlit 앱 구성
+        st.title("일별 주문체결 조회")
+
+        df4['주문일자'] = pd.to_datetime(df4['주문일자'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
+        df4['주문시각'] = pd.to_datetime(df4['주문시각'], format='%H%M%S').dt.strftime('%H:%M:%S')
+
+        df_display = df4.sort_values(by=['주문일자', '주문시각'], ascending=False).copy().reset_index(drop=True)
+
+        # Grid 옵션 생성
+        gb = GridOptionsBuilder.from_dataframe(df_display)
+        # 페이지당 20개 표시
+        gb.configure_pagination(enabled=True, paginationPageSize=20)
+        gb.configure_grid_options(domLayout='normal')
+
+        column_widths = {
+            '주문일자': 60,
+            '주문시각': 60,
+            '종목명': 140,
+            '주문번호': 70,
+            '원주문번호': 70,
+            '주문유형': 100,
+            '주문단가': 80,
+            '주문수량': 70,
+            '체결단가': 80,
+            '체결수량': 70,
+            '잔여수량': 70,
+            '체결금액': 100
+        }
+
+        # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
+        number_format_js = JsCode("""
+            function(params) {
+                if (params.value === null || params.value === undefined) {
+                    return '';
+                }
+                return params.value.toLocaleString();
+            }
+        """)
+
+        # 숫자 포맷을 적용할 컬럼들 설정
+        for col, width in column_widths.items():
+            if col in ['주문단가', '주문수량', '체결단가', '체결수량', '잔여수량', '취소수량', '체결금액']:
+                gb.configure_column(col, type=['numericColumn'], cellRenderer=number_format_js, width=width)
+            else:
+                gb.configure_column(col, width=width)
+
+        grid_options = gb.build()
+
+        # AgGrid를 통해 데이터 출력
+        AgGrid(
+            df_display,
+            gridOptions=grid_options,
+            fit_columns_on_grid_load=False,   # 화면 로드시 자동 폭 맞춤
+            allow_unsafe_jscode=True,
+            use_container_width=True,
+        )      
