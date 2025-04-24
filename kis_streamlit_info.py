@@ -888,23 +888,31 @@ if not result4:
     print("일별주문체결조회 결과가 없습니다.")
 else:
 
+    # 모든 orgn_odno 수집
+    orig_odnos = {item['orgn_odno'] for item in result4 if item['orgn_odno'] != ""}
     data4 = []
     for item in result4:
 
-        data4.append({
-            '주문일자': item['ord_dt'],
-            '주문시각': item['ord_tmd'],
-            '종목명': item['prdt_name'],
-            '주문번호': float(item['odno']) if item['odno'] != "" else "",
-            '원주문번호': float(item['orgn_odno']) if item['orgn_odno'] != "" else "",
-            '주문유형': item['sll_buy_dvsn_cd_name'],
-            '주문단가': float(item['ord_unpr']),
-            '주문수량': float(item['ord_qty']),
-            '체결단가': float(item['avg_prvs']),
-            '체결수량': float(item['tot_ccld_qty']),
-            '잔여수량': float(item['rmn_qty']),
-            '체결금액': float(item['tot_ccld_amt'])
-        })
+        odno = item['odno']
+        orgn_odno = item['orgn_odno']
+
+        # 주문취소 제외한 주문정보 대상(원주문번호와 동일한 주문번호 대상건 제외)
+        if odno not in orig_odnos:            
+
+            data4.append({
+                '주문일자': item['ord_dt'],
+                '주문시각': item['ord_tmd'],
+                '종목명': item['prdt_name'],
+                '주문번호': float(odno) if odno != "" else "",
+                '원주문번호': float(orgn_odno) if orgn_odno != "" else "",
+                '체결금액': float(item['tot_ccld_amt']),
+                '주문유형': item['sll_buy_dvsn_cd_name'],
+                '주문단가': float(item['ord_unpr']),
+                '주문수량': float(item['ord_qty']),
+                '체결단가': float(item['avg_prvs']),
+                '체결수량': float(item['tot_ccld_qty']),
+                '잔여수량': float(item['rmn_qty']),
+            })
 
     df4 = pd.DataFrame(data4)
 
@@ -914,13 +922,23 @@ else:
         # Streamlit 앱 구성
         st.title("일별 주문체결 조회")
 
-        df4['주문일자'] = pd.to_datetime(df4['주문일자'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
-        df4['주문시각'] = pd.to_datetime(df4['주문시각'], format='%H%M%S').dt.strftime('%H:%M:%S')
+        all_types = df4['주문유형'].unique()
+        주문유형리스트 = [t for t in all_types if t in ('현금매수', '현금매도')]
+        선택주문유형 = st.selectbox("주문유형을 선택하세요", 주문유형리스트)
 
-        df_display = df4.sort_values(by=['주문일자', '주문시각'], ascending=False).copy().reset_index(drop=True)
+        선택주문유형_df = df4[df4['주문유형'] == 선택주문유형].copy()
+
+        선택주문유형_df['주문일자'] = pd.to_datetime(선택주문유형_df['주문일자'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
+        선택주문유형_df['주문시각'] = pd.to_datetime(선택주문유형_df['주문시각'], format='%H%M%S').dt.strftime('%H:%M:%S')
+
+        df_display = 선택주문유형_df.sort_values(by=['주문일자', '주문시각'], ascending=False).copy().reset_index(drop=True)
 
         # Grid 옵션 생성
         gb = GridOptionsBuilder.from_dataframe(df_display)
+        # 주문유형 컬럼 숨기기
+        gb.configure_column('주문유형', hide=True)
+        # 원주문번호 컬럼 숨기기
+        gb.configure_column('원주문번호', hide=True)
         # 페이지당 20개 표시
         gb.configure_pagination(enabled=True, paginationPageSize=20)
         gb.configure_grid_options(domLayout='normal')
@@ -930,14 +948,12 @@ else:
             '주문시각': 60,
             '종목명': 140,
             '주문번호': 70,
-            '원주문번호': 70,
-            '주문유형': 100,
+            '체결금액': 100,
             '주문단가': 80,
             '주문수량': 70,
             '체결단가': 80,
             '체결수량': 70,
             '잔여수량': 70,
-            '체결금액': 100
         }
 
         # 숫자 포맷을 JS 코드로 적용 (정렬 문제 방지)
