@@ -1,7 +1,7 @@
 import kis_api_resp as resp
 import requests
 import json
-import telegram
+from telegram import Bot
 import psycopg2 as db
 import sys
 import math
@@ -14,10 +14,18 @@ from psycopg2.extras import execute_values
 URL_BASE = "https://api.kiwoom.com"    
 SOCKET_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket"  # 접속 URL
 
-# conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
-conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
 conn = db.connect(conn_string)
+
+CHAT_ID = "2147256258"
+TOKEN = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"
+
+# 텔레그램 메시지 전송 함수
+async def send_telegram_message(message_text):
+    bot = Bot(token=TOKEN)
+    await bot.send_message(chat_id=CHAT_ID, text=message_text)
 
 def auth(APP_KEY, APP_SECRET):
 
@@ -146,8 +154,8 @@ class WebSocketClient:
 
                     if seq == self.condition_list[5][0]:  # 파워급등주 결과
                         await self.save_to_db(self.power_rapid_name, self.search_results)
-                    elif seq == self.condition_list[6][0]:  # 파워종목 결과
-                        await self.save_to_db(self.power_item_name, self.search_results)
+                    # elif seq == self.condition_list[6][0]:  # 파워종목 결과
+                        # await self.save_to_db(self.power_item_name, self.search_results)
                 
                 # 메시지 유형이 PING일 경우 수신값 그대로 송신
                 elif response.get('trnm') == 'PING':
@@ -173,32 +181,69 @@ class WebSocketClient:
         today = datetime.now().strftime('%Y%m%d')
         now = datetime.now().strftime('%H%M')
         data = []
-
-        for i in items:
-            code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
-            row = (
-                today, now, search_name, code, i['302'],
-                math.ceil(float(i['18'])),  # 저가
-                math.ceil(float(i['17'])),  # 고가
-                math.ceil(float(i['10'])),  # 현재가
-                math.ceil(float(i['13'])),  # 거래량
-                datetime.now()
-            )
-            data.append(row)
-
-        insert_query = """
-            INSERT INTO stock_search_form (
-                search_day, search_time, search_name, code, name,
-                low_price, high_price, current_price, volumn, cdate
-            )
-            VALUES %s
-            ON CONFLICT (search_day, search_name, code) DO NOTHING
-        """
+        telegram_messages = []
 
         with conn.cursor() as cur:
-            execute_values(cur, insert_query, data)
-            conn.commit()
-            print(f"{len(data)}건의 데이터가 저장되었습니다.")  
+            for i in items:
+                code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
+
+                # 기존 데이터 확인
+                cur.execute("""
+                    SELECT 1
+                    FROM stock_search_form
+                    WHERE code = %s AND search_day = %s AND search_name = %s
+                    LIMIT 1;
+                """, (code, today, search_name))
+
+                if not cur.fetchone():  # 기존 데이터가 없으면
+                    # 데이터 준비
+                    row = (
+                        today, now, search_name, code, i['302'],
+                        math.ceil(float(i['18'])),  # 저가
+                        math.ceil(float(i['17'])),  # 고가
+                        math.ceil(float(i['10'])),  # 현재가
+                        math.ceil(float(i['13'])),  # 거래량
+                        datetime.now()
+                    )
+                    data.append(row)
+
+                    # 텔레그램 메시지 준비
+                    telegram_text = (
+                        f"<{search_name}> {i['302']} [{code}] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
+                        f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
+                        f"저가: {format(math.ceil(float(i['18'])), ',d')}원"
+                    )
+                    telegram_messages.append((code, telegram_text))
+
+            if data:
+                # 삽입 쿼리
+                insert_query = """
+                    INSERT INTO stock_search_form (
+                        search_day, search_time, search_name, code, name,
+                        low_price, high_price, current_price, volumn, cdate
+                    )
+                    VALUES %s
+                    ON CONFLICT (search_day, search_name, code) DO NOTHING
+                    RETURNING code;
+                """
+
+                # execute_values로 데이터 삽입
+                execute_values(cur, insert_query, data)
+
+                # 커밋
+                conn.commit()
+
+                # 삽입된 코드 추출
+                inserted_codes = [row[0] for row in cur.fetchall()]
+
+                # 텔레그램 메시지 전송
+                for code, message in telegram_messages:
+                    if code in inserted_codes:
+                        await send_telegram_message(message)
+
+                print(f"{len(inserted_codes)}건의 데이터가 저장되고 텔레그램 알림이 전송되었습니다.")
+            else:
+                print("새로운 데이터가 없어 삽입 및 알림이 수행되지 않았습니다.")
 
     # WebSocket 실행
     async def run(self):
