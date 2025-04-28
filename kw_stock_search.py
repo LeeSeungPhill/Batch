@@ -1,4 +1,3 @@
-import kis_api_resp as resp
 import requests
 import json
 from telegram import Bot
@@ -14,8 +13,8 @@ from psycopg2.extras import execute_values
 URL_BASE = "https://api.kiwoom.com"    
 SOCKET_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket"  # 접속 URL
 
-conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
-# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
 conn = db.connect(conn_string)
 
