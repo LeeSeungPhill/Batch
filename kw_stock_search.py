@@ -153,8 +153,8 @@ class WebSocketClient:
 
                     if seq == self.condition_list[5][0]:  # 파워급등주 결과
                         await self.save_to_db(self.power_rapid_name, self.search_results)
-                    # elif seq == self.condition_list[6][0]:  # 파워종목 결과
-                        # await self.save_to_db(self.power_item_name, self.search_results)
+                    elif seq == self.condition_list[6][0]:  # 파워종목 결과
+                        await self.save_to_db(self.power_item_name, self.search_results)
                 
                 # 메시지 유형이 PING일 경우 수신값 그대로 송신
                 elif response.get('trnm') == 'PING':

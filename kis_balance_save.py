@@ -139,81 +139,81 @@ if result_one == None:
             cur01.execute(insert_query, ins_param1)
             conn.commit()
 
-        item_search4 = ka.inquire_search_result("phills2", "3")
-        number = 0
-        for i in item_search4:
+        # item_search4 = ka.inquire_search_result("phills2", "3")
+        # number = 0
+        # for i in item_search4:
 
-            number = number + 1
+        #     number = number + 1
         
-            ins_param1 = (
-                time,
-                math.ceil(float(i['low'])),
-                math.ceil(float(i['high'])), 
-                math.ceil(float(i['price'])),
-                i['chgrate'],
-                math.ceil(float(i['acml_vol'])),
-                i['chgrate2'],
-                int(round(float(i['stotprice']))), 
-                datetime.datetime.now(),
-                today,
-                "파워급등주", 
-                i['code'],
-                today, 
-                time, 
-                "파워급등주", 
-                i['code'], 
-                i['name'], 
-                math.ceil(float(i['low'])), 
-                math.ceil(float(i['high'])), 
-                math.ceil(float(i['price'])), 
-                i['chgrate'], 
-                math.ceil(float(i['acml_vol'])), 
-                i['chgrate2'], 
-                int(round(float(i['stotprice']))), 
-                datetime.datetime.now()
-            )
+        #     ins_param1 = (
+        #         time,
+        #         math.ceil(float(i['low'])),
+        #         math.ceil(float(i['high'])), 
+        #         math.ceil(float(i['price'])),
+        #         i['chgrate'],
+        #         math.ceil(float(i['acml_vol'])),
+        #         i['chgrate2'],
+        #         int(round(float(i['stotprice']))), 
+        #         datetime.datetime.now(),
+        #         today,
+        #         "파워급등주", 
+        #         i['code'],
+        #         today, 
+        #         time, 
+        #         "파워급등주", 
+        #         i['code'], 
+        #         i['name'], 
+        #         math.ceil(float(i['low'])), 
+        #         math.ceil(float(i['high'])), 
+        #         math.ceil(float(i['price'])), 
+        #         i['chgrate'], 
+        #         math.ceil(float(i['acml_vol'])), 
+        #         i['chgrate2'], 
+        #         int(round(float(i['stotprice']))), 
+        #         datetime.datetime.now()
+        #     )
 
-            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
-            cur01.execute(insert_query, ins_param1)
-            conn.commit()
+        #     insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+        #     cur01.execute(insert_query, ins_param1)
+        #     conn.commit()
 
-        item_search5 = ka.inquire_search_result("phills2", "4")
-        number = 0
-        for i in item_search5:
+        # item_search5 = ka.inquire_search_result("phills2", "4")
+        # number = 0
+        # for i in item_search5:
 
-            number = number + 1
+        #     number = number + 1
 
-            ins_param1 = (
-                time,
-                math.ceil(float(i['low'])),
-                math.ceil(float(i['high'])), 
-                math.ceil(float(i['price'])),
-                i['chgrate'],
-                math.ceil(float(i['acml_vol'])),
-                i['chgrate2'],
-                int(round(float(i['stotprice']))), 
-                datetime.datetime.now(),
-                today,
-                "파워종목", 
-                i['code'],
-                today, 
-                time, 
-                "파워종목", 
-                i['code'], 
-                i['name'], 
-                math.ceil(float(i['low'])), 
-                math.ceil(float(i['high'])), 
-                math.ceil(float(i['price'])), 
-                i['chgrate'], 
-                math.ceil(float(i['acml_vol'])), 
-                i['chgrate2'], 
-                int(round(float(i['stotprice']))), 
-                datetime.datetime.now()
-            )
+        #     ins_param1 = (
+        #         time,
+        #         math.ceil(float(i['low'])),
+        #         math.ceil(float(i['high'])), 
+        #         math.ceil(float(i['price'])),
+        #         i['chgrate'],
+        #         math.ceil(float(i['acml_vol'])),
+        #         i['chgrate2'],
+        #         int(round(float(i['stotprice']))), 
+        #         datetime.datetime.now(),
+        #         today,
+        #         "파워종목", 
+        #         i['code'],
+        #         today, 
+        #         time, 
+        #         "파워종목", 
+        #         i['code'], 
+        #         i['name'], 
+        #         math.ceil(float(i['low'])), 
+        #         math.ceil(float(i['high'])), 
+        #         math.ceil(float(i['price'])), 
+        #         i['chgrate'], 
+        #         math.ceil(float(i['acml_vol'])), 
+        #         i['chgrate2'], 
+        #         int(round(float(i['stotprice']))), 
+        #         datetime.datetime.now()
+        #     )
 
-            insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
-            cur01.execute(insert_query, ins_param1)
-            conn.commit()
+        #     insert_query = "with upsert as (update stock_search_form set search_time = %s, low_price = %s, high_price = %s, current_price = %s, day_rate = %s, volumn = %s, volumn_rate = %s, market_total_sum = %s, cdate = %s where search_day = %s and search_name = %s and code = %s returning * ) insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+        #     cur01.execute(insert_query, ins_param1)
+        #     conn.commit()
 
         # DB 연결된 커서 설정
         cur1 = conn.cursor()        
