@@ -253,9 +253,9 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price):
 
     if buy_flag:
-        tr_id = "TTTC0012U"  #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
+        tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
     else:
-        tr_id = "TTTC0011U"  #sell : TTTC0011U[실전투자], VTTC0011U[모의투자]
+        tr_id = "TTTC0011U"                     #sell : TTTC0011U[실전투자], VTTC0011U[모의투자]
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -268,9 +268,9 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "PDNO": stock_code,
-               "ORD_DVSN": ord_dvsn,    # 00 : 지정가, 01 : 시장가
+               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가
                "ORD_QTY": order_qty,
-               "ORD_UNPR": order_price  # 시장가 등 주문시, "0"으로 입력
+               "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
     }
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
@@ -287,7 +287,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC0013U",    # TTTC0013U[실전투자], VTTC0013U[모의투자]
+               "tr_id": "TTTC0013U",            # TTTC0013U[실전투자], VTTC0013U[모의투자]
                "custtype": "P"
     }
     params = {
@@ -316,7 +316,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8001R",    # tr_id : TTTC8001R(실전투자 3개월이내), CTSC9215R(실전투자 3개월이전), VTTC0081R(모의투자 3개월이내), VTSC9215R(모의투자 3개월이전)
+               "tr_id": "TTTC8001R",                                # tr_id : TTTC8001R(실전투자 3개월이내), CTSC9215R(실전투자 3개월이전), VTTC0081R(모의투자 3개월이내), VTSC9215R(모의투자 3개월이전)
                "custtype": "P"
     }  
     params = {
@@ -350,7 +350,7 @@ def get_acct_balance_sell(access_token, app_key, app_secret, acct_no):
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8434R"}    # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
+               "tr_id": "TTTC8434R"}            # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
@@ -2400,7 +2400,7 @@ def echo(update, context):
 
                         try:
                             # 주문정정
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, replace_price, d_remain_qty)
+                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, d_remain_qty, replace_price)
                             if c['ODNO'] != "":
                                 print("주문정정 완료")
                                 context.bot.send_message(chat_id=user_id, text= "주문정정 완료 [" + company + "], 주문번호 : " + str(int(c['ODNO'])))
