@@ -1464,7 +1464,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("일별체결") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["주문조회", "주문철회", "취소"], data_selected)
+            button_list = build_button(["주문조회", "주문정정", "주문철회", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="일별체결 메뉴를 선택해 주세요.",
@@ -1519,8 +1519,15 @@ def callback_get(update, context) :
                                                   chat_id=update.callback_query.message.chat_id,
                                                   message_id=update.callback_query.message.message_id)
 
+            elif data_selected.find("주문정정") != -1:
+                menuNum = "141"
+
+                context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가를 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+            
             elif data_selected.find("주문철회") != -1:
-                menuNum = "14"
+                menuNum = "142"
 
                 context.bot.edit_message_text(text="주문철회할 종목코드(종목명), 주문번호를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
@@ -2341,7 +2348,76 @@ def echo(update, context):
                 print("추세하단가 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 추세하단가 미존재")
 
-        elif menuNum == '14':
+        elif menuNum == '141':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+                
+                commandBot = user_text.split(sep=',', maxsplit=3)
+
+                print("commandBot[0] : ", commandBot[0])    # 종목코드
+                print("commandBot[1] : ", commandBot[1])    # 주문번호
+                print("commandBot[2] : ", commandBot[2])    # 정정가
+
+            # 주문번호 존재시
+            if commandBot[1].isdecimal():
+                    
+                # 주문번호
+                order_no = commandBot[1]
+                print("주문번호 : "+order_no)
+
+                 # 정정가 존재시
+                if commandBot[2].isdecimal():
+
+                    replace_price = commandBot[2]
+                    print("정정가 : "+replace_price)
+
+                    try:
+                        # 일별주문체결 조회
+                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no)
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
+
+                        try:
+                            # 주문정정
+                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, replace_price, d_remain_qty)
+                            if c['ODNO'] != "":
+                                print("주문정정 완료")
+                                context.bot.send_message(chat_id=user_id, text= "주문정정 완료 [" + company + "], 주문번호 : " + str(int(c['ODNO'])))
+                            else:
+                                print("주문철회 실패")
+                                context.bot.send_message(chat_id=user_id, text="주문정정 실패 [" + company + "]")
+
+                        except Exception as e:
+                            print('주문정정 오류.', e)
+                            context.bot.send_message(chat_id=user_id, text="주문정정 오류 [" + company + "] : "+str(e))
+
+                    except Exception as e:
+                        print('일별주문체결 조회 오류.',e)
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 오류 [" + company + "] : "+str(e))
+
+                else:
+                    print("주문정정 정정가 미존재")
+                    context.bot.send_message(chat_id=user_id, text="주문정정 정정가 미존재 [" + company + "]")                    
+
+            else:
+                print("주문정정 주문번호 미존재")
+                context.bot.send_message(chat_id=user_id, text="주문정정 주문번호 미존재 [" + company + "]")                    
+
+        elif menuNum == '142':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
@@ -2396,7 +2472,7 @@ def echo(update, context):
 
             else:
                 print("주문철회 주문번호 미존재")
-                context.bot.send_message(chat_id=user_id, text="주문철회 주문번호 미존재 [" + company + "]")                    
+                context.bot.send_message(chat_id=user_id, text="주문철회 주문번호 미존재 [" + company + "]")       
 
         elif menuNum == '15':
             initMenuNum()
