@@ -215,8 +215,8 @@ def inquire_price(access_token, app_key, app_secret, code):
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-            'FID_COND_MRKT_DIV_CODE': "J",
-            'FID_INPUT_ISCD': code
+                'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
+                'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
@@ -231,15 +231,16 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8908R"}    # tr_id : TTTC8908R[실전투자], VTTC8908R[모의투자]
+               "tr_id": "TTTC8908R"             # tr_id : TTTC8908R[실전투자], VTTC8908R[모의투자]
+    }            
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
-               "PDNO": "",                     # 종목번호(6자리)
-               "ORD_UNPR": "0",                # 1주당 가격
-               "ORD_DVSN": "02",               # 02 : 조건부지정가
-               "CMA_EVLU_AMT_ICLD_YN": "Y",    # CMA평가금액포함여부
-               "OVRS_ICLD_YN": "N"             # 해외포함여부
+               "PDNO": "",                      # 종목번호(6자리)
+               "ORD_UNPR": "0",                 # 1주당 가격
+               "ORD_DVSN": "02",                # 02 : 조건부지정가
+               "CMA_EVLU_AMT_ICLD_YN": "Y",     # CMA평가금액포함여부
+               "OVRS_ICLD_YN": "N"              # 해외포함여부
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-order"
     URL = f"{URL_BASE}/{PATH}"
@@ -252,22 +253,24 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price):
 
     if buy_flag:
-        tr_id = "TTTC0802U"  #buy : TTTC0802U[실전투자], VTTC0802U[모의투자]
+        tr_id = "TTTC0012U"  #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
     else:
-        tr_id = "TTTC0801U"  #sell : TTTC0801U[실전투자], VTTC0801U[모의투자]
+        tr_id = "TTTC0011U"  #sell : TTTC0011U[실전투자], VTTC0011U[모의투자]
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": tr_id}
+               "tr_id": tr_id,
+               "custtype": "P"
+    }
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "PDNO": stock_code,
                "ORD_DVSN": ord_dvsn,    # 00 : 지정가, 01 : 시장가
                "ORD_QTY": order_qty,
-               "ORD_UNPR": order_price
+               "ORD_UNPR": order_price  # 시장가 등 주문시, "0"으로 입력
     }
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
@@ -284,17 +287,19 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC0803U"}    # TTTC0803U[실전투자], VTTC0803U[모의투자]
+               "tr_id": "TTTC0013U",    # TTTC0013U[실전투자], VTTC0013U[모의투자]
+               "custtype": "P"
+    }
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "KRX_FWDG_ORD_ORGNO": "06010",
                "ORGN_ODNO": order_no,
-               "ORD_DVSN": "00",
+               "ORD_DVSN": "00",                # 지정가 : 00, 시장가 : 01
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
-               "QTY_ALL_ORD_YN": "Y"
+               "QTY_ALL_ORD_YN": "Y"            # 전량 : Y, 일부 : N
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
@@ -311,23 +316,25 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8001R"}  # tr_id : TTTC8001R[실전투자], VTTC8001R[모의투자]
+               "tr_id": "TTTC8001R",    # tr_id : TTTC8001R(실전투자 3개월이내), CTSC9215R(실전투자 3개월이전), VTTC0081R(모의투자 3개월이내), VTSC9215R(모의투자 3개월이전)
+               "custtype": "P"
+    }  
     params = {
-        "CANO": acct_no,
-        "ACNT_PRDT_CD": '01',
-        "INQR_STRT_DT": datetime.now().strftime('%Y%m%d'),
-        "INQR_END_DT": datetime.now().strftime('%Y%m%d'),
-        "SLL_BUY_DVSN_CD": '00',
-        "INQR_DVSN": '00',
-        "PDNO": code,
-        "CCLD_DVSN": "00",
-        "ORD_GNO_BRNO": "",
-        "ODNO": order_no,
-        "INQR_DVSN_3": "00",
-        "INQR_DVSN_1": "",
-        "INQR_DVSN_2": "",
-        "CTX_AREA_FK100": "",
-        "CTX_AREA_NK100": ""
+                "CANO": acct_no,
+                "ACNT_PRDT_CD": '01',
+                "INQR_STRT_DT": datetime.now().strftime('%Y%m%d'),  # 조회시작일자 YYYYMMDD
+                "INQR_END_DT": datetime.now().strftime('%Y%m%d'),   # 조회종료일자 YYYYMMDD
+                "SLL_BUY_DVSN_CD": '00',                            # 매도매수구분코드 : 00 전체, 01 매도, 02 매수
+                "PDNO": code,
+                "ORD_GNO_BRNO": "",
+                "ODNO": order_no,
+                "CCLD_DVSN": "00",                                  # 체결구분 : 00 전체, 01 체결, 02 미체결
+                "INQR_DVSN": '00',                                  # 조회구분 : 00 역순, 01 정순
+                "INQR_DVSN_1": "",        
+                "INQR_DVSN_3": "00",                                # 조회구분3 : 00 전체, 01 현금, 02 신용
+                "EXCG_ID_DVSN_CD": "KRX",                           # 거래소ID구분코드 : KRX, NXT
+                "CTX_AREA_FK100": "",
+                "CTX_AREA_NK100": ""
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
     URL = f"{URL_BASE}/{PATH}"
@@ -343,19 +350,19 @@ def get_acct_balance_sell(access_token, app_key, app_secret, acct_no):
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8434R"}  # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
+               "tr_id": "TTTC8434R"}    # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
     params = {
-        "CANO": acct_no,
-        'ACNT_PRDT_CD': '01',
-        'AFHR_FLPR_YN': 'N',
-        'FNCG_AMT_AUTO_RDPT_YN': 'N',
-        'FUND_STTL_ICLD_YN': 'N',
-        'INQR_DVSN': '01',
-        'OFL_YN': 'N',
-        'PRCS_DVSN': '01',
-        'UNPR_DVSN': '01',
-        'CTX_AREA_FK100': '',
-        'CTX_AREA_NK100': ''
+                "CANO": acct_no,
+                'ACNT_PRDT_CD': '01',
+                'AFHR_FLPR_YN': 'N',
+                'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
+                'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
+                'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
+                'FUND_STTL_ICLD_YN': 'N',       # 펀드결제분포함여부 : Y 포함, N 포함하지 않음
+                'FNCG_AMT_AUTO_RDPT_YN': 'N',   # 융자금액자동상환여부 : N 기본값
+                'PRCS_DVSN': '01',              # 처리구분 : 00 전일매매포함, 01 전일매매미포함
+                'CTX_AREA_FK100': '',
+                'CTX_AREA_NK100': ''
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
@@ -377,20 +384,20 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8434R"}    # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
+               "tr_id": "TTTC8434R"}            # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
                 'AFHR_FLPR_YN': 'N',
-                'FNCG_AMT_AUTO_RDPT_YN': 'N',
-                'FUND_STTL_ICLD_YN': 'N',
-                'INQR_DVSN': '01',
-                'OFL_YN': 'N',
-                'PRCS_DVSN': '01',
-                'UNPR_DVSN': '01',
+                'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
+                'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
+                'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
+                'FUND_STTL_ICLD_YN': 'N',       # 펀드결제분포함여부 : Y 포함, N 포함하지 않음
+                'FNCG_AMT_AUTO_RDPT_YN': 'N',   # 융자금액자동상환여부 : N 기본값
+                'PRCS_DVSN': '01',              # 처리구분 : 00 전일매매포함, 01 전일매매미포함
                 'CTX_AREA_FK100': '',
                 'CTX_AREA_NK100': ''
-            }
+    }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
     res = requests.get(URL, headers=headers, params=params, verify=False)
