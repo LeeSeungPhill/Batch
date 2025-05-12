@@ -923,7 +923,7 @@ else:
         st.title("일별 주문체결 조회")
 
         all_types = df4['주문유형'].unique()
-        주문유형리스트 = [t for t in all_types if t in ('현금매수', '현금매도')]
+        주문유형리스트 = [t for t in all_types if t in ('현금매수', '현금매도', '매수정정*', '매도정정*')]
         선택주문유형 = st.selectbox("주문유형을 선택하세요", 주문유형리스트)
 
         선택주문유형_df = df4[df4['주문유형'] == 선택주문유형].copy()
