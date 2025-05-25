@@ -118,8 +118,10 @@ def get_my_complete(access_token, app_key, app_secret, acct_no):
             'CANO': acct_no,                                    # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
             'ACNT_PRDT_CD':"01",                                # 계좌상품코드 계좌번호 체계(8-2)의 뒤 2자리
             'SORT_DVSN': "01",                                  # 00: 최근 순, 01: 과거 순, 02: 최근 순
-            'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),  # 조회시작일(8자리) 
-            'INQR_END_DT': datetime.now().strftime('%Y%m%d'),   # 조회종료일(8자리)
+            # 'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),  # 조회시작일(8자리) 
+            # 'INQR_END_DT': datetime.now().strftime('%Y%m%d'),   # 조회종료일(8자리)
+            'INQR_STRT_DT': "20250523",  # 조회시작일(8자리) 
+            'INQR_END_DT': "20250523",   # 조회종료일(8자리)
             'SLL_BUY_DVSN_CD': "00",                            # 매도매수구분코드 00 : 전체 / 01 : 매도 / 02 : 매수
             'PDNO': "",                                         # 종목번호(6자리) ""공란입력 시, 전체
             'ORD_GNO_BRNO': "",                                 # 주문채번지점번호 ""공란입력 시, 전체
@@ -278,7 +280,8 @@ def balance_proc():
 
     if order_complete_output:
         order_complete_list = []
-        today_str = datetime.now().strftime('%Y%m%d')
+        # today_str = datetime.now().strftime('%Y%m%d')
+        today_str = "20250523"
 
         for item in order_complete_output:
             odno = item['odno']
@@ -315,7 +318,7 @@ def balance_proc():
 
         # 읿별주문체결정보 맵 설정 : 계좌번호, 주문일자, 주문번호, 원주문번호의 체결량, 잔여량 
         order_commplete_map = {
-            (acct_no, today_str, row[0], row[1]): (float(row[2]), float(row[3]))
+            (acct_no, today_str, row[0], row[1]): (int(row[2]), int(row[3]))
             for row in result_400
         }
 
@@ -330,9 +333,9 @@ def balance_proc():
                 item['보유단가'] = 0
                 item['보유수량'] = 0
 
-            key2 = (item['계좌번호'], item['주문일자'], item['주문번호'], item['원주문번호'])
-            new_complete_qty = item['체결수량']
-            new_remain_qty = item['잔여수량']
+            key2 = (item['계좌번호'], item['주문일자'], str(int(item['주문번호'])), str(int(item['원주문번호'])) if item['원주문번호'] != "" else "")
+            new_complete_qty = int(item['체결수량'])
+            new_remain_qty = int(item['잔여수량'])
 
             # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 미존재하는 경우
             if key2 not in order_commplete_map:
@@ -361,21 +364,23 @@ def balance_proc():
                     item['주문일자'], 
                     item['주문시각'], 
                     item['종목명'], 
-                    item['주문번호'],
-                    item['원주문번호'],
-                    item['체결금액'],
+                    str(int(item['주문번호'])),
+                    str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
+                    int(item['체결금액']),
                     item['주문유형'], 
-                    item['주문단가'], 
-                    item['주문수량'],
+                    int(item['주문단가']), 
+                    int(item['주문수량']),
                     new_complete_qty, 
                     new_remain_qty, 
                     item['보유단가'], 
                     item['보유수량'] 
                 ))
+
+                conn.commit()
             else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
                 old_complete_qty, old_remain_qty = order_commplete_map[key2]
                 #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
-                if new_complete_qty != old_complete_qty or new_remain_qty != old_remain_qty:
+                if new_complete_qty != int(old_complete_qty) or new_remain_qty != int(old_remain_qty):
                     # UPDATE
                     cur400.execute("""
                         UPDATE \"stockOrderComplete_stock_order_complete\"
@@ -393,15 +398,16 @@ def balance_proc():
                     , (
                         new_complete_qty, 
                         new_remain_qty,
-                        item['체결금액'],
+                        int(item['체결금액']),
                         item['보유단가'], 
                         item['보유수량'] ,
                         acct_no, 
                         item['주문일자'], 
-                        item['주문번호']
+                        str(int(item['주문번호']))
                     ))
 
-        conn.commit()
+                    conn.commit()
+
         cur400.close()
 
 async def main(telegram_text):
