@@ -7,6 +7,7 @@ import telegram
 import asyncio
 import sys
 import pandas as pd
+from decimal import Decimal
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
@@ -118,10 +119,10 @@ def get_my_complete(access_token, app_key, app_secret, acct_no):
             'CANO': acct_no,                                    # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
             'ACNT_PRDT_CD':"01",                                # 계좌상품코드 계좌번호 체계(8-2)의 뒤 2자리
             'SORT_DVSN': "01",                                  # 00: 최근 순, 01: 과거 순, 02: 최근 순
-            # 'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),  # 조회시작일(8자리) 
-            # 'INQR_END_DT': datetime.now().strftime('%Y%m%d'),   # 조회종료일(8자리)
-            'INQR_STRT_DT': "20250523",  # 조회시작일(8자리) 
-            'INQR_END_DT': "20250523",   # 조회종료일(8자리)
+            'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),  # 조회시작일(8자리) 
+            'INQR_END_DT': datetime.now().strftime('%Y%m%d'),   # 조회종료일(8자리)
+            # 'INQR_STRT_DT': "20250522",  # 조회시작일(8자리) 
+            # 'INQR_END_DT': "20250522",   # 조회종료일(8자리)
             'SLL_BUY_DVSN_CD': "00",                            # 매도매수구분코드 00 : 전체 / 01 : 매도 / 02 : 매수
             'PDNO': "",                                         # 종목번호(6자리) ""공란입력 시, 전체
             'ORD_GNO_BRNO': "",                                 # 주문채번지점번호 ""공란입력 시, 전체
@@ -143,14 +144,50 @@ def get_my_complete(access_token, app_key, app_secret, acct_no):
 
         # 응답에 output1이 있는지 확인
         body = ar.getBody()
-        if hasattr(body, 'output1'):
-            return body.output1
-        else:
-            print("일별주문체결조회 응답이 없습니다.")
-            return []  # 혹은 None
+        return body.output1 if hasattr(body, 'output1') else []
 
     except Exception as e:
         print("일별주문체결조회 중 오류 발생:", e)
+        return []
+
+# 기간별손익일별합산조회
+def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt, end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8708R",
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,            # 종합계좌번호
+            'SORT_DVSN': "01",          # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'INQR_DVSN': "00",
+            'ACNT_PRDT_CD':"01",
+            'CBLC_DVSN': "00",
+            'PDNO': code,               # ""공란입력 시, 전체
+            'INQR_STRT_DT': strt_dt,    # 조회시작일(8자리) 
+            'INQR_END_DT': end_dt,      # 조회종료일(8자리)
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-period-profit"
+    URL = f"{URL_BASE}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output1이 있는지 확인
+        body = ar.getBody()
+        if hasattr(body, 'output1'):
+            return body.output1
+        else:
+            print("기간별손익일별합산조회 응답이 없습니다.")
+            return []  # 혹은 None
+
+    except Exception as e:
+        print("기간별손익일별합산조회 중 오류 발생:", e)
         return []
 
 # 잔고정보 처리
@@ -278,15 +315,31 @@ def balance_proc():
     # 일별 주문 체결 조회
     order_complete_output = get_my_complete(access_token, app_key, app_secret, acct_no)
 
-    if order_complete_output:
-        order_complete_list = []
-        # today_str = datetime.now().strftime('%Y%m%d')
-        today_str = "20250523"
+    order_complete_list = []
+    today_str = datetime.now().strftime('%Y%m%d')
+    # today_str = "20250522"
 
+    if order_complete_output:
+    
         for item in order_complete_output:
             odno = item['odno']
             orgn_odno = item['orgn_odno']
+            pfls_rate = 0
+            pfls_amt = 0
+            paid_tax= 0
+            paid_fee= 0
             
+            if float(item['tot_ccld_qty']) > 0:
+                # 기간별손익일별합산조회
+                period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+
+                for item2 in period_profit_loss_sum_output:
+                
+                    pfls_rate = float(item2['pfls_rt'])
+                    pfls_amt = float(item2['rlzt_pfls'])
+                    paid_tax = float(item2['tl_tax'])
+                    paid_fee = float(item2['fee'])
+
             order_complete_list.append({
                 '계좌번호': str(acct_no),
                 '주문일자': item['ord_dt'],
@@ -301,114 +354,134 @@ def balance_proc():
                 '체결단가': float(item['avg_prvs']),
                 '체결수량': float(item['tot_ccld_qty']),
                 '잔여수량': float(item['rmn_qty']),
-            })
+                'pfls_rate': pfls_rate,
+                'pfls_amt': pfls_amt,
+                'paid_tax': paid_tax,
+                'paid_fee': paid_fee,
+            })        
 
-        cur400 = conn.cursor()
+    cur400 = conn.cursor()
 
-        # 일별주문체결정보 조회
-        cur400.execute("""
-            SELECT 
-                order_no, org_order_no, total_complete_qty, remain_qty
-            FROM \"stockOrderComplete_stock_order_complete\"
-            WHERE acct_no = %s 
-            AND order_dt = %s
-        """
-        , (str(acct_no), today_str))
-        result_400 = cur400.fetchall()
+    # 일별주문체결정보 조회
+    cur400.execute("""
+        SELECT 
+            order_no, org_order_no, total_complete_qty, remain_qty
+        FROM \"stockOrderComplete_stock_order_complete\"
+        WHERE acct_no = %s 
+        AND order_dt = %s
+    """
+    , (str(acct_no), today_str))
+    result_400 = cur400.fetchall()
 
-        # 읿별주문체결정보 맵 설정 : 계좌번호, 주문일자, 주문번호, 원주문번호의 체결량, 잔여량 
-        order_commplete_map = {
-            (acct_no, today_str, row[0], row[1]): (int(row[2]), int(row[3]))
-            for row in result_400
-        }
+    # 읿별주문체결정보 맵 설정 : 계좌번호, 주문일자, 주문번호, 원주문번호의 체결량, 잔여량 
+    order_commplete_map = {
+        (str(acct_no), today_str, str(int(row[0])), str(int(row[1])) if row[1] != "" else ""): (int(row[2]), int(row[3]))
+        for row in result_400
+    }
 
-        for item in order_complete_list:
-            key1 = (item['계좌번호'], item['종목명'])
+    for item in order_complete_list:
+        key1 = (item['계좌번호'], item['종목명'])
 
-            # 잔고정보 맵의 해당하는 일별 주문 체결 조회의 계좌번호, 종목명이 존재하는 경우 : 보유단가, 보유수량 설정
-            if key1 in balance_map:
-                item['보유단가'] = balance_map[key1]['보유단가']
-                item['보유수량'] = balance_map[key1]['보유수량']
-            else:   # 잔고정보 맵의 해당하는 일별 주문 체결 조회의 계좌번호, 종목명이 미존재하는 경우
-                item['보유단가'] = 0
-                item['보유수량'] = 0
+        # 잔고정보 맵의 해당하는 일별 주문 체결 조회의 계좌번호, 종목명이 존재하는 경우 : 보유단가, 보유수량 설정
+        if key1 in balance_map:
+            item['보유단가'] = balance_map[key1]['보유단가']
+            item['보유수량'] = balance_map[key1]['보유수량']
+        else:   # 잔고정보 맵의 해당하는 일별 주문 체결 조회의 계좌번호, 종목명이 미존재하는 경우
+            item['보유단가'] = 0
+            item['보유수량'] = 0
 
-            key2 = (item['계좌번호'], item['주문일자'], str(int(item['주문번호'])), str(int(item['원주문번호'])) if item['원주문번호'] != "" else "")
-            new_complete_qty = int(item['체결수량'])
-            new_remain_qty = int(item['잔여수량'])
+        key2 = (str(item['계좌번호']), item['주문일자'], str(int(item['주문번호'])), str(int(item['원주문번호'])) if item['원주문번호'] != "" else "")
+        new_complete_qty = int(item['체결수량'])
+        new_remain_qty = int(item['잔여수량'])
+        
+        # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 미존재하는 경우
+        if key2 not in order_commplete_map:
+            # 미존재시 INSERT 처리
+            cur400.execute("""
+                INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                    acct_no, 
+                    order_dt,
+                    order_tmd, 
+                    name, 
+                    order_no, 
+                    org_order_no,
+                    total_complete_amt, 
+                    order_type, 
+                    order_price, 
+                    order_amount,
+                    total_complete_qty, 
+                    remain_qty, 
+                    hold_price, 
+                    hold_vol,
+                    profit_loss_rate,
+                    profit_loss_amt,
+                    paid_tax, 
+                    paid_fee,
+                    last_chg_date
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+            """
+            , (
+                acct_no, 
+                item['주문일자'], 
+                item['주문시각'], 
+                item['종목명'], 
+                str(int(item['주문번호'])),
+                str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
+                int(item['체결금액']),
+                item['주문유형'], 
+                int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
+                int(item['주문수량']),
+                new_complete_qty, 
+                new_remain_qty, 
+                item['보유단가'], 
+                item['보유수량'],
+                Decimal(item['pfls_rate']),
+                int(item['pfls_amt']),
+                int(item['paid_tax']),
+                int(item['paid_fee'])
+            ))
 
-            # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 미존재하는 경우
-            if key2 not in order_commplete_map:
-                # 미존재시 INSERT 처리
+            conn.commit()
+        else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
+            old_complete_qty, old_remain_qty = order_commplete_map[key2]
+            #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
+            if new_complete_qty != int(old_complete_qty) or new_remain_qty != int(old_remain_qty):
+                # UPDATE
                 cur400.execute("""
-                    INSERT INTO \"stockOrderComplete_stock_order_complete\" (
-                        acct_no, 
-                        order_dt,
-                        order_tmd, 
-                        name, 
-                        order_no, 
-                        org_order_no,
-                        total_complete_amt, 
-                        order_type, 
-                        order_price, 
-                        order_amount,
-                        total_complete_qty, 
-                        remain_qty, 
-                        hold_price, 
-                        hold_vol, 
-                        last_chg_date
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                    UPDATE \"stockOrderComplete_stock_order_complete\"
+                    SET
+                        total_complete_qty = %s,
+                        remain_qty = %s,
+                        total_complete_amt = %s,
+                        hold_price = %s, 
+                        hold_vol = %s,
+                        pfls_rate = %s,
+                        pfls_amt = %s,
+                        paid_tax = %s,
+                        paid_fee = %s,
+                        last_chg_date = now()
+                    WHERE acct_no = %s 
+                    AND order_dt = %s
+                    AND order_no = %s 
                 """
                 , (
+                    new_complete_qty, 
+                    new_remain_qty,
+                    int(item['체결금액']),
+                    item['보유단가'], 
+                    item['보유수량'],
+                    Decimal(item['pfls_rate']),
+                    int(item['pfls_amt']),
+                    int(item['paid_tax']),
+                    int(item['paid_fee']),
                     acct_no, 
                     item['주문일자'], 
-                    item['주문시각'], 
-                    item['종목명'], 
-                    str(int(item['주문번호'])),
-                    str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
-                    int(item['체결금액']),
-                    item['주문유형'], 
-                    int(item['주문단가']), 
-                    int(item['주문수량']),
-                    new_complete_qty, 
-                    new_remain_qty, 
-                    item['보유단가'], 
-                    item['보유수량'] 
+                    str(int(item['주문번호']))
                 ))
 
                 conn.commit()
-            else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
-                old_complete_qty, old_remain_qty = order_commplete_map[key2]
-                #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
-                if new_complete_qty != int(old_complete_qty) or new_remain_qty != int(old_remain_qty):
-                    # UPDATE
-                    cur400.execute("""
-                        UPDATE \"stockOrderComplete_stock_order_complete\"
-                        SET
-                            total_complete_qty = %s,
-                            remain_qty = %s,
-                            total_complete_amt = %s,
-                            hold_price = %s, 
-                            hold_vol = %s,
-                            last_chg_date = now()
-                        WHERE acct_no = %s 
-                        AND order_dt = %s
-                        AND order_no = %s 
-                    """
-                    , (
-                        new_complete_qty, 
-                        new_remain_qty,
-                        int(item['체결금액']),
-                        item['보유단가'], 
-                        item['보유수량'] ,
-                        acct_no, 
-                        item['주문일자'], 
-                        str(int(item['주문번호']))
-                    ))
 
-                    conn.commit()
-
-        cur400.close()
+    cur400.close()
 
 async def main(telegram_text):
     chat_id = "2147256258"
