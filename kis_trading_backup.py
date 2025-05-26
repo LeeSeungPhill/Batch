@@ -77,7 +77,7 @@ for nick in nickname_list:
 
         remote_cur1 = remote_conn.cursor()
 
-        insert_query = """
+        insert_query1 = """
             INSERT INTO \"stockOrderComplete_stock_order_complete\" (
                 acct_no, order_no, org_order_no, order_type, order_dt, order_tmd, name, order_price, order_amount, total_complete_qty, remain_qty,
                 total_complete_amt, hold_price, hold_vol, profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
@@ -88,15 +88,90 @@ for nick in nickname_list:
         for row in stock_order_complete_result:
             acct_no, order_no, org_order_no, order_type, order_dt, order_tmd, name, order_price, order_amount, total_complete_qty, remain_qty, total_complete_amt, hold_price, hold_vol, profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date = row
             try:
-                remote_cur1.execute(insert_query, (
+                remote_cur1.execute(insert_query1, (
                     acct_no, order_no, org_order_no, order_type, order_dt, order_tmd, name, order_price, order_amount, total_complete_qty, remain_qty, total_complete_amt, hold_price, hold_vol, profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
                 ))
             except Exception as e:
-                print(f"[{nick}] Error inserting row {row}: {e}")
+                print(f"[{nick}] Error inserting1 row {row}: {e}")
 
         remote_conn.commit()
         remote_cur1.close()
-        print(f"[{nick}] Insert completed. ({len(stock_order_complete_result)} rows processed)")
+        print(f"[{nick}] Insert1 completed. ({len(stock_order_complete_result)} rows processed)")
+
+        cur2 = conn.cursor()
+        cur2.execute("""
+            SELECT 
+                acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, 
+                pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date
+            FROM dly_acct_balance
+            WHERE acct = %s AND dt = %s
+        """, (acct_no, today_str))
+        acc_balance_result = cur2.fetchall()
+        cur2.close()
+
+        if not acc_balance_result:
+            print(f"[{nick}] No acc_balance data found.")
+            continue
+
+        remote_cur2 = remote_conn.cursor()
+
+        insert_query2 = """
+            INSERT INTO dly_acct_balance (
+                acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (acct, dt) DO NOTHING
+        """
+
+        for row in acc_balance_result:
+            acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date = row
+            try:
+                remote_cur2.execute(insert_query2, (
+                    acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date
+                ))
+            except Exception as e:
+                print(f"[{nick}] Error inserting2 row {row}: {e}")
+
+        remote_conn.commit()
+        remote_cur2.close()
+        print(f"[{nick}] Insert2 completed. ({len(acc_balance_result)} rows processed)")
+
+        cur3 = conn.cursor()
+        cur3.execute("""
+            SELECT 
+                acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, 
+                eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, 
+                sign_support_price, end_loss_price, end_target_price, last_chg_date
+            FROM dly_stock_balance
+            WHERE acct = %s AND dt = %s
+        """, (acct_no, today_str))
+        stock_balance_result = cur3.fetchall()
+        cur3.close()
+
+        if not stock_balance_result:
+            print(f"[{nick}] No stock_balance data found.")
+            continue
+
+        remote_cur3 = remote_conn.cursor()
+
+        insert_query3 = """
+            INSERT INTO dly_stock_balance (
+                acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, last_chg_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (acct, dt, code) DO NOTHING
+        """
+
+        for row in stock_balance_result:
+            acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, last_chg_date = row
+            try:
+                remote_cur3.execute(insert_query3, (
+                    acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, last_chg_date
+                ))
+            except Exception as e:
+                print(f"[{nick}] Error inserting3 row {row}: {e}")
+
+        remote_conn.commit()
+        remote_cur3.close()
+        print(f"[{nick}] Insert3 completed. ({len(stock_balance_result)} rows processed)")
 
     except Exception as e:
         print(f"[{nick}] Error processing account: {e}")

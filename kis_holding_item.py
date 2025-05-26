@@ -446,38 +446,69 @@ def balance_proc():
             old_complete_qty, old_remain_qty = order_commplete_map[key2]
             #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
             if new_complete_qty != int(old_complete_qty) or new_remain_qty != int(old_remain_qty):
-                # UPDATE
-                cur400.execute("""
-                    UPDATE \"stockOrderComplete_stock_order_complete\"
-                    SET
-                        total_complete_qty = %s,
-                        remain_qty = %s,
-                        total_complete_amt = %s,
-                        hold_price = %s, 
-                        hold_vol = %s,
-                        pfls_rate = %s,
-                        pfls_amt = %s,
-                        paid_tax = %s,
-                        paid_fee = %s,
-                        last_chg_date = now()
-                    WHERE acct_no = %s 
-                    AND order_dt = %s
-                    AND order_no = %s 
-                """
-                , (
-                    new_complete_qty, 
-                    new_remain_qty,
-                    int(item['체결금액']),
-                    item['보유단가'], 
-                    item['보유수량'],
-                    Decimal(item['pfls_rate']),
-                    int(item['pfls_amt']),
-                    int(item['paid_tax']),
-                    int(item['paid_fee']),
-                    acct_no, 
-                    item['주문일자'], 
-                    str(int(item['주문번호']))
-                ))
+
+                if float(item['보유단가']) > 0 and int(item['보유수량']) > 0:
+                    # UPDATE
+                    cur400.execute("""
+                        UPDATE \"stockOrderComplete_stock_order_complete\"
+                        SET
+                            total_complete_qty = %s,
+                            remain_qty = %s,
+                            total_complete_amt = %s,
+                            hold_price = %s, 
+                            hold_vol = %s,
+                            profit_loss_rate = %s,
+                            profit_loss_amt = %s,
+                            paid_tax = %s,
+                            paid_fee = %s,
+                            last_chg_date = now()
+                        WHERE acct_no = %s 
+                        AND order_dt = %s
+                        AND order_no = %s 
+                    """
+                    , (
+                        new_complete_qty, 
+                        new_remain_qty,
+                        int(item['체결금액']),
+                        item['보유단가'], 
+                        item['보유수량'],
+                        Decimal(item['pfls_rate']),
+                        int(item['pfls_amt']),
+                        int(item['paid_tax']),
+                        int(item['paid_fee']),
+                        acct_no, 
+                        item['주문일자'], 
+                        str(int(item['주문번호']))
+                    ))
+                else:
+                    # UPDATE
+                    cur400.execute("""
+                        UPDATE \"stockOrderComplete_stock_order_complete\"
+                        SET
+                            total_complete_qty = %s,
+                            remain_qty = %s,
+                            total_complete_amt = %s,
+                            profit_loss_rate = %s,
+                            profit_loss_amt = %s,
+                            paid_tax = %s,
+                            paid_fee = %s,
+                            last_chg_date = now()
+                        WHERE acct_no = %s 
+                        AND order_dt = %s
+                        AND order_no = %s 
+                    """
+                    , (
+                        new_complete_qty, 
+                        new_remain_qty,
+                        int(item['체결금액']),
+                        Decimal(item['pfls_rate']),
+                        int(item['pfls_amt']),
+                        int(item['paid_tax']),
+                        int(item['paid_fee']),
+                        acct_no, 
+                        item['주문일자'], 
+                        str(int(item['주문번호']))
+                    ))    
 
                 conn.commit()
 
@@ -543,7 +574,7 @@ if result_one == None:
 
     # 보유정보 조회
     cur03 = conn.cursor()
-    cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.earnings_rate as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)	and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y'")
+    cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.earnings_rate as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)    and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y'")
     result_three = cur03.fetchall()
     cur03.close()
 
