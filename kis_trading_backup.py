@@ -53,10 +53,10 @@ def account(nickname):
     }
 
 nickname_list = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
-# start_dt = datetime.now().strftime('%Y%m%d')
-# end_dt = datetime.now().strftime('%Y%m%d')
-start_dt = "20250101"
-end_dt = "20250526"
+start_dt = datetime.now().strftime('%Y%m%d')
+end_dt = datetime.now().strftime('%Y%m%d')
+# start_dt = "20250101"
+# end_dt = "20250526"
 
 for nick in nickname_list:
     try:
@@ -95,11 +95,11 @@ for nick in nickname_list:
                     acct_no, order_no, org_order_no, order_type, order_dt, order_tmd, name, order_price, order_amount, total_complete_qty, remain_qty, total_complete_amt, hold_price, hold_vol, profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
                 ))
             except Exception as e:
-                print(f"[{nick}] Error inserting1 row {row}: {e}")
+                print(f"[{nick}] Error order inserting row {row}: {e}")
 
         remote_conn.commit()
         remote_cur1.close()
-        print(f"[{nick}] Insert1 completed. ({len(stock_order_complete_result)} rows processed)")
+        print(f"[{nick}] Insert order completed. ({len(stock_order_complete_result)} rows processed)")
 
         cur2 = conn.cursor()
         cur2.execute("""
@@ -113,7 +113,7 @@ for nick in nickname_list:
         cur2.close()
 
         if not acc_balance_result:
-            print(f"[{nick}] No acc_balance data found.")
+            print(f"[{nick}] No dly_acct_balance data found.")
             continue
 
         remote_cur2 = remote_conn.cursor()
@@ -132,11 +132,11 @@ for nick in nickname_list:
                     acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date
                 ))
             except Exception as e:
-                print(f"[{nick}] Error inserting2 row {row}: {e}")
+                print(f"[{nick}] Error dly_acct_balance inserting row {row}: {e}")
 
         remote_conn.commit()
         remote_cur2.close()
-        print(f"[{nick}] Insert2 completed. ({len(acc_balance_result)} rows processed)")
+        print(f"[{nick}] Insert dly_acct_balance completed. ({len(acc_balance_result)} rows processed)")
 
         cur3 = conn.cursor()
         cur3.execute("""
@@ -145,13 +145,13 @@ for nick in nickname_list:
                 eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, 
                 sign_support_price, end_loss_price, end_target_price, last_chg_date
             FROM dly_stock_balance
-            WHERE acct = %s AND dt BETWEEM %s AND %s
+            WHERE acct = %s AND dt BETWEEN %s AND %s
         """, (str(acct_no), start_dt, end_dt))
         stock_balance_result = cur3.fetchall()
         cur3.close()
 
         if not stock_balance_result:
-            print(f"[{nick}] No stock_balance data found.")
+            print(f"[{nick}] No dly_stock_balance data found.")
             continue
 
         remote_cur3 = remote_conn.cursor()
@@ -170,11 +170,11 @@ for nick in nickname_list:
                     acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, last_chg_date
                 ))
             except Exception as e:
-                print(f"[{nick}] Error inserting3 row {row}: {e}")
+                print(f"[{nick}] Error dly_stock_balance inserting row {row}: {e}")
 
         remote_conn.commit()
         remote_cur3.close()
-        print(f"[{nick}] Insert3 completed. ({len(stock_balance_result)} rows processed)")
+        print(f"[{nick}] Insert dly_stock_balance completed. ({len(stock_balance_result)} rows processed)")
 
     except Exception as e:
         print(f"[{nick}] Error trading backup : {e}")
