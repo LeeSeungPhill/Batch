@@ -76,7 +76,6 @@ for nick in nickname_list:
 
         if not stock_order_complete_result:
             print(f"[{nick}] No order data found.")
-            continue
 
         remote_cur1 = remote_conn.cursor()
 
@@ -114,7 +113,6 @@ for nick in nickname_list:
 
         if not acc_balance_result:
             print(f"[{nick}] No dly_acct_balance data found.")
-            continue
 
         remote_cur2 = remote_conn.cursor()
 
@@ -152,7 +150,6 @@ for nick in nickname_list:
 
         if not stock_balance_result:
             print(f"[{nick}] No dly_stock_balance data found.")
-            continue
 
         remote_cur3 = remote_conn.cursor()
 
