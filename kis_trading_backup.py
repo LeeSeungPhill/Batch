@@ -52,7 +52,7 @@ def account(nickname):
         'app_secret': app_secret
     }
 
-nickname_list = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
 start_dt = datetime.now().strftime('%Y%m%d')
 end_dt = datetime.now().strftime('%Y%m%d')
 # start_dt = "20250101"
