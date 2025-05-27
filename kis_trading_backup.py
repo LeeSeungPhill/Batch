@@ -53,7 +53,10 @@ def account(nickname):
     }
 
 nickname_list = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
-today_str = datetime.now().strftime('%Y%m%d')
+# start_dt = datetime.now().strftime('%Y%m%d')
+# end_dt = datetime.now().strftime('%Y%m%d')
+start_dt = "20250101"
+end_dt = "20250526"
 
 for nick in nickname_list:
     try:
@@ -66,8 +69,8 @@ for nick in nickname_list:
                 acct_no, order_no, org_order_no, order_type, order_dt, order_tmd, name, order_price, order_amount, total_complete_qty, remain_qty,
                 total_complete_amt, hold_price, hold_vol, profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
             FROM \"stockOrderComplete_stock_order_complete\"
-            WHERE acct_no = %s AND order_dt = %s
-        """, (acct_no, today_str))
+            WHERE acct_no = %s AND order_dt BETWEEN %s AND %s
+        """, (acct_no, start_dt, end_dt))
         stock_order_complete_result = cur1.fetchall()
         cur1.close()
 
@@ -104,8 +107,8 @@ for nick in nickname_list:
                 acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, 
                 pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date
             FROM dly_acct_balance
-            WHERE acct = %s AND dt = %s
-        """, (acct_no, today_str))
+            WHERE acct = %s AND dt BETWEEN %s AND %s
+        """, (str(acct_no), start_dt, end_dt))
         acc_balance_result = cur2.fetchall()
         cur2.close()
 
@@ -142,8 +145,8 @@ for nick in nickname_list:
                 eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, 
                 sign_support_price, end_loss_price, end_target_price, last_chg_date
             FROM dly_stock_balance
-            WHERE acct = %s AND dt = %s
-        """, (acct_no, today_str))
+            WHERE acct = %s AND dt BETWEEM %s AND %s
+        """, (str(acct_no), start_dt, end_dt))
         stock_balance_result = cur3.fetchall()
         cur3.close()
 
@@ -174,7 +177,7 @@ for nick in nickname_list:
         print(f"[{nick}] Insert3 completed. ({len(stock_balance_result)} rows processed)")
 
     except Exception as e:
-        print(f"[{nick}] Error processing account: {e}")
+        print(f"[{nick}] Error trading backup : {e}")
 
 # 연결 종료
 conn.close()
