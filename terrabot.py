@@ -175,7 +175,7 @@ def auth(APP_KEY, APP_SECRET):
 def account():
 
     cur01 = conn.cursor()
-    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
     result_two = cur01.fetchone()
     cur01.close()
 
@@ -183,12 +183,13 @@ def account():
     access_token = result_two[1]
     app_key = result_two[2]
     app_secret = result_two[3]
+    today = datetime.now().strftime("%Y%m%d")
 
     YmdHMS = datetime.now()
     validTokenDate = datetime.strptime(result_two[4], '%Y%m%d%H%M%S')
     diff = YmdHMS - validTokenDate
     # print("diff : " + str(diff.days))
-    if diff.days >= 1:  # 토큰 유효기간(1일) 만료 재발급
+    if diff.days >= 1 or result_two[5] != today:  # 토큰 유효기간(1일) 만료 재발급
         access_token = auth(app_key, app_secret)
         token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
         print("new access_token : " + access_token)

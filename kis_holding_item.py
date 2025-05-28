@@ -5,14 +5,11 @@ import requests
 import json
 import telegram
 import asyncio
-import sys
 import pandas as pd
 from decimal import Decimal
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
-
-# arguments = sys.argv
 
 # PostgreSQL 연결 설정
 #conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
@@ -41,16 +38,16 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no, access_token, app_key, app_secret, token_publ_date = result_two
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
-    if (datetime.now() - validTokenDate).days >= 1:
+    if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
         token_publ_date = datetime.now().strftime('%Y%m%d%H%M%S')
         cur02 = conn.cursor()
