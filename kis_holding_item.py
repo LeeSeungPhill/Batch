@@ -215,13 +215,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
         u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
 
-    # print("총평가금액 : " + format(int(u_tot_evlu_amt), ',d'))       
-    # print("예수금총금액 : " + format(int(u_dnca_tot_amt), ',d'))
-    # print("순자산금액(세금비용 제외) : " + format(int(u_nass_amt), ',d'))
-    # print("가수도 정산 금액 : " + format(int(u_prvs_rcdl_excc_amt), ',d'))
-    # print("유저 평가 금액 : " + format(int(u_scts_evlu_amt), ',d'))
-    # print("자산 증감액 : " + format(int(u_asst_icdc_amt), ',d'))
-
     # 자산정보 조회
     cur100 = conn.cursor()
     cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
@@ -234,8 +227,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
     for i in result_one00:
         asset_num = i[0]
         sell_plan_amt = i[4]
-        # print("자산번호 : " + str(asset_num))   
-        # print("매도예정금액 : " + str(sell_plan_amt))
 
     # 자산정보 변경
     cur200 = conn.cursor()
@@ -581,11 +572,6 @@ if result_one == None:
                 print("종목명 : " + i[1])
 
                 a = inquire_price(access_token, app_key, app_secret, i[0])
-                # print("현재가 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
-                # print("최고가 : " + format(int(a['stck_hgpr']), ',d'))  # 최고가
-                # print("최저가 : " + format(int(a['stck_lwpr']), ',d'))  # 최저가
-                # print("누적거래량 : " + format(int(a['acml_vol']), ',d'))  # 누적거래량
-                # print("전일대비거래량비율 : " + a['prdy_vrss_vol_rate'])  # 전일대비거래량비율
 
                 trail_signal_code = ""
                 trail_signal_name = ""
@@ -599,6 +585,11 @@ if result_one == None:
                             trail_signal_code = "07"
                             trail_signal_name = format(int(i[2]), ',d') + "원 {저항가 돌파}"
 
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
+
                 if i[3] != None:
                     if i[3] > 0:
                         if int(a['stck_prpr']) < i[3]:
@@ -607,7 +598,7 @@ if result_one == None:
                             trail_signal_name = format(int(i[3]), ',d') + "원 {지지가 이탈}"
 
                             if i[6] != None:
-                                n_sell_amount = round(i[6]/2)
+                                n_sell_amount = i[6]
                                 n_sell_sum = int(a['stck_prpr']) * n_sell_amount
                                 sell_plan_amount = format(int(n_sell_amount), ',d')
 
@@ -617,6 +608,11 @@ if result_one == None:
                             print("최종목표가 돌파 : " + format(int(i[4]), ',d'))
                             trail_signal_code = "09"
                             trail_signal_name = format(int(i[4]), ',d') + "원 {최종목표가 돌파}"
+
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
 
                 if i[5] != None:
                     if i[5] > 0:
@@ -636,7 +632,7 @@ if result_one == None:
                     trail_signal_name = "시장 지지선 이탈[지지가 : " + format(int(i[3]), ',d') + "원]"
 
                     if i[6] != None:
-                        n_sell_amount = round(i[6]/2)
+                        n_sell_amount = i[6]
                         n_sell_sum = int(a['stck_prpr']) * n_sell_amount
                         sell_plan_amount = format(int(n_sell_amount), ',d')
 

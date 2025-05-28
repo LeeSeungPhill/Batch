@@ -5,14 +5,11 @@ import requests
 import json
 import telegram
 import asyncio
-import sys
 import math
 import pandas as pd
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
-
-arguments = sys.argv
 
 # PostgreSQL 연결 설정
 #conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
@@ -22,22 +19,6 @@ conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
 time = datetime.now().strftime("%H%M")
-
-# 텔레그램봇 사용할 token
-if arguments[1] == 'chichipa':
-    token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-elif arguments[1] == 'phills13':
-    token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
-elif arguments[1] == 'phills15':
-    token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-elif arguments[1] == 'phills2':
-    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[1] == 'phills75':
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
-elif arguments[1] == 'yh480825':
-    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
-else:
-    token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"    
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -53,6 +34,37 @@ def auth(APP_KEY, APP_SECRET):
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
+
+def account(nickname):
+    cur01 = conn.cursor()
+    cur01.execute("""
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day
+        FROM "stockAccount_stock_account"
+        WHERE nick_name = %s
+    """, (nickname,))
+    result_two = cur01.fetchone()
+    cur01.close()
+
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day = result_two
+    validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
+    if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
+        access_token = auth(app_key, app_secret)
+        token_publ_date = datetime.now().strftime('%Y%m%d%H%M%S')
+        cur02 = conn.cursor()
+        cur02.execute("""
+            UPDATE "stockAccount_stock_account"
+            SET access_token = %s, token_publ_date = %s, last_chg_date = %s
+            WHERE acct_no = %s
+        """, (access_token, token_publ_date, datetime.now(), acct_no))
+        conn.commit()
+        cur02.close()
+
+    return {
+        'acct_no': acct_no,
+        'access_token': access_token,
+        'app_key': app_key,
+        'app_secret': app_secret
+    }
 
 # 주식현재가 시세
 def inquire_price(access_token, app_key, app_secret, code):
@@ -129,7 +141,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     return pd.DataFrame(output)
 
 # 자산정보 및 시장레벨정보 처리
-def fund_marketLevel_proc():
+def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no):
     # 계좌잔고 조회
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
@@ -141,13 +153,6 @@ def fund_marketLevel_proc():
         u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
         u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
 
-    print("총평가금액 : " + format(int(u_tot_evlu_amt), ',d'))       
-    print("예수금총금액 : " + format(int(u_dnca_tot_amt), ',d'))
-    print("순자산금액(세금비용 제외) : " + format(int(u_nass_amt), ',d'))
-    print("가수도 정산 금액 : " + format(int(u_prvs_rcdl_excc_amt), ',d'))
-    print("유저 평가 금액 : " + format(int(u_scts_evlu_amt), ',d'))
-    print("자산 증감액 : " + format(int(u_asst_icdc_amt), ',d'))
-
     # 자산정보 조회
     cur100 = conn.cursor()
     cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
@@ -157,9 +162,7 @@ def fund_marketLevel_proc():
     asset_num = 0 
 
     for i in result_one00:
-
         asset_num = i[0]
-        print("자산번호 : " + str(asset_num))   
 
     # 자산정보 변경
     cur200 = conn.cursor()
@@ -263,10 +266,6 @@ def fund_marketLevel_proc():
                 n_stock_num = 3
 
     n_risk_sum = n_asset_sum * n_risk_rate * 0.01
-    print("전체 자산 : " + format(int(n_asset_sum), ',d'))    
-    print("리스크율 : " + str(n_risk_rate))
-    print("리스크 금액 : " + format(int(n_risk_sum), ',d'))
-    print("종목 갯수 : " + format(int(n_stock_num), ',d'))
 
     # 시장레벨정보 변경
     cur400 = conn.cursor()
@@ -460,248 +459,311 @@ cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
 result_one = cur0.fetchone()
 cur0.close()
 
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
+
 # 휴일이 아닌 경우
 if result_one == None:
 
-    # 계정정보 조회
-    cur01 = conn.cursor()
-    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date from \"stockAccount_stock_account\" where nick_name = '"+arguments[1]+"'")
-    result_two = cur01.fetchone()
-    cur01.close()
+    for nick in nickname_list:
+        try:
+            # 텔레그램봇 사용할 token
+            if nick == 'chichipa':
+                token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
+            elif nick == 'phills13':
+                token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
+            elif nick == 'phills15':
+                token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
+            elif nick == 'phills2':
+                token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
+            elif nick == 'phills75':
+                token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
+            elif nick == 'yh480825':
+                token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
+            else:
+                token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"  
 
-    acct_no = result_two[0]
-    access_token = result_two[1]
-    app_key = result_two[2]
-    app_secret = result_two[3]
+            ac = account(nick)
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
 
-    YmdHMS = datetime.now()
-    validTokenDate = datetime.strptime(result_two[4], '%Y%m%d%H%M%S')
-    diff = YmdHMS - validTokenDate
-    #print("diff : " + str(diff.days))
-    if diff.days >= 1:  # 토큰 유효기간(1일) 만료 재발급
-        access_token = auth(result_two[2], result_two[3])
-        token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
-        print("new access_token : " + access_token)
-        # 계정정보 토큰값 변경
-        cur02 = conn.cursor()
-        update_query = "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s"
-        # update 인자값 설정
-        record_to_update = ([access_token, token_publ_date, datetime.now(), acct_no])
-        # DB 연결된 커서의 쿼리 수행
-        cur02.execute(update_query, record_to_update)
-        conn.commit()
-        cur02.close()
+            # 자산정보 및 시장레벨정보 처리
+            fund_marketLevel_proc(access_token, app_key, app_secret, acct_no)
 
-    # 자산정보 및 시장레벨정보 처리
-    fund_marketLevel_proc()
-    #params = {'acct_no': str(acct_no), 'app_key': app_key, 'app_secret': app_secret, 'access_token': access_token}
-    #url = 'http://phills2.gonetis.com:8000/stockFundMng/list'   # Django URL 주소
-    #url = 'http://localhost:8000/stockFundMng/list'  # Django URL 주소
-    #response = requests.get(url, params=params)
+            # 관심정보 조회
+            cur03 = conn.cursor()
+            cur03.execute("select code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, ROUND(B.buy_avail_cash*C.risk_rate*0.01/C.item_number, 0) as item_loss_sum from \"interestItem_interest_item\" A, (select row_number() over (order by id desc) as ROWNUM, prvs_rcdl_excc_amt, acct_no, case when cash_rate > COALESCE(market_ratio, 0) then ROUND(cash_rate*prvs_rcdl_excc_amt*0.01, 0) else ROUND(COALESCE(market_ratio, 0)*prvs_rcdl_excc_amt*0.01, 0) end as buy_avail_cash from \"stockFundMng_stock_fund_mng\" where acct_no = '"+str(acct_no)+"') B, (select acct_no, risk_rate, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '"+str(acct_no)+"' and aply_end_dt = '99991231') C where A.acct_no = B.acct_no and A.acct_no = C.acct_no and A.acct_no = '"+str(acct_no)+"' and B.rownum = 1")
+            result_three = cur03.fetchall()
+            cur03.close()
 
-    #if response.status_code == 200:
-        # 요청이 성공했을 때의 처리
-    #    print(response.text)
-    #else:
-        # 요청이 실패했을 때의 처리
-    #    print('요청이 실패했습니다. 상태 코드:', response.status_code)
+            # 관심종목 이탈가, 돌파가, 지지가, 저항가, 추세하단가, 추세상단가를 각각 실시간 종목시세의 최고가와 최저가 비교
+            for i in result_three:
+                print("종목명 : " + i[1])
 
-    # 시장레벨정보 호출
-    #params = {'acct_no': str(acct_no), 'app_key': app_key, 'app_secret': app_secret, 'access_token': access_token}
-    #url = 'http://phills2.gonetis.com:8000/stockMarketMng/list'   # Django URL 주소
-    #url = 'http://localhost:8000/stockMarketMng/list'  # Django URL 주소
-    #response = requests.get(url, params=params)
+                trail_signal_code = ""
+                trail_signal_name = ""
+                vol_appear = 0
 
-    #if response.status_code == 200:
-        # 요청이 성공했을 때의 처리
-    #    print(response.text)
-    #else:
-        # 요청이 실패했을 때의 처리
-    #    print('요청이 실패했습니다. 상태 코드:', response.status_code)    
+                if len(i[0]) == 6:
 
-    # 관심정보 조회
-    cur03 = conn.cursor()
-    cur03.execute("select code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, ROUND(B.buy_avail_cash*C.risk_rate*0.01/C.item_number, 0) as item_loss_sum from \"interestItem_interest_item\" A, (select row_number() over (order by id desc) as ROWNUM, prvs_rcdl_excc_amt, acct_no, case when cash_rate > COALESCE(market_ratio, 0) then ROUND(cash_rate*prvs_rcdl_excc_amt*0.01, 0) else ROUND(COALESCE(market_ratio, 0)*prvs_rcdl_excc_amt*0.01, 0) end as buy_avail_cash from \"stockFundMng_stock_fund_mng\" where acct_no = '"+str(acct_no)+"') B, (select acct_no, risk_rate, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '"+str(acct_no)+"' and aply_end_dt = '99991231') C where A.acct_no = B.acct_no and A.acct_no = C.acct_no and A.acct_no = '"+str(acct_no)+"' and B.rownum = 1")
-    result_three = cur03.fetchall()
-    cur03.close()
+                    a = inquire_price(access_token, app_key, app_secret, i[0])
 
-    # 관심종목 이탈가, 돌파가, 지지가, 저항가, 추세하단가, 추세상단가를 각각 실시간 종목시세의 최고가와 최저가 비교
-    for i in result_three:
-        print("종목코드 : " + i[0])
-        print("종목명 : " + i[1])
-        print("돌파가 : " + format(int(i[2]), ',d'))
-        print("이탈가 : " + format(int(i[3]), ',d'))
-        print("저항가 : " + format(int(i[4]), ',d'))
-        print("지지가 : " + format(int(i[5]), ',d'))
-        print("추세상단가 : " + format(int(i[6]), ',d'))
-        print("추세하단가 : " + format(int(i[7]), ',d'))
+                    if time > '0900' and time < '0910':
+                        if round(float(a['prdy_vrss_vol_rate'])) > 10:
+                            vol_appear = 1
+                    if time > '0910' and time < '0920':
+                        if round(float(a['prdy_vrss_vol_rate'])) > 20:
+                            vol_appear = 1
+                    if time > '0920' and time < '0930':
+                        if round(float(a['prdy_vrss_vol_rate'])) > 30:
+                            vol_appear = 1
+                    if time > '0930' and time < '1000':
+                        if round(float(a['prdy_vrss_vol_rate'])) > 50:
+                            vol_appear = 1
+                    if time > '1000' and time < '1430':
+                        if round(float(a['prdy_vrss_vol_rate'])) > 100:
+                            vol_appear = 1
+                    vol_appear = 1 # 전일대비거래량비율 체크 제외(20250406)        
+                    print("vol_appear : " + str(vol_appear))
 
-        trail_signal_code = ""
-        trail_signal_name = ""
-        vol_appear = 0
+                    n_buy_amount = 0
+                    n_buy_sum = 0
 
-        if len(i[0]) == 6:
+                    if time > '1430' and time < '1520':     # 장종료 1시간전 현재가 기준 돌파, 이탈 설정
 
-            a = inquire_price(access_token, app_key, app_secret, i[0])
-            print("현재가 : " + format(int(a['stck_prpr']), ',d'))  # 현재가
-            print("최고가 : " + format(int(a['stck_hgpr']), ',d'))  # 최고가
-            print("최저가 : " + format(int(a['stck_lwpr']), ',d'))  # 최저가
-            print("누적거래량 : " + format(int(a['acml_vol']), ',d'))  # 누적거래량
-            print("전일대비거래량비율 : " + a['prdy_vrss_vol_rate'])  # 전일대비거래량비율
+                        if int(a['stck_prpr']) > i[2]:
+                            print("돌파가 돌파")
+                            trail_signal_code = "01"
+                            trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
+                            print("매수금액 : " + format(int(n_buy_sum), ',d'))
+                        if int(a['stck_prpr']) < i[3]:
+                            print("이탈가 이탈")
+                            trail_signal_code = "02"
+                            trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
+                        if int(a['stck_prpr']) > i[4]:
+                            print("저항가 돌파")
+                            trail_signal_code = "03"
+                            trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
+                        if int(a['stck_prpr']) < i[5]:
+                            print("지지가 이탈")
+                            trail_signal_code = "04"
+                            trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
+                        if int(a['stck_prpr']) > i[6]:
+                            print("추세상단가 돌파")
+                            trail_signal_code = "05"
+                            trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
+                        if int(a['stck_prpr']) < i[7]:
+                            print("추세하단가 이탈")
+                            trail_signal_code = "06"
+                            trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
 
-            if time > '0900' and time < '0910':
-                if round(float(a['prdy_vrss_vol_rate'])) > 10:
-                    vol_appear = 1
-            if time > '0910' and time < '0920':
-                if round(float(a['prdy_vrss_vol_rate'])) > 20:
-                    vol_appear = 1
-            if time > '0920' and time < '0930':
-                if round(float(a['prdy_vrss_vol_rate'])) > 30:
-                    vol_appear = 1
-            if time > '0930' and time < '1000':
-                if round(float(a['prdy_vrss_vol_rate'])) > 50:
-                    vol_appear = 1
-            if time > '1000' and time < '1430':
-                if round(float(a['prdy_vrss_vol_rate'])) > 100:
-                    vol_appear = 1
-            vol_appear = 1 # 전일대비거래량비율 체크 제외(20250406)        
-            print("vol_appear : " + str(vol_appear))
+                    else:   # 돌파시 최고가, 이탈시 최저가 기준 설정
 
-            n_buy_amount = 0
-            n_buy_sum = 0
+                        if int(a['stck_hgpr']) > i[2]:
+                            print("돌파가 돌파")
+                            trail_signal_code = "01"
+                            trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
+                        if int(a['stck_lwpr']) < i[3]:
+                            print("이탈가 이탈")
+                            trail_signal_code = "02"
+                            trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
+                        if int(a['stck_hgpr']) > i[4]:
+                            print("저항가 돌파")
+                            trail_signal_code = "03"
+                            trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
+                        if int(a['stck_lwpr']) < i[5]:
+                            print("지지가 이탈")
+                            trail_signal_code = "04"
+                            trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
+                        if int(a['stck_hgpr']) > i[6]:
+                            print("추세상단가 돌파")
+                            trail_signal_code = "05"
+                            trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
+                            # 손절금액
+                            loss_price = int(i[3])
+                            # 종목손실금액
+                            item_loss_sum = i[8]
+                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # 매수량
+                            # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
+                            n_buy_amount = round(2000000 / int(a['stck_prpr']))
+                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # 매수금액
+                            n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
+                        if int(a['stck_lwpr']) < i[7]:
+                            print("추세하단가 이탈")
+                            trail_signal_code = "06"
+                            trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
 
-            if time > '1430' and time < '1520':     # 장종료 1시간전 현재가 기준 돌파, 이탈 설정
+                    # 추적정보 조회(현재일 종목코드 기준)
+                    cur04 = conn.cursor()
+                    cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+                    result_four = cur04.fetchall()
+                    cur04.close()
 
-                if int(a['stck_prpr']) > i[2]:
-                    print("돌파가 돌파")
-                    trail_signal_code = "01"
-                    trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
-                    print("매수금액 : " + format(int(n_buy_sum), ',d'))
-                if int(a['stck_prpr']) < i[3]:
-                    print("이탈가 이탈")
-                    trail_signal_code = "02"
-                    trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
-                if int(a['stck_prpr']) > i[4]:
-                    print("저항가 돌파")
-                    trail_signal_code = "03"
-                    trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
-                if int(a['stck_prpr']) < i[5]:
-                    print("지지가 이탈")
-                    trail_signal_code = "04"
-                    trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
-                if int(a['stck_prpr']) > i[6]:
-                    print("추세상단가 돌파")
-                    trail_signal_code = "05"
-                    trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
-                if int(a['stck_prpr']) < i[7]:
-                    print("추세하단가 이탈")
-                    trail_signal_code = "06"
-                    trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
+                    if len(result_four) > 0:
+                        for j in result_four:
+                            print("trail_signal_code1 : " + j[0])
+                            if trail_signal_code != "":
+                                if trail_signal_code != j[0]:
 
-            else:   # 돌파시 최고가, 이탈시 최저가 기준 설정
+                                    if vol_appear > 0:
+                                        # 자산관리정보 조회
+                                        cur041 = conn.cursor()
+                                        cur041.execute("select case when market_ratio = 0 then 100 - cash_rate else market_ratio end as market_ratio from (select row_number() over (order by id desc) as ROWNUM, cash_rate, COALESCE(market_ratio, 0) as market_ratio from  \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
+                                        result_fourone = cur041.fetchall()
+                                        cur041.close()
 
-                if int(a['stck_hgpr']) > i[2]:
-                    print("돌파가 돌파")
-                    trail_signal_code = "01"
-                    trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
-                if int(a['stck_lwpr']) < i[3]:
-                    print("이탈가 이탈")
-                    trail_signal_code = "02"
-                    trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
-                if int(a['stck_hgpr']) > i[4]:
-                    print("저항가 돌파")
-                    trail_signal_code = "03"
-                    trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
-                if int(a['stck_lwpr']) < i[5]:
-                    print("지지가 이탈")
-                    trail_signal_code = "04"
-                    trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
-                if int(a['stck_hgpr']) > i[6]:
-                    print("추세상단가 돌파")
-                    trail_signal_code = "05"
-                    trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
-                    # 손절금액
-                    loss_price = int(i[3])
-                    # 종목손실금액
-                    item_loss_sum = i[8]
-                    print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
-                    # 매수량
-                    # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
-                    n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                    print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
-                    # 매수금액
-                    n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
-                if int(a['stck_lwpr']) < i[7]:
-                    print("추세하단가 이탈")
-                    trail_signal_code = "06"
-                    trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
+                                        for k in result_fourone:
+                                            print("시장승률 : "+str(k[0]))
+                                            if k[0] >= 50:   # 시장 상승인 경우
+                                                if n_buy_amount > 0:
+                                                    buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                    # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
+                                                    telegram_text = (f"[시장상승]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
+                                                else:
+                                                    # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
+                                                    telegram_text = "[시장상승]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
+                                                # 텔레그램 메시지 전송
+                                                asyncio.run(main(telegram_text))
 
-            # 추적정보 조회(현재일 종목코드 기준)
-            cur04 = conn.cursor()
-            cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
-            result_four = cur04.fetchall()
-            cur04.close()
+                                                # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
+                                                cur20 = conn.cursor()
+                                                insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                                                # insert 인자값 설정
+                                                record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                                # DB 연결된 커서의 쿼리 수행
+                                                cur20.execute(insert_query0, record_to_insert0)
 
-            if len(result_four) > 0:
-                for j in result_four:
-                    print("trail_signal_code1 : " + j[0])
-                    if trail_signal_code != "":
-                        if trail_signal_code != j[0]:
+                                                # 추적신호이력 정보 생성
+                                                cur2 = conn.cursor()
+                                                insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                # insert 인자값 설정
+                                                record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                                # DB 연결된 커서의 쿼리 수행
+                                                cur2.execute(insert_query, record_to_insert)
+                                                conn.commit()
+                                                cur20.close()
+                                                cur2.close()
+                                            else:
+                                                if n_buy_amount > 0:
+                                                    buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                    # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
+                                                    telegram_text = (f"[시장하락]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
+                                                else:
+                                                    # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
+                                                    telegram_text = "[시장하락]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
+                                                # 텔레그램 메시지 전송
+                                                asyncio.run(main(telegram_text))
+
+                                                # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
+                                                cur20 = conn.cursor()
+                                                insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                                                # insert 인자값 설정
+                                                record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                                # DB 연결된 커서의 쿼리 수행
+                                                cur20.execute(insert_query0, record_to_insert0)
+
+                                                # 추적신호이력 정보 생성
+                                                cur2 = conn.cursor()
+                                                insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                # insert 인자값 설정
+                                                record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                                # DB 연결된 커서의 쿼리 수행
+                                                cur2.execute(insert_query, record_to_insert)
+                                                conn.commit()
+                                                cur20.close()
+                                                cur2.close()
+                                    else:
+                                        if time > '1430' and time < '1520':
+                                            if n_buy_amount > 0:
+                                                buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                # telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
+                                                telegram_text = (f"[장마감전]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
+                                            else:
+                                                telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
+                                            # 텔레그램 메시지 전송
+                                            asyncio.run(main(telegram_text))
+
+                                            # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
+                                            cur20 = conn.cursor()
+                                            insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                                            # insert 인자값 설정
+                                            record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                            # DB 연결된 커서의 쿼리 수행
+                                            cur20.execute(insert_query0, record_to_insert0)
+
+                                            # 추적신호이력 정보 생성
+                                            cur2 = conn.cursor()
+                                            insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                            # insert 인자값 설정
+                                            record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                                            # DB 연결된 커서의 쿼리 수행
+                                            cur2.execute(insert_query, record_to_insert)
+                                            conn.commit()
+                                            cur20.close()
+                                            cur2.close()
+
+                    else:
+                        print("trail_signal_code2 : " + trail_signal_code)
+
+                        if trail_signal_code != "":
 
                             if vol_appear > 0:
                                 # 자산관리정보 조회
@@ -712,9 +774,9 @@ if result_one == None:
 
                                 for k in result_fourone:
                                     print("시장승률 : "+str(k[0]))
-                                    if k[0] >= 50:   # 시장 상승인 경우
+                                    if k[0] >= 50:  # 시장 상승인 경우
                                         if n_buy_amount > 0:
-                                            buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
+                                            buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
                                             # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                             telegram_text = (f"[시장상승]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                         else:
@@ -743,7 +805,7 @@ if result_one == None:
                                         cur2.close()
                                     else:
                                         if n_buy_amount > 0:
-                                            buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
+                                            buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
                                             # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                             telegram_text = (f"[시장하락]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                         else:
@@ -773,7 +835,7 @@ if result_one == None:
                             else:
                                 if time > '1430' and time < '1520':
                                     if n_buy_amount > 0:
-                                        buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
+                                        buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
                                         # telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                         telegram_text = (f"[장마감전]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                     else:
@@ -800,216 +862,167 @@ if result_one == None:
                                     cur20.close()
                                     cur2.close()
 
-            else:
-                print("trail_signal_code2 : " + trail_signal_code)
+                elif len(i[0]) == 4:
+                    
+                    b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
+                    # print("현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f'))  # 현재포인트
+                    # print("최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f'))  # 최고포인트
+                    # print("최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f'))  # 최저포인트
+                    # print("누적거래량 : " + format(int(b['acml_vol']), ',d'))  # 누적거래량
 
-                if trail_signal_code != "":
+                    # 시장레벨정보 조회
+                    cur05 = conn.cursor()
+                    cur05.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
+                    result_five = cur05.fetchall()
+                    cur05.close()
 
-                    if vol_appear > 0:
-                        # 자산관리정보 조회
-                        cur041 = conn.cursor()
-                        cur041.execute("select case when market_ratio = 0 then 100 - cash_rate else market_ratio end as market_ratio from (select row_number() over (order by id desc) as ROWNUM, cash_rate, COALESCE(market_ratio, 0) as market_ratio from  \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
-                        result_fourone = cur041.fetchall()
-                        cur041.close()
+                    market_level_num = ""
+                    risk_rate = 0
+                    item_number = 0
 
-                        for k in result_fourone:
-                            print("시장승률 : "+str(k[0]))
-                            if k[0] >= 50:  # 시장 상승인 경우
-                                if n_buy_amount > 0:
-                                    buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
-                                    # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
-                                    telegram_text = (f"[시장상승]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
-                                else:
-                                    # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
-                                    telegram_text = "[시장상승]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
-                                # 텔레그램 메시지 전송
-                                asyncio.run(main(telegram_text))
+                    if math.ceil(float(b['bstp_nmix_prpr'])) > i[2]:
+                        print("돌파포인트 돌파")
+                        trail_signal_code = "01"
+                        trail_signal_name = format(int(i[2]), ',d') + " {돌파포인트 돌파}"
 
-                                # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
-                                cur20 = conn.cursor()
-                                insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                                # insert 인자값 설정
-                                record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                                # DB 연결된 커서의 쿼리 수행
-                                cur20.execute(insert_query0, record_to_insert0)
+                        if i[0] == "0001":
+                            if len(result_five) > 0:
+                                for k in result_five:
+                                    # 기존 시장레벨번호가 단기 추세 전환 후, 기술적 반등보다 쟉은 경우(market_level_num='1')
+                                    if int(k[1]) < 2:
+                                        market_level_num = "2"  # 단기 추세 전환 후, 기술적 반등
+                                        risk_rate = 3
+                                        item_number = 4
 
-                                # 추적신호이력 정보 생성
-                                cur2 = conn.cursor()
-                                insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                # insert 인자값 설정
-                                record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                                # DB 연결된 커서의 쿼리 수행
-                                cur2.execute(insert_query, record_to_insert)
-                                conn.commit()
-                                cur20.close()
-                                cur2.close()
-                            else:
-                                if n_buy_amount > 0:
-                                    buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
-                                    # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
-                                    telegram_text = (f"[시장하락]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
-                                else:
-                                    # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
-                                    telegram_text = "[시장하락]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
-                                # 텔레그램 메시지 전송
-                                asyncio.run(main(telegram_text))
+                    if math.ceil(float(b['bstp_nmix_prpr'])) < i[3]:
+                        print("이탈포인트 이탈")
+                        trail_signal_code = "02"
+                        trail_signal_name = format(int(i[3]), ',d') + " {이탈포인트 이탈}"
 
-                                # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
-                                cur20 = conn.cursor()
-                                insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                                # insert 인자값 설정
-                                record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                                # DB 연결된 커서의 쿼리 수행
-                                cur20.execute(insert_query0, record_to_insert0)
+                        if i[0] == "0001":
+                            if len(result_five) > 0:
+                                for k in result_five:
+                                    # 기존 시장레벨번호가 패턴내에서 기술적 반등보다 작은 경우(market_level_num='1', market_level_num='2')
+                                    if int(k[1]) < 3:
+                                        market_level_num = "1"  # 하락 지속 후, 기술적 반등
+                                        risk_rate = 2
+                                        item_number = 2
 
-                                # 추적신호이력 정보 생성
-                                cur2 = conn.cursor()
-                                insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                # insert 인자값 설정
-                                record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                                # DB 연결된 커서의 쿼리 수행
-                                cur2.execute(insert_query, record_to_insert)
-                                conn.commit()
-                                cur20.close()
-                                cur2.close()
+
+                    if math.ceil(float(b['bstp_nmix_prpr'])) > i[4]:
+                        print("저항포인트 돌파")
+                        trail_signal_code = "03"
+                        trail_signal_name = format(int(i[4]), ',d') + " {저항포인트 돌파}"
+
+                        if i[0] == "0001":
+                            if len(result_five) > 0:
+                                for k in result_five:
+                                    # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3')                            if int(k[1]) < 4:
+                                        market_level_num = "4"  # 일봉상 추세 전환 후, 눌림구간에서 반등
+                                        risk_rate = 5.5
+                                        item_number = 8
+
+                    if math.ceil(float(b['bstp_nmix_prpr'])) < i[5]:
+                        print("지지포인트 이탈")
+                        trail_signal_code = "04"
+                        trail_signal_name = format(int(i[5]), ',d') + " {지지포인트 이탈}"
+
+                        if i[0] == "0001":
+                            for k in result_five:
+                                if len(result_five) > 0:
+                                    # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3', market_level_num='4')
+                                    if int(k[1]) < 5:
+                                        market_level_num = "1"  # 하락 지속 후, 기술적 반등
+                                        risk_rate = 2
+                                        item_number = 2
+
+                    if math.ceil(float(b['bstp_nmix_prpr'])) > i[6]:
+                        print("추세상단포인트 돌파")
+                        trail_signal_code = "05"
+                        trail_signal_name = format(int(i[6]), ',d') + " {추세상단포인트 돌파}"
+
+                        if i[0] == "0001":
+                            if len(result_five) > 0:
+                                market_level_num = "5"  # 상승 지속 후, 패턴내에서 기술적 반등
+                                risk_rate = 4
+                                item_number = 6
+
+                    if math.ceil(float(b['bstp_nmix_prpr'])) < i[7]:
+                        print("추세하단포인트 이탈")
+                        trail_signal_code = "06"
+                        trail_signal_name = format(int(i[7]), ',d') + " {추세하단포인트 이탈}"
+
+                        if i[0] == "0001":
+                            if len(result_five) > 0:
+                                market_level_num = "1"  # 하락 지속 후, 기술적 반등
+                                risk_rate = 2
+                                item_number = 2
+
+                    # 추적정보 조회(현재일 종목코드 기준)
+                    cur04 = conn.cursor()
+                    cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+                    result_four = cur04.fetchall()
+                    cur04.close()
+
+                    if len(result_four) > 0:
+                        for j in result_four:
+                            print("trail_signal_code1 : " + j[0])
+                            if trail_signal_code != "":
+                                if trail_signal_code != j[0]:
+                                    telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주" 
+                                    # 텔레그램 메시지 전송
+                                    asyncio.run(main(telegram_text))
+
+                                    if i[0] == "0001":
+                                        if len(result_five) > 0:
+                                            for k in result_five:
+                                                # 시장레벨번호가 존재하는 경우
+                                                if len(market_level_num) > 0:
+                                                    # 시장레벨정보에 시장레벨번호가 미존재한 경우
+                                                    if k[0] != int(market_level_num + today):
+                                                        # 시장레벨정보 변경
+                                                        cur200 = conn.cursor()
+                                                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                                                        # update 인자값 설정
+                                                        record_to_update200 = ([acct_no])
+                                                        # DB 연결된 커서의 쿼리 수행
+                                                        cur200.execute(update_query200, record_to_update200)
+
+                                                        # 시장레벨정보 생성
+                                                        cur201 = conn.cursor()
+                                                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                        # update 인자값 설정
+                                                        record_to_insert201 = ([int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
+                                                        # DB 연결된 커서의 쿼리 수행
+                                                        cur201.execute(insert_query201, record_to_insert201)
+
+                                    # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
+                                    cur20 = conn.cursor()
+                                    insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                                    # insert 인자값 설정
+                                    record_to_insert0 = ([time, i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now(), str(acct_no), today, trail_signal_code, i[0], str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now()])
+                                    # DB 연결된 커서의 쿼리 수행
+                                    cur20.execute(insert_query0, record_to_insert0)
+
+                                    # 추적신호이력 정보 생성
+                                    cur2 = conn.cursor()
+                                    insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                    # insert 인자값 설정
+                                    record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now()])
+                                    # DB 연결된 커서의 쿼리 수행
+                                    cur2.execute(insert_query, record_to_insert)
+                                    conn.commit()
+                                    cur20.close()
+                                    cur2.close()
+
+                                    # 코스피, 코스닥 추적신호정보 기준 자산관리정보 현금비중, 승률, 매수예정자금, 매도예정자금 변경 처리 호출
+                                    fundTrail_proc()
+
                     else:
-                        if time > '1430' and time < '1520':
-                            if n_buy_amount > 0:
-                                buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}_{n_buy_amount}"
-                                # telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
-                                telegram_text = (f"[장마감전]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
-                            else:
-                                telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
-                            # 텔레그램 메시지 전송
-                            asyncio.run(main(telegram_text))
+                        print("trail_signal_code2 : " + trail_signal_code)
 
-                            # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
-                            cur20 = conn.cursor()
-                            insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, buy_plan_qty = %s, buy_plan_amt = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                            # insert 인자값 설정
-                            record_to_insert0 = ([time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], int(round(n_buy_amount)), int(n_buy_sum), datetime.now(), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                            # DB 연결된 커서의 쿼리 수행
-                            cur20.execute(insert_query0, record_to_insert0)
-
-                            # 추적신호이력 정보 생성
-                            cur2 = conn.cursor()
-                            insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, buy_plan_qty, buy_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                            # insert 인자값 설정
-                            record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                            # DB 연결된 커서의 쿼리 수행
-                            cur2.execute(insert_query, record_to_insert)
-                            conn.commit()
-                            cur20.close()
-                            cur2.close()
-
-        elif len(i[0]) == 4:
-            
-            b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
-            print("현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f'))  # 현재포인트
-            print("최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f'))  # 최고포인트
-            print("최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f'))  # 최저포인트
-            print("누적거래량 : " + format(int(b['acml_vol']), ',d'))  # 누적거래량
-
-            # 시장레벨정보 조회
-            cur05 = conn.cursor()
-            cur05.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
-            result_five = cur05.fetchall()
-            cur05.close()
-
-            market_level_num = ""
-            risk_rate = 0
-            item_number = 0
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) > i[2]:
-                print("돌파포인트 돌파")
-                trail_signal_code = "01"
-                trail_signal_name = format(int(i[2]), ',d') + " {돌파포인트 돌파}"
-
-                if i[0] == "0001":
-                    if len(result_five) > 0:
-                        for k in result_five:
-                            # 기존 시장레벨번호가 단기 추세 전환 후, 기술적 반등보다 쟉은 경우(market_level_num='1')
-                            if int(k[1]) < 2:
-                                market_level_num = "2"  # 단기 추세 전환 후, 기술적 반등
-                                risk_rate = 3
-                                item_number = 4
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) < i[3]:
-                print("이탈포인트 이탈")
-                trail_signal_code = "02"
-                trail_signal_name = format(int(i[3]), ',d') + " {이탈포인트 이탈}"
-
-                if i[0] == "0001":
-                    if len(result_five) > 0:
-                        for k in result_five:
-                            # 기존 시장레벨번호가 패턴내에서 기술적 반등보다 작은 경우(market_level_num='1', market_level_num='2')
-                            if int(k[1]) < 3:
-                                market_level_num = "1"  # 하락 지속 후, 기술적 반등
-                                risk_rate = 2
-                                item_number = 2
-
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) > i[4]:
-                print("저항포인트 돌파")
-                trail_signal_code = "03"
-                trail_signal_name = format(int(i[4]), ',d') + " {저항포인트 돌파}"
-
-                if i[0] == "0001":
-                    if len(result_five) > 0:
-                        for k in result_five:
-                            # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3')                            if int(k[1]) < 4:
-                                market_level_num = "4"  # 일봉상 추세 전환 후, 눌림구간에서 반등
-                                risk_rate = 5.5
-                                item_number = 8
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) < i[5]:
-                print("지지포인트 이탈")
-                trail_signal_code = "04"
-                trail_signal_name = format(int(i[5]), ',d') + " {지지포인트 이탈}"
-
-                if i[0] == "0001":
-                    for k in result_five:
-                        if len(result_five) > 0:
-                            # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3', market_level_num='4')
-                            if int(k[1]) < 5:
-                                market_level_num = "1"  # 하락 지속 후, 기술적 반등
-                                risk_rate = 2
-                                item_number = 2
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) > i[6]:
-                print("추세상단포인트 돌파")
-                trail_signal_code = "05"
-                trail_signal_name = format(int(i[6]), ',d') + " {추세상단포인트 돌파}"
-
-                if i[0] == "0001":
-                    if len(result_five) > 0:
-                        market_level_num = "5"  # 상승 지속 후, 패턴내에서 기술적 반등
-                        risk_rate = 4
-                        item_number = 6
-
-            if math.ceil(float(b['bstp_nmix_prpr'])) < i[7]:
-                print("추세하단포인트 이탈")
-                trail_signal_code = "06"
-                trail_signal_name = format(int(i[7]), ',d') + " {추세하단포인트 이탈}"
-
-                if i[0] == "0001":
-                    if len(result_five) > 0:
-                        market_level_num = "1"  # 하락 지속 후, 기술적 반등
-                        risk_rate = 2
-                        item_number = 2
-
-            # 추적정보 조회(현재일 종목코드 기준)
-            cur04 = conn.cursor()
-            cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
-            result_four = cur04.fetchall()
-            cur04.close()
-
-            if len(result_four) > 0:
-                for j in result_four:
-                    print("trail_signal_code1 : " + j[0])
-                    if trail_signal_code != "":
-                        if trail_signal_code != j[0]:
-                            telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주" 
+                        if trail_signal_code != "":
+                            telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
                             # 텔레그램 메시지 전송
                             asyncio.run(main(telegram_text))
 
@@ -1032,7 +1045,8 @@ if result_one == None:
                                                 cur201 = conn.cursor()
                                                 insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
                                                 # update 인자값 설정
-                                                record_to_insert201 = ([int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
+                                                record_to_insert201 = (
+                                                [int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
                                                 # DB 연결된 커서의 쿼리 수행
                                                 cur201.execute(insert_query201, record_to_insert201)
 
@@ -1057,80 +1071,10 @@ if result_one == None:
 
                             # 코스피, 코스닥 추적신호정보 기준 자산관리정보 현금비중, 승률, 매수예정자금, 매도예정자금 변경 처리 호출
                             fundTrail_proc()
-                            #url = 'http://phills2.gonetis.com:8000/stockFundMng/marketReg?acct_no='+str(acct_no)  # Django URL 주소
-                            #url = 'http://localhost:8000/stockFundMng/marketReg?acct_no='+str(acct_no)  # Django URL 주소
-                            """ response = requests.get(url)
 
-                            if response.status_code == 200:
-                                # 요청이 성공했을 때의 처리
-                                print(response.text)
-                            else:
-                                # 요청이 실패했을 때의 처리
-                                print('요청이 실패했습니다. 상태 코드:', response.status_code) """
-            else:
-                print("trail_signal_code2 : " + trail_signal_code)
-
-                if trail_signal_code != "":
-                    telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
-                    # 텔레그램 메시지 전송
-                    asyncio.run(main(telegram_text))
-
-                    if i[0] == "0001":
-                        if len(result_five) > 0:
-                            for k in result_five:
-                                # 시장레벨번호가 존재하는 경우
-                                if len(market_level_num) > 0:
-                                    # 시장레벨정보에 시장레벨번호가 미존재한 경우
-                                    if k[0] != int(market_level_num + today):
-                                        # 시장레벨정보 변경
-                                        cur200 = conn.cursor()
-                                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
-                                        # update 인자값 설정
-                                        record_to_update200 = ([acct_no])
-                                        # DB 연결된 커서의 쿼리 수행
-                                        cur200.execute(update_query200, record_to_update200)
-
-                                        # 시장레벨정보 생성
-                                        cur201 = conn.cursor()
-                                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        # update 인자값 설정
-                                        record_to_insert201 = (
-                                        [int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
-                                        # DB 연결된 커서의 쿼리 수행
-                                        cur201.execute(insert_query201, record_to_insert201)
-
-                    # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
-                    cur20 = conn.cursor()
-                    insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, cdate = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, cdate) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                    # insert 인자값 설정
-                    record_to_insert0 = ([time, i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now(), str(acct_no), today, trail_signal_code, i[0], str(acct_no), today, time, trail_signal_code, trail_signal_name, i[0], i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now()])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur20.execute(insert_query0, record_to_insert0)
-
-                    # 추적신호이력 정보 생성
-                    cur2 = conn.cursor()
-                    insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                    # insert 인자값 설정
-                    record_to_insert = ([acct_no, today, time, trail_signal_code, trail_signal_name, i[0], i[1], math.ceil(float(b['bstp_nmix_prpr'])), math.ceil(float(b['bstp_nmix_hgpr'])), math.floor(float(b['bstp_nmix_lwpr'])), int(b['acml_vol']), datetime.now()])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur2.execute(insert_query, record_to_insert)
-                    conn.commit()
-                    cur20.close()
-                    cur2.close()
-
-                    # 코스피, 코스닥 추적신호정보 기준 자산관리정보 현금비중, 승률, 매수예정자금, 매도예정자금 변경 처리 호출
-                    fundTrail_proc()
-                    #url = 'http://phills2.gonetis.com:8000/stockFundMng/marketReg?acct_no='+str(acct_no)  # Django URL 주소
-                    #url = 'http://localhost:8000/stockFundMng/marketReg?acct_no='+str(acct_no)  # Django URL 주소
-                    """ response = requests.get(url)
-
-                    if response.status_code == 200:
-                        # 요청이 성공했을 때의 처리
-                        print(response.text)
-                    else:
-                        # 요청이 실패했을 때의 처리
-                        print('요청이 실패했습니다. 상태 코드:', response.status_code) """
-
+        except Exception as e:
+            print(f"[{nick}] Error interest item : {e}")      
+    
     conn.close()
 
 else:
