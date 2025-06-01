@@ -3545,14 +3545,14 @@ def echo(update, context):
 
             summary_text = f"[{company} - 주요 지표]\n"
             summary_text += f"• 현재가:{format(int(stck_prpr), ',d')}원, 고가:{format(int(stck_hgpr), ',d')}원, 저가:{format(int(stck_lwpr), ',d')}원, 등락률:{prdy_ctrt}%, 전일비:{prdy_vrss_vol_rate}%, 거래량:{format(int(acml_vol), ',d')}주\n"
-            summary_text += f"• 3호가매도 총액: {format(ask_trade_sum, ',d')}원\n"
-            summary_text += f"• 3호가매수 총액: {format(bid_trade_sum, ',d')}원\n"
-            summary_text += f"• 시가총액: {format(int(hts_avls), ',d')}억원\n"
-            summary_text += f"• PBR: {pbr}\n"
-            summary_text += f"• BPS: {format(int(float(bps)), ',d')}원\n"
+            summary_text += f"• 3호가 매도 총액 : {format(ask_trade_sum, ',d')}원\n"
+            summary_text += f"• 3호가 매수 총액 : {format(bid_trade_sum, ',d')}원\n"
+            summary_text += f"• 시가총액 : {format(int(hts_avls), ',d')}억원\n"
+            summary_text += f"• PBR : {pbr}\n"
+            summary_text += f"• BPS : {format(int(float(bps)), ',d')}원\n"
 
             dividend_rate = get_dividend_yield(code)
-            summary_text += f"• 배당수익률: {dividend_rate}\n"
+            summary_text += f"• 배당수익률 : {dividend_rate}\n"
 
             context.bot.send_message(chat_id=user_id, text=summary_text)
 
