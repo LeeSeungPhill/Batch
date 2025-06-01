@@ -226,6 +226,26 @@ def inquire_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output
 
+# 주식현재가 호가/예상체결
+def inquire_asking_price(access_token, app_key, app_secret, code):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "FHKST01010200",
+               "custtype": "P"}
+    params = {
+                'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
+                'FID_INPUT_ISCD': code
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output1
+
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
     headers = {"Content-Type": "application/json",
@@ -1865,14 +1885,16 @@ def echo(update, context):
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
         stck_prpr = a['stck_prpr']                      # 현재가
+        stck_hgpr = a['stck_hgpr']                      # 고가
+        stck_lwpr = a['stck_lwpr']                      # 저가
+        upper_limit = float(a["stck_mxpr"])             # 상한가
+        lower_limit = float(a["stck_llam"])             # 하한가
         prdy_ctrt = a['prdy_ctrt']                      # 전일 대비율
         acml_vol = a['acml_vol']                        # 누적거래량
         prdy_vrss_vol_rate = a['prdy_vrss_vol_rate']    # 전일 대비 거래량 비율
         hts_avls = a['hts_avls']                        # 시가총액
         pbr = a['pbr']
         bps = a['bps']
-        upper_limit = float(a["stck_mxpr"])  # 상한가
-        lower_limit = float(a["stck_llam"])  # 하한가
 
         print("menuNum : ", menuNum)
 
@@ -3567,11 +3589,27 @@ def echo(update, context):
     
     if not ',' in user_text:
         if len(code) > 0 and chartReq == "1":
+            
+            # 입력 종목코드 현재가 호가/예상체결
+            a1 = inquire_asking_price(access_token, app_key, app_secret, code)
+            print("a1 : ",a1)
+            # stck_prpr = a['stck_prpr']                      # 현재가
+            # stck_hgpr = a['stck_hgpr']                      # 고가
+            # stck_lwpr = a['stck_lwpr']                      # 저가
+            # upper_limit = float(a["stck_mxpr"])             # 상한가
+            # lower_limit = float(a["stck_llam"])             # 하한가
+            # prdy_ctrt = a['prdy_ctrt']                      # 전일 대비율
+            # acml_vol = a['acml_vol']                        # 누적거래량
+            # prdy_vrss_vol_rate = a['prdy_vrss_vol_rate']    # 전일 대비 거래량 비율
+            # hts_avls = a['hts_avls']                        # 시가총액
+            # pbr = a['pbr']
+            # bps = a['bps']
+
             get_chart(code)
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
 
             summary_text = f"[{company} - 주요 지표]\n"
-            summary_text += f"• 현재가:{format(int(stck_prpr), ',d')}원, 등락률:{prdy_ctrt}%, 전일비:{prdy_vrss_vol_rate}%, 거래량:{format(int(acml_vol), ',d')}주\n"
+            summary_text += f"• 현재가:{format(int(stck_prpr), ',d')}원, 고가:{format(int(stck_hgpr), ',d')}원, 저가:{format(int(stck_lwpr), ',d')}원, 등락률:{prdy_ctrt}%, 전일비:{prdy_vrss_vol_rate}%, 거래량:{format(int(acml_vol), ',d')}주\n"
             summary_text += f"• 시가총액: {format(int(hts_avls), ',d')}억원\n"
             summary_text += f"• PBR: {pbr}\n"
             summary_text += f"• BPS: {format(int(float(bps)), ',d')}원\n"
