@@ -957,7 +957,7 @@ def callback_get(update, context) :
         sell_code = parts[1]  # 종목코드
         sell_amount = format(int(parts[2]), ',d')  # 매도 수량
 
-        menuNum = "32"
+        menuNum = "31"
 
         context.bot.edit_message_text(text='[<code>'+ sell_code +'</code>] 전체('+ sell_amount+ ') 매도의 종목코드(종목명), 매도가를 입력하세요.', parse_mode='HTML',
                                     chat_id=update.callback_query.message.chat_id,
@@ -985,11 +985,11 @@ def callback_get(update, context) :
             update.callback_query.message.reply_text("잘못된 매수 명령어 형식입니다.")
             return
         buy_code = parts[1]  # 종목코드
-        buy_name = parts[2]  # 종목명
+        current_price = format(int(parts[2]), ',d')  # 현재가
 
         menuNum = "22"
 
-        context.bot.edit_message_text(text=buy_name+'[<code>'+ buy_code + '</code>] 매수금액 기준 매수의 종목코드(종목명), 매수가, 매수금액을 입력하세요.', parse_mode='HTML',
+        context.bot.edit_message_text(text='[<code>'+ buy_code + '</code>] 현재가('+ current_price +')원 매수의 종목코드(종목명), 매수가, 매수금액을 입력하세요.', parse_mode='HTML',
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)
 

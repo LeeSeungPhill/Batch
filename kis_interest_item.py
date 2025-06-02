@@ -674,7 +674,7 @@ if result_one == None:
                                             print("시장승률 : "+str(k[0]))
                                             if k[0] >= 50:   # 시장 상승인 경우
                                                 if n_buy_amount > 0:
-                                                    buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                    buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                                     # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                                     telegram_text = (f"[시장상승]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                                 else:
@@ -703,7 +703,7 @@ if result_one == None:
                                                 cur2.close()
                                             else:
                                                 if n_buy_amount > 0:
-                                                    buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                    buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                                     # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                                     telegram_text = (f"[시장하락]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                                 else:
@@ -733,7 +733,7 @@ if result_one == None:
                                     else:
                                         if time > '1430' and time < '1520':
                                             if n_buy_amount > 0:
-                                                buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                                buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                                 # telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                                 telegram_text = (f"[장마감전]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                             else:
@@ -776,7 +776,7 @@ if result_one == None:
                                     print("시장승률 : "+str(k[0]))
                                     if k[0] >= 50:  # 시장 상승인 경우
                                         if n_buy_amount > 0:
-                                            buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                            buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                             # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                             telegram_text = (f"[시장상승]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                         else:
@@ -805,7 +805,7 @@ if result_one == None:
                                         cur2.close()
                                     else:
                                         if n_buy_amount > 0:
-                                            buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                            buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                             # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                             telegram_text = (f"[시장하락]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                         else:
@@ -835,7 +835,7 @@ if result_one == None:
                             else:
                                 if time > '1430' and time < '1520':
                                     if n_buy_amount > 0:
-                                        buy_command = f"/InterestBuy_{i[1]}_[{i[0]}]_{a['stck_prpr']}"
+                                        buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
                                         # telegram_text = "[장마감전]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 매수량 : " +  format(int(round(n_buy_amount)), ',d') + "주, 매수금액 : " + format(int(n_buy_sum), ',d') + "원, 손절가 : " + format(int(loss_price), ',d') + "원, 손절금액 : " + format(int(item_loss_sum), ',d') + "원"
                                         telegram_text = (f"[장마감전]{i[1]}[{i[0]}] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                     else:
