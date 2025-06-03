@@ -246,6 +246,29 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output1
 
+# 주식당일분봉조회
+def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "FHKST03010200",
+               "custtype": "P"}
+    params = {
+                'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
+                'FID_INPUT_ISCD': code,
+                'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
+                'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
+                'FID_ETC_CLS_CODE': ""
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output2
+
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
     headers = {"Content-Type": "application/json",
@@ -1134,14 +1157,14 @@ def callback_get(update, context) :
             elif data_selected.find("매수기준시분") != -1:
                 menuNum = "41"
 
-                context.bot.edit_message_text(text="매수기준시분의 종목코드(종목명), 연월일시분(12자리), 매수금액을 입력하세요.",
+                context.bot.edit_message_text(text="매수기준시분의 종목코드(종목명), 시분초(00)-6자리, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
             elif data_selected.find("매도기준시분") != -1:
                 menuNum = "42"
 
-                context.bot.edit_message_text(text="매도기준시분의 종목코드(종목명), 연월일시분(12자리), 매도비율(%)을 입력하세요.",
+                context.bot.edit_message_text(text="매도기준시분의 종목코드(종목명), 시분초(00)-6자리, 매도비율(%)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)    
     
@@ -3225,6 +3248,76 @@ def echo(update, context):
                 print("매도가 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 매도가 미존재") 
 
+        elif menuNum == '41':
+            chartReq = "0"
+            if len(user_text.split(",")) > 0:
+                
+                commandBot = user_text.split(sep=',', maxsplit=3)
+                print("commandBot[1] : ", commandBot[1])    # 시분초(00)-6자리
+                print("commandBot[2] : ", commandBot[2])    # 매수금액
+
+            # 시분초(00)-6자리, 매수금액 존재시
+            if commandBot[1].isdecimal() & len(commandBot[1]) == 6 & commandBot[2].isdecimal():
+
+                # 시분초(00)-6자리
+                base_dtm = commandBot[1]
+                print("시분초(00)-6자리 : " + base_dtm)
+                # 매수금액
+                buy_amount = commandBot[2]
+                print("매수금액 : " + format(int(buy_amount), ',d'))
+
+                # 주식당일분봉조회
+                minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                for item in minute_info:
+                    print("체결시간 : ",item['stck_cntg_hour'])
+                    print("현재가 : ",item['stck_prpr'])
+                    print("시가 : ",item['stck_oprc'])
+                    print("최고가 : ",item['stck_hgpr'])
+                    print("최저가 : ",item['stck_lwpr'])
+                    print("체결 거래량 : ",item['cntg_vol'])
+
+                # 매매자동처리 생성
+                # cur500 = conn.cursor()
+                # insert_query = """
+                #                 INSERT INTO trade_auto_proc (
+                #                     acct_no, name, code, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, vol_rate, avg_vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                #                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                #                 ON CONFLICT (acct_no, code, base_dtm, trade_tp) DO NOTHING
+                #             """
+                # # insert 인자값 설정
+                # record_to_insert = ([acct_no, company, code, base_dtm, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
+                # cur500.execute(insert_query, (
+                #     acct_no, company, code, base_dtm, "B"
+                # ))
+                # conn.commit()
+                # cur500.close()
+
+            else:
+                print("시분초(00)-6자리 또는 매수금액 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 시분초(00)-6자리 또는 매수금액 미존재")        
+        
+        elif menuNum == '42':
+            chartReq = "0"
+            if len(user_text.split(",")) > 0:
+                
+                commandBot = user_text.split(sep=',', maxsplit=3)
+                print("commandBot[1] : ", commandBot[1])    # 시분초(00)-6자리
+                print("commandBot[2] : ", commandBot[2])    # 매도비율(%)
+
+            # 시분초(00)-6자리, 매도비율(%) 존재시
+            if commandBot[1].isdecimal() & len(commandBot[1]) == 12 & commandBot[2].isdecimal():
+                
+                # 시분초(00)-6자리
+                base_dtm = commandBot[1]
+                print("시분초(00)-6자리 : " + base_dtm)
+                # 매도비율(%)
+                sell_rate = commandBot[2]
+                print("매도비율(%) : " + format(int(sell_rate), ',d'))
+                                              
+            else:
+                print("시분초(00)-6자리 또는 매도비율(%) 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 시분초(00)-6자리 또는 매도비율(%) 미존재")
+        
         elif menuNum == '51':
             chartReq = "0"
             if len(user_text.split(",")) > 0:
