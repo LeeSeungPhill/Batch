@@ -729,18 +729,18 @@ def handle_holding_sell(update, context):
 
 def handle_interest_buy(update, context):
     command_parts = update.message.text.split("_")
-    if len(command_parts) < 4:
+    if len(command_parts) < 3:
         update.message.reply_text("잘못된 명령어 형식입니다.")
         return
     
-    stock_name = command_parts[1]
-    stock_code = command_parts[2]
+    stock_code = command_parts[1]
+    current_price = int(command_parts[2])
     
     button_list = build_button(["신호매수", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     
     button_list = [
-        InlineKeyboardButton(f"신호매수 ({stock_name}[{stock_code}])", callback_data=f"신호매수_{stock_code}_{stock_name}"),
+        InlineKeyboardButton(f"신호매수 ({stock_code}])", callback_data=f"신호매수_{stock_code}_{current_price}"),
         InlineKeyboardButton("취소", callback_data="취소")
     ]
     show_markup = InlineKeyboardMarkup([button_list])
@@ -1138,10 +1138,10 @@ def callback_get(update, context) :
 
     elif data_selected.find("자동") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["매수기준시분", "매도기준시분", "취소"], data_selected)
+            button_list = build_button(["자수", "자도", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
-            context.bot.edit_message_text(text="매매기준시분 종류를 선택해 주세요.",
+            context.bot.edit_message_text(text="매매기준 종류를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id,
                                           reply_markup=show_markup)
@@ -1154,17 +1154,17 @@ def callback_get(update, context) :
                                               message_id=update.callback_query.message.message_id)
                 return
 
-            elif data_selected.find("매수기준시분") != -1:
+            elif data_selected.find("자수") != -1:
                 menuNum = "41"
 
-                context.bot.edit_message_text(text="매수기준시분의 종목코드(종목명), 시분초(00)-6자리, 매수금액을 입력하세요.",
+                context.bot.edit_message_text(text="매수기준의 종목코드(종목명), 시분초(00)-6자리, 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("매도기준시분") != -1:
+            elif data_selected.find("자도") != -1:
                 menuNum = "42"
 
-                context.bot.edit_message_text(text="매도기준시분의 종목코드(종목명), 시분초(00)-6자리, 매도비율(%)을 입력하세요.",
+                context.bot.edit_message_text(text="매도기준의 종목코드(종목명), 시분초(00)-6자리, 매도비율(%)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)    
     
@@ -3268,6 +3268,7 @@ def echo(update, context):
 
                 # 주식당일분봉조회
                 minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                minute_list = []
                 for item in minute_info:
                     print("체결시간 : ",item['stck_cntg_hour'])
                     print("현재가 : ",item['stck_prpr'])
@@ -3275,7 +3276,15 @@ def echo(update, context):
                     print("최고가 : ",item['stck_hgpr'])
                     print("최저가 : ",item['stck_lwpr'])
                     print("체결 거래량 : ",item['cntg_vol'])
-
+                    
+                    minute_list.append({
+                        '체결시간': item['stck_cntg_hour'],
+                        '현재가': item['stck_prpr'],
+                        '시가': item['stck_oprc'],
+                        '고가': item['stck_hgpr'],
+                        '저가': item['stck_lwpr'],
+                        '거래량': item['cntg_vol']
+                    })
                 # 매매자동처리 생성
                 # cur500 = conn.cursor()
                 # insert_query = """
