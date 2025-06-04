@@ -3279,27 +3279,67 @@ def echo(update, context):
                     
                     minute_list.append({
                         '체결시간': item['stck_cntg_hour'],
-                        '현재가': item['stck_prpr'],
+                        '종가': item['stck_prpr'],
                         '시가': item['stck_oprc'],
                         '고가': item['stck_hgpr'],
                         '저가': item['stck_lwpr'],
                         '거래량': item['cntg_vol']
                     })
+
+                df = pd.DataFrame(minute_list)
+                df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M')
+                df = df.sort_values('체결시간').reset_index(drop=True)
+                
+                df.rename(columns={
+                    '종가': 'close',
+                    '시가': 'open',
+                    '고가': 'high',
+                    '저가': 'low',
+                    '거래량': 'volume',
+                    '체결시간': 'timestamp'
+                }, inplace=True)
+
+                df['body'] = (df['close'] - df['open']).abs()
+
+                # 기준봉: 가장 거래량 많은 봉
+                idx = df['volume'].idxmax()
+                기준봉 = df.loc[idx]
+
+                while True:
+                    이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
+                    candidates = 이후_봉들[
+                        (이후_봉들['volume'] >= 기준봉['volume'] * 0.95) &
+                        (이후_봉들['high'] > 기준봉['high'])
+                    ]
+                    if candidates.empty:
+                        break
+                    기준봉 = candidates.iloc[0]
+
+                avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+
+                # 몸통 유형 구분
+                body_value = 기준봉['body']
+                if body_value > avg_body * 1.5:
+                    candle_body = "L"   # 장봉
+                elif body_value < avg_body * 0.5:
+                    candle_body = "S"   # 단봉
+                else:
+                    candle_body = "M"   # 보통
+
                 # 매매자동처리 생성
-                # cur500 = conn.cursor()
-                # insert_query = """
-                #                 INSERT INTO trade_auto_proc (
-                #                     acct_no, name, code, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, vol_rate, avg_vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                #                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                #                 ON CONFLICT (acct_no, code, base_dtm, trade_tp) DO NOTHING
-                #             """
-                # # insert 인자값 설정
-                # record_to_insert = ([acct_no, company, code, base_dtm, time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(round(n_buy_amount)), int(n_buy_sum)])
-                # cur500.execute(insert_query, (
-                #     acct_no, company, code, base_dtm, "B"
-                # ))
-                # conn.commit()
-                # cur500.close()
+                cur500 = conn.cursor()
+                insert_query = """
+                    INSERT INTO trade_auto_proc (
+                        acct_no, name, code, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                    )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (acct_no, code, base_dtm, trade_tp) DO NOTHING
+                """
+                # insert 인자값 설정
+                cur500.execute(insert_query, (
+                    acct_no, company, code, base_dtm, "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
+                ))
+                conn.commit()
+                cur500.close()
 
             else:
                 print("시분초(00)-6자리 또는 매수금액 미존재")
