@@ -3339,7 +3339,7 @@ def echo(update, context):
                 cur500.close()
 
                 if was_inserted:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록")
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
                     
                     # 매매자동처리 update
                     cur501 = conn.cursor()
@@ -3463,7 +3463,7 @@ def echo(update, context):
                 cur500.close()
 
                 if was_inserted:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록")
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
 
                     # 매매자동처리 update
                     cur501 = conn.cursor()
