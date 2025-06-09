@@ -208,7 +208,7 @@ class WebSocketClient:
 
                     # 텔레그램 메시지 준비
                     telegram_text = (
-                        f"<{search_name}> {i['302']} [{code}] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
+                        f"&lt;{search_name}&gt; {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
                         f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
                         f"저가: {format(math.ceil(float(i['18'])), ',d')}원"
                     )
@@ -238,7 +238,7 @@ class WebSocketClient:
                 # 텔레그램 메시지 전송
                 for code, message in telegram_messages:
                     if code in inserted_codes:
-                        await send_telegram_message(message)
+                        await send_telegram_message(message, parse_mode='HTML')
 
                 print(f"{len(inserted_codes)}건의 데이터가 저장되고 텔레그램 알림이 전송되었습니다.")
             else:
