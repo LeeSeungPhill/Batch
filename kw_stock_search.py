@@ -208,7 +208,7 @@ class WebSocketClient:
 
                     # 텔레그램 메시지 준비
                     telegram_text = (
-                        f"&lt;{search_name}&gt; {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
+                        f"<{search_name}> {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
                         f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
                         f"저가: {format(math.ceil(float(i['18'])), ',d')}원"
                     )
