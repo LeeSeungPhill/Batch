@@ -22,9 +22,9 @@ CHAT_ID = "2147256258"
 TOKEN = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"
 
 # 텔레그램 메시지 전송 함수
-async def send_telegram_message(message_text):
+async def send_telegram_message(message_text: str, parse_mode: str = 'HTML'):
     bot = Bot(token=TOKEN)
-    await bot.send_message(chat_id=CHAT_ID, text=message_text)
+    await bot.send_message(chat_id=CHAT_ID, text=message_text, parse_mode=parse_mode)
 
 def auth(APP_KEY, APP_SECRET):
 
