@@ -8,6 +8,7 @@ from datetime import datetime
 import asyncio
 import websockets
 from psycopg2.extras import execute_values
+import html
 
 #URL_BASE = "https://mockapi.kiwoom.com"   # 모의투자서비스
 URL_BASE = "https://api.kiwoom.com"    
@@ -206,9 +207,11 @@ class WebSocketClient:
                     )
                     data.append(row)
 
+                    safe_search_name = html.escape(search_name)
+
                     # 텔레그램 메시지 준비
                     telegram_text = (
-                        f"<{search_name}> {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
+                        f"&lt;{safe_search_name}&gt; {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
                         f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
                         f"저가: {format(math.ceil(float(i['18'])), ',d')}원"
                     )
