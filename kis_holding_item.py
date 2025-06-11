@@ -520,7 +520,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 async def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(cchat_id=chat_id, text=telegram_text, parse_mode='HTML')
+    await bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
 
 
 # 휴일정보 조회
