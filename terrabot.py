@@ -1018,7 +1018,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("매수") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["손절금액", "매수금액", "현재가", "수량수가", "취소"], data_selected)
+            button_list = build_button(["손절금액", "매수금액", "현재가", "수가수량", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="매수 종류를 선택해 주세요.",
@@ -1055,16 +1055,16 @@ def callback_get(update, context) :
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("수량수가") != -1:
+            elif data_selected.find("수가수량") != -1:
                 menuNum = "24"
 
-                context.bot.edit_message_text(text="종목코드(종목명), 매수량, 매수가를 입력하세요.",
+                context.bot.edit_message_text(text="종목코드(종목명), 매수가, 매수량을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)    
 
     elif data_selected.find("매도") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["전체", "절반", "1/4", "1/3", "2/3", "3/4", "현재가", "도량도가", "취소"], data_selected)
+            button_list = build_button(["전체", "절반", "1/4", "1/3", "2/3", "3/4", "현재가", "도가도량", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 3))
 
             context.bot.edit_message_text(text="매도 종류를 선택해 주세요.",
@@ -1129,10 +1129,10 @@ def callback_get(update, context) :
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("도량도가") != -1:
+            elif data_selected.find("도가도량") != -1:
                 menuNum = "34"
 
-                context.bot.edit_message_text(text="종목코드(종목명), 매도량, 매도가를 입력하세요.",
+                context.bot.edit_message_text(text="종목코드(종목명), 매도가, 매도량을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
@@ -2818,17 +2818,17 @@ def echo(update, context):
             if len(user_text.split(",")) > 0:
                
                 commandBot = user_text.split(sep=',', maxsplit=3)
-                print("commandBot[1] : ", commandBot[1])    # 매수량
-                print("commandBot[1] : ", commandBot[2])    # 매수가
+                print("commandBot[1] : ", commandBot[1])    # 매수가
+                print("commandBot[1] : ", commandBot[2])    # 매수량
 
-            # 매수량, 매수가 존재시
+            # 매수가, 매수량 존재시
             if commandBot[1].isdecimal() & commandBot[2].isdecimal():
 
                 # 매수량
-                buy_amount = commandBot[1]
+                buy_amount = commandBot[2]
                 print("매수량 : " + format(int(buy_amount), ',d'))
                 # 매수금액
-                n_buy_sum = int(commandBot[2]) * int(buy_amount)
+                n_buy_sum = int(commandBot[1]) * int(buy_amount)
                 print("매수금액 : " + format(int(n_buy_sum), ',d'))
 
                 # 시가총액 기준 매수예상금액 설정
@@ -2849,24 +2849,24 @@ def echo(update, context):
                     if int(b) > n_buy_sum:  # 매수가능(현금)이 매수금액이 더 큰 경우
 
                         g_buy_amount = buy_amount
-                        g_buy_price = int(commandBot[2])
+                        g_buy_price = int(commandBot[1])
                         g_buy_code = code
                         g_company = company
                        
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[1]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수금액 : " + format(n_buy_sum, ',d') + "원 => /buy")
                         get_handler = CommandHandler('buy', get_command1)
                         updater.dispatcher.add_handler(get_handler)
 
                     else:
                         print("매수 가능(현금) 부족")
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[1]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수 가능(현금) : " + format(int(b) - n_buy_sum, ',d') +"원 부족")
                 else:
                     print("매수량 매수예상금액 초과")
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[2]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(commandBot[1]), ',d') + "원, 매수량 : " + format(int(buy_amount), ',d') + "주, 매수예상금액 : " + format(buy_expect_sum, ',d') + "원, " + format(buy_expect_sum - n_buy_sum, ',d') +"원 매수량 기준 매수예상금액 초과")
 
             else:
-                print("매수량 또는 매수가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 매수량 또는 매수가 미존재")        
+                print("매수가 또는 매수량 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매수가 또는 매수량 미존재")        
 
         elif menuNum == '31':
             chartReq = "0"
@@ -3015,14 +3015,14 @@ def echo(update, context):
             if len(user_text.split(",")) > 0:
                
                 commandBot = user_text.split(sep=',', maxsplit=3)
-                print("commandBot[1] : ", commandBot[1])    # 매도량
-                print("commandBot[2] : ", commandBot[2])    # 매도가
+                print("commandBot[1] : ", commandBot[1])    # 매도가
+                print("commandBot[2] : ", commandBot[2])    # 매도량
 
-            # 매도량, 매도가 존재시
+            # 매도가, 매도량 존재시
             if commandBot[1].isdecimal() & commandBot[2].isdecimal():
 
                 # 매도량
-                sell_amount = commandBot[1]
+                sell_amount = commandBot[2]
                 print("매도량 : " + format(int(sell_amount), ',d'))
 
                 # 계좌잔고 조회
@@ -3038,15 +3038,15 @@ def echo(update, context):
                     if ord_psbl_qty >= int(sell_amount):  # 주문가능수량이 매도량보다 큰 경우
 
                         # 매도금액
-                        n_sell_sum = int(commandBot[2]) * int(sell_amount)
+                        n_sell_sum = int(commandBot[1]) * int(sell_amount)
                         print("매도금액 : " + format(n_sell_sum, ',d'))
 
                         g_sell_amount = sell_amount
-                        g_sell_price = int(commandBot[2])
+                        g_sell_price = int(commandBot[1])
                         g_sell_code = code
                         g_company = company
 
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(commandBot[2]), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(commandBot[1]), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                         get_handler = CommandHandler('sell', get_command2)
                         updater.dispatcher.add_handler(get_handler)
 
@@ -3057,8 +3057,8 @@ def echo(update, context):
                     print("주문가능수량 부족")
                     context.bot.send_message(chat_id=user_id, text=company + " : 주문가능수량 부족")
             else:
-                print("매도량 또는 매도가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 매도량 또는 매도가 미존재")
+                print("매도가 또는 매도량 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매도가 또는 매도량 미존재")
 
         elif menuNum == '35':
             chartReq = "0"
