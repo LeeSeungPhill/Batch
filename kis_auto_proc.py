@@ -194,6 +194,12 @@ if result_one == None:
                 trail_signal_code = ""
                 trail_signal_name = ""
                 vol_appear = 0
+                candle_type = ""
+
+                if i[11] == 'L': 
+                    candle_type  = "[장봉] "
+                elif i[11] == 'S': 
+                    candle_type  = "[단봉] "
 
                 # 주식현재가 시세
                 a = inquire_price(access_token, app_key, app_secret, i[2])
@@ -221,7 +227,7 @@ if result_one == None:
 
                         buy_command = f"/InterestBuy_{i[2]}_{a['stck_prpr']}"
 
-                        telegram_text = (f"[자동매수]{i[1]}[<code>{i[2]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
+                        telegram_text = (f"[자동매수]{i[1]}[<code>{i[2]}</code>] : {candle_type}{trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                         # 텔레그램 메시지 전송
                         asyncio.run(main(telegram_text))
 
@@ -286,13 +292,13 @@ if result_one == None:
                                     # 매도비율(%)
                                     sell_rate = int(i[12])
                                     # 매도량 = round((보유수량 / 매도비율 )* 100)
-                                    sell_amount = round((e_purchase_amount / sell_rate) * 100)
+                                    sell_amount = round(e_purchase_amount * (sell_rate / 100))
                                     # 매도금액 = 매도량 * 현재가
                                     sell_sum = sell_amount * int(a['stck_prpr'])
 
                                     sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
 
-                                    telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                    telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
                                     # 텔레그램 메시지 전송
                                     asyncio.run(main(telegram_text))
 
