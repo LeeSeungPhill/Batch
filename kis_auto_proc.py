@@ -261,16 +261,16 @@ if result_one == None:
 
                         balance_list = []
 
-                        for i, name in enumerate(c.index):
-                            e_code = c['pdno'][i]
-                            e_name = c['prdt_name'][i]
-                            e_purchase_price = c['pchs_avg_pric'][i]
-                            e_purchase_amount = int(c['hldg_qty'][i])
-                            e_purchase_sum = int(c['pchs_amt'][i])
-                            e_current_price = int(c['prpr'][i])
-                            e_eval_sum = int(c['evlu_amt'][i])
-                            e_earnings_rate = c['evlu_pfls_rt'][i]
-                            e_valuation_sum = int(c['evlu_pfls_amt'][i])
+                        for j, name in enumerate(c.index):
+                            e_code = c['pdno'][j]
+                            e_name = c['prdt_name'][j]
+                            e_purchase_price = c['pchs_avg_pric'][j]
+                            e_purchase_amount = int(c['hldg_qty'][j])
+                            e_purchase_sum = int(c['pchs_amt'][j])
+                            e_current_price = int(c['prpr'][j])
+                            e_eval_sum = int(c['evlu_amt'][j])
+                            e_earnings_rate = c['evlu_pfls_rt'][j]
+                            e_valuation_sum = int(c['evlu_pfls_amt'][j])
 
                             sell_rate = 0
                             sell_amount = 0
@@ -322,7 +322,7 @@ if result_one == None:
                                     cur400.close()
 
         except Exception as e:
-            print(f"[{nick}] Error interest item : {e}")      
+            print(f"[{nick}] Error kis_auto_proc : {e}")      
     
     conn.close()
 
