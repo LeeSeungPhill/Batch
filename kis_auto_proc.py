@@ -279,7 +279,7 @@ if result_one == None:
                             # 잔고정보의 매매자동처리 종목이 존재할 경우
                             if e_code == i[2]:
                                 signal_cd = "02"
-                                signal_cd_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
+                                signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
 
                                 # 보유수량 존재시
                                 if e_purchase_amount > 0:
