@@ -980,9 +980,9 @@ def callback_get(update, context) :
         sell_code = parts[1]  # 종목코드
         sell_amount = format(int(parts[2]), ',d')  # 매도 수량
 
-        menuNum = "31"
+        menuNum = "34"
 
-        context.bot.edit_message_text(text='[<code>'+ sell_code +'</code>] 전체('+ sell_amount+ ') 매도의 종목코드(종목명), 매도가를 입력하세요.', parse_mode='HTML',
+        context.bot.edit_message_text(text='[<code>'+ sell_code +'</code>] 전체('+ sell_amount+ ') 매도의 종목코드(종목명), 매도가, 매도량을 입력하세요.', parse_mode='HTML',
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)    
 
@@ -995,9 +995,9 @@ def callback_get(update, context) :
         sell_code = parts[1]  # 종목코드
         sell_amount = format(int(round(int(parts[2])/2)), ',d')  # 매도 수량
 
-        menuNum = "32"
+        menuNum = "34"
 
-        context.bot.edit_message_text(text='[<code>'+ sell_code + '</code>] 절반('+ sell_amount+ ') 매도의 종목코드(종목명), 매도가를 입력하세요.', parse_mode='HTML',
+        context.bot.edit_message_text(text='[<code>'+ sell_code + '</code>] 절반('+ sell_amount+ ') 매도의 종목코드(종목명), 매도가, 매도량을 입력하세요.', parse_mode='HTML',
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)                            
 
