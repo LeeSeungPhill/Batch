@@ -212,7 +212,7 @@ if result_one == None:
                     loss_price = 0
                     item_loss_sum = 0
 
-                    if int(a['stck_hgpr']) > i[7]:
+                    if int(a['stck_prpr']) > i[7]:
                         print("돌파가 돌파")
                         signal_cd = "01"
                         signal_cd_name = format(int(i[7]), ',d') + "원 {돌파가 돌파}"
@@ -259,7 +259,7 @@ if result_one == None:
                 # 매도 대상
                 elif i[4] == 'S':
 
-                    if int(a['stck_lwpr']) < i[8]:
+                    if int(a['stck_prpr']) < i[8]:
                         print("이탈가 이탈")
                         
                         # 계좌종목 조회
