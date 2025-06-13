@@ -1349,12 +1349,14 @@ def callback_get(update, context) :
 
                 code_chk = ""
                 for j, name in enumerate(c.index):
-                    j_code = c['pdno'][j]
-                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+                    j_code = ""
+                    if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
+                        j_code = c.loc[name, 'pdno']
                     
                     # 잔고정보의 매도대상 종목이 존재할 경우
                     if j_code == g_sell_code:
                         code_chk = "hold"
+                        j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
                         # 주문가능수량이 매도수량보다 더 많은 경우
                         if j_ord_psbl_qty >= g_sell_amount:
 
@@ -1486,12 +1488,14 @@ def callback_get(update, context) :
 
                 code_chk = ""
                 for j, name in enumerate(c.index):
-                    j_code = c['pdno'][j]
-                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+                    j_code = ""
+                    if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
+                        j_code = c.loc[name, 'pdno']
                     
                     # 잔고정보의 매도대상 종목이 존재할 경우
                     if j_code == g_sell_code:
                         code_chk = "hold"
+                        j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
                         # 주문가능수량이 매도수량보다 더 많은 경우
                         if j_ord_psbl_qty >= g_sell_amount:
 
@@ -1623,12 +1627,14 @@ def callback_get(update, context) :
 
                 code_chk = ""
                 for j, name in enumerate(c.index):
-                    j_code = c['pdno'][j]
-                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+                    j_code = ""
+                    if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
+                        j_code = c.loc[name, 'pdno']
                     
                     # 잔고정보의 매도대상 종목이 존재할 경우
                     if j_code == g_sell_code:
                         code_chk = "hold"
+                        j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
                         # 주문가능수량이 매도수량보다 더 많은 경우
                         if j_ord_psbl_qty >= g_sell_amount:
 
