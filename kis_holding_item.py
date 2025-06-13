@@ -455,6 +455,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     cur400.execute("""
                         UPDATE \"stockOrderComplete_stock_order_complete\"
                         SET
+                            order_price = %s,       
                             total_complete_qty = %s,
                             remain_qty = %s,
                             total_complete_amt = %s,
@@ -470,6 +471,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         AND order_no = %s 
                     """
                     , (
+                        int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
                         new_complete_qty, 
                         new_remain_qty,
                         int(item['체결금액']),
@@ -488,6 +490,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     cur400.execute("""
                         UPDATE \"stockOrderComplete_stock_order_complete\"
                         SET
+                            order_price = %s,       
                             total_complete_qty = %s,
                             remain_qty = %s,
                             total_complete_amt = %s,
@@ -501,6 +504,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         AND order_no = %s 
                     """
                     , (
+                        int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
                         new_complete_qty, 
                         new_remain_qty,
                         int(item['체결금액']),
