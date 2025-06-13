@@ -268,31 +268,24 @@ if result_one == None:
                         balance_list = []
 
                         for j, name in enumerate(c.index):
-                            e_code = c['pdno'][j]
-                            e_name = c['prdt_name'][j]
-                            e_purchase_price = c['pchs_avg_pric'][j]
-                            e_purchase_amount = int(c['hldg_qty'][j])
-                            e_purchase_sum = int(c['pchs_amt'][j])
-                            e_current_price = int(c['prpr'][j])
-                            e_eval_sum = int(c['evlu_amt'][j])
-                            e_earnings_rate = c['evlu_pfls_rt'][j]
-                            e_valuation_sum = int(c['evlu_pfls_amt'][j])
+                            J_code = c['pdno'][j]
+                            j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
 
                             sell_rate = 0
                             sell_amount = 0
                             sell_sum = 0
 
                             # 잔고정보의 매매자동처리 종목이 존재할 경우
-                            if e_code == i[2]:
+                            if J_code == i[2]:
                                 signal_cd = "02"
                                 signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
 
-                                # 보유수량 존재시
-                                if e_purchase_amount > 0:
+                                # 주문가능수량 존재시
+                                if j_ord_psbl_qty > 0:
                                     # 매도비율(%)
                                     sell_rate = int(i[12])
-                                    # 매도량 = round((보유수량 / 매도비율 )* 100)
-                                    sell_amount = round(e_purchase_amount * (sell_rate / 100))
+                                    # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                    sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
                                     # 매도금액 = 매도량 * 현재가
                                     sell_sum = sell_amount * int(a['stck_prpr'])
 
