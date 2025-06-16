@@ -448,7 +448,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
             else:
                 # 주문(주문정정) 생성 후, 주문체결정보 현행화(1분단위)되기전에 전량 체결되어 잔고정보의 보유단가와 보유수량이 0 인 경우, 
                 # 보유단가 = 체결금액 - 수익금액(세금 및 수수료 포함) / 체결수량
-                hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) + int(item['paid_tax']) + int(item['paid_fee'])) / new_complete_qty)
+                hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) - int(item['paid_tax']) - int(item['paid_fee'])) / new_complete_qty)
 
                 cur400.execute("""
                     INSERT INTO \"stockOrderComplete_stock_order_complete\" (
