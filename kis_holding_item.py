@@ -400,49 +400,99 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 미존재하는 경우
         if key2 not in order_commplete_map:
             # 미존재시 INSERT 처리
-            cur400.execute("""
-                INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+            if float(item['보유단가']) > 0 and int(item['보유수량']) > 0:
+                cur400.execute("""
+                    INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                        acct_no, 
+                        order_dt,
+                        order_tmd, 
+                        name, 
+                        order_no, 
+                        org_order_no,
+                        total_complete_amt, 
+                        order_type, 
+                        order_price, 
+                        order_amount,
+                        total_complete_qty, 
+                        remain_qty, 
+                        hold_price, 
+                        hold_vol,
+                        profit_loss_rate,
+                        profit_loss_amt,
+                        paid_tax, 
+                        paid_fee,
+                        last_chg_date
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                """
+                , (
                     acct_no, 
-                    order_dt,
-                    order_tmd, 
-                    name, 
-                    order_no, 
-                    org_order_no,
-                    total_complete_amt, 
-                    order_type, 
-                    order_price, 
-                    order_amount,
-                    total_complete_qty, 
-                    remain_qty, 
+                    item['주문일자'], 
+                    item['주문시각'], 
+                    item['종목명'], 
+                    str(int(item['주문번호'])),
+                    str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
+                    int(item['체결금액']),
+                    item['주문유형'], 
+                    int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
+                    int(item['주문수량']),
+                    new_complete_qty, 
+                    new_remain_qty, 
+                    item['보유단가'], 
+                    item['보유수량'],
+                    Decimal(item['pfls_rate']),
+                    int(item['pfls_amt']),
+                    int(item['paid_tax']),
+                    int(item['paid_fee'])
+                ))
+
+            else:
+                # 주문(주문정정) 생성 후, 주문체결정보 현행화(1분단위)되기전에 전량 체결되어 잔고정보의 보유단가와 보유수량이 0 인 경우, 
+                # 보유단가 = 체결금액 - 수익금액(세금 및 수수료 포함) / 체결수량
+                hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) + int(item['paid_tax']) + int(item['paid_fee'])) / new_complete_qty)
+
+                cur400.execute("""
+                    INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                        acct_no, 
+                        order_dt,
+                        order_tmd, 
+                        name, 
+                        order_no, 
+                        org_order_no,
+                        total_complete_amt, 
+                        order_type, 
+                        order_price, 
+                        order_amount,
+                        total_complete_qty, 
+                        remain_qty, 
+                        hold_price, 
+                        hold_vol,
+                        profit_loss_rate,
+                        profit_loss_amt,
+                        paid_tax, 
+                        paid_fee,
+                        last_chg_date
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                """
+                , (
+                    acct_no, 
+                    item['주문일자'], 
+                    item['주문시각'], 
+                    item['종목명'], 
+                    str(int(item['주문번호'])),
+                    str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
+                    int(item['체결금액']),
+                    item['주문유형'], 
+                    int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
+                    int(item['주문수량']),
+                    new_complete_qty, 
+                    new_remain_qty, 
                     hold_price, 
-                    hold_vol,
-                    profit_loss_rate,
-                    profit_loss_amt,
-                    paid_tax, 
-                    paid_fee,
-                    last_chg_date
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
-            """
-            , (
-                acct_no, 
-                item['주문일자'], 
-                item['주문시각'], 
-                item['종목명'], 
-                str(int(item['주문번호'])),
-                str(int(item['원주문번호'])) if item['원주문번호'] != "" else "",
-                int(item['체결금액']),
-                item['주문유형'], 
-                int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
-                int(item['주문수량']),
-                new_complete_qty, 
-                new_remain_qty, 
-                item['보유단가'], 
-                item['보유수량'],
-                Decimal(item['pfls_rate']),
-                int(item['pfls_amt']),
-                int(item['paid_tax']),
-                int(item['paid_fee'])
-            ))
+                    new_complete_qty,
+                    Decimal(item['pfls_rate']),
+                    int(item['pfls_amt']),
+                    int(item['paid_tax']),
+                    int(item['paid_fee'])
+                ))
 
             conn.commit()
         else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
