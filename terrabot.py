@@ -454,7 +454,10 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     else:    
         output = ar.getBody().output1
 
-    return pd.DataFrame(output)
+    if isinstance(output, list):
+        return pd.DataFrame(output)
+    else:
+        return pd.DataFrame([])
 
 # 잔고정보 처리
 def balance_proc(access_token, app_key, app_secret, acct_no):
@@ -1361,7 +1364,7 @@ def callback_get(update, context) :
                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
                 code_chk = ""
-                if isinstance(c, pd.DataFrame):
+                if isinstance(c, pd.DataFrame) and not c.empty:
                     for j, name in enumerate(c.index):
                         j_code = ""
                         if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
@@ -1504,7 +1507,7 @@ def callback_get(update, context) :
                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
                 code_chk = ""
-                if isinstance(c, pd.DataFrame):
+                if isinstance(c, pd.DataFrame) and not c.empty:
                     for j, name in enumerate(c.index):
                         j_code = ""
                         if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
@@ -1647,7 +1650,7 @@ def callback_get(update, context) :
                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
                 code_chk = ""
-                if isinstance(c, pd.DataFrame):
+                if isinstance(c, pd.DataFrame) and not c.empty:
                     for j, name in enumerate(c.index):
                         j_code = ""
                         if 'pdno' in c.columns and pd.notna(c.loc[name, 'pdno']):
