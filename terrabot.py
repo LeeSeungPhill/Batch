@@ -923,12 +923,9 @@ def callback_get(update, context) :
                                 msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 매수주문 실패"
                                 result_msgs.append(msg)
                                 
-                            menuNum = "0"
-
                         except Exception as e:
                             msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 [매수주문 오류] - {str(e)}"
                             result_msgs.append(msg)
-                            menuNum = "0"
                             
                     else:
                         ord_dvsn = "00"    
@@ -979,6 +976,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
            
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
@@ -1047,12 +1045,9 @@ def callback_get(update, context) :
                                 msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 매수주문 실패"
                                 result_msgs.append(msg)
 
-                            menuNum = "0"
-
                         except Exception as e:
                             msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 [매수주문 오류] - {str(e)}"
                             result_msgs.append(msg)
-                            menuNum = "0"
 
                     else:
                         ord_dvsn = "00"    
@@ -1103,6 +1098,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
                     
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
@@ -1171,12 +1167,9 @@ def callback_get(update, context) :
                                 msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 매수주문 실패"
                                 result_msgs.append(msg)
 
-                            menuNum = "0"
-
                         except Exception as e:
                             msg = f"[{nick}:{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 [매수주문 오류] - {str(e)}"
                             result_msgs.append(msg)
-                            menuNum = "0"
 
                     else:
                         ord_dvsn = "00"    
@@ -1227,6 +1220,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
            
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
@@ -1413,13 +1407,10 @@ def callback_get(update, context) :
                                             msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 매도주문 실패"
                                             result_msgs.append(msg)
                                             
-                                        menuNum = "0"
-
                                     except Exception as e:
                                         print('매도주문 오류.', e)
                                         msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 [매도주문 오류] - {str(e)}"
                                         result_msgs.append(msg)
-                                        menuNum = "0"
                                         
                                 else:
                                     ord_dvsn = "00"    
@@ -1477,6 +1468,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
 
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
@@ -1556,13 +1548,10 @@ def callback_get(update, context) :
                                             msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 매도주문 실패"
                                             result_msgs.append(msg)
 
-                                        menuNum = "0"
-
                                     except Exception as e:
                                         print('매도주문 오류.', e)
                                         msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 [매도주문 오류] - {str(e)}"
                                         result_msgs.append(msg)
-                                        menuNum = "0"
 
                                 else:
                                     ord_dvsn = "00"    
@@ -1620,6 +1609,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
             
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
@@ -1699,13 +1689,10 @@ def callback_get(update, context) :
                                             msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 매도주문 실패"
                                             result_msgs.append(msg)
 
-                                        menuNum = "0"
-
                                     except Exception as e:
                                         print('매도주문 오류.', e)
                                         msg = f"[{nick}:{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 [매도주문 오류] - {str(e)}"
                                         result_msgs.append(msg)
-                                        menuNum = "0"
 
                                 else:
                                     ord_dvsn = "00"    
@@ -1763,6 +1750,7 @@ def callback_get(update, context) :
                     result_msgs.append(msg)
                     menuNum = "0"
 
+            menuNum = "0"
             final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
             context.bot.edit_message_text(
