@@ -1369,7 +1369,7 @@ def callback_get(update, context) :
                             code_chk = "hold"
                             j_ord_psbl_qty = int(sb['ord_psbl_qty'][j])
                             # 주문가능수량이 매도수량보다 더 많은 경우
-                            if j_ord_psbl_qty >= g_sell_amount:
+                            if j_ord_psbl_qty >= int(g_sell_amount):
 
                                 # 매도량 입력시 시장가 매도주문
                                 if menuNum == "33":
@@ -1510,7 +1510,7 @@ def callback_get(update, context) :
                             code_chk = "hold"
                             j_ord_psbl_qty = int(sb['ord_psbl_qty'][j])
                             # 주문가능수량이 매도수량보다 더 많은 경우
-                            if j_ord_psbl_qty >= g_sell_amount:
+                            if j_ord_psbl_qty >= int(g_sell_amount):
 
                                 # 매도량 입력시 시장가 매도주문
                                 if menuNum == "33":
@@ -1651,7 +1651,7 @@ def callback_get(update, context) :
                             code_chk = "hold"
                             j_ord_psbl_qty = int(sb['ord_psbl_qty'][j])
                             # 주문가능수량이 매도수량보다 더 많은 경우
-                            if j_ord_psbl_qty >= g_sell_amount:
+                            if j_ord_psbl_qty >= int(g_sell_amount):
 
                                 # 매도량 입력시 시장가 매도주문
                                 if menuNum == "33":
