@@ -790,13 +790,16 @@ def callback_get(update, context) :
                                                         chat_id=update.callback_query.message.chat_id,
                                                         message_id=update.callback_query.message.message_id)
                 else:
-                    print("주문철회 실패")
+                    print("주문정정 실패")
                     context.bot.edit_message_text(text="주문정정 실패 [" + g_company + "]",
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
                     
+                menuNum = "0"                    
+                    
             except Exception as e:
                 print('주문정정 오류.', e)
+                menuNum = "0"
                 context.bot.edit_message_text(text="주문정정 오류 [" + g_company + "] : "+str(e),
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
