@@ -851,20 +851,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문취소
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
-                            if c['ODNO'] != "":
-                                print("주문취소 완료")
-                                msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
+                                    # 주문취소
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    if c['ODNO'] != "":
+                                        print("주문취소 완료")
+                                        msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
 
-                            else:
-                                print("주문취소 실패")
-                                msg = f"[{nick}:{g_company}] 주문취소 실패"
-                                result_msgs.append(msg)
+                                    else:
+                                        print("주문취소 실패")
+                                        msg = f"[{nick}:{g_company}] 주문취소 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문취소내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문취소내역 미존재"
                             result_msgs.append(msg)        
@@ -932,20 +931,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문취소
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
-                            if c['ODNO'] != "":
-                                print("주문취소 완료")
-                                msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
+                                    # 주문취소
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    if c['ODNO'] != "":
+                                        print("주문취소 완료")
+                                        msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
 
-                            else:
-                                print("주문취소 실패")
-                                msg = f"[{nick}:{g_company}] 주문취소 실패"
-                                result_msgs.append(msg)
+                                    else:
+                                        print("주문취소 실패")
+                                        msg = f"[{nick}:{g_company}] 주문취소 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문취소내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문취소내역 미존재"
                             result_msgs.append(msg)        
@@ -1013,20 +1011,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문취소
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
-                            if c['ODNO'] != "":
-                                print("주문취소 완료")
-                                msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
+                                    # 주문취소
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    if c['ODNO'] != "":
+                                        print("주문취소 완료")
+                                        msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
 
-                            else:
-                                print("주문취소 실패")
-                                msg = f"[{nick}:{g_company}] 주문취소 실패"
-                                result_msgs.append(msg)
+                                    else:
+                                        print("주문취소 실패")
+                                        msg = f"[{nick}:{g_company}] 주문취소 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문취소내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문취소내역 미존재"
                             result_msgs.append(msg)        
@@ -1130,20 +1127,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문정정
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
-                            if c['ODNO'] != "":
-                                print("주문정정 완료")
-                                msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
-                                
-                            else:
-                                print("주문정정 실패")
-                                msg = f"[{nick}:{g_company}] 주문정정 실패"
-                                result_msgs.append(msg)
+                                    # 주문정정
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    if c['ODNO'] != "":
+                                        print("주문정정 완료")
+                                        msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
+                                        
+                                    else:
+                                        print("주문정정 실패")
+                                        msg = f"[{nick}:{g_company}] 주문정정 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문정정내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
                             result_msgs.append(msg)        
@@ -1212,20 +1208,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문정정
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
-                            if c['ODNO'] != "":
-                                print("주문정정 완료")
-                                msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
-                                
-                            else:
-                                print("주문정정 실패")
-                                msg = f"[{nick}:{g_company}] 주문정정 실패"
-                                result_msgs.append(msg)
+                                    # 주문정정
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    if c['ODNO'] != "":
+                                        print("주문정정 완료")
+                                        msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
+                                        
+                                    else:
+                                        print("주문정정 실패")
+                                        msg = f"[{nick}:{g_company}] 주문정정 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문정정내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
                             result_msgs.append(msg)        
@@ -1294,20 +1289,19 @@ def callback_get(update, context) :
                                     order_no = int(d['odno'][i])
                                     rmn_qty = int(d['rmn_qty'][i])
 
-                        if rmn_qty > 0:
-                            # 주문정정
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
-                            if c['ODNO'] != "":
-                                print("주문정정 완료")
-                                msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
-                                result_msgs.append(msg)
-                                
-                            else:
-                                print("주문정정 실패")
-                                msg = f"[{nick}:{g_company}] 주문정정 실패"
-                                result_msgs.append(msg)
+                                    # 주문정정
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    if c['ODNO'] != "":
+                                        print("주문정정 완료")
+                                        msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                                        result_msgs.append(msg)
+                                        
+                                    else:
+                                        print("주문정정 실패")
+                                        msg = f"[{nick}:{g_company}] 주문정정 실패"
+                                        result_msgs.append(msg)
 
-                        else:
+                        if rmn_qty == 0:
                             print("주문정정내역 미존재")
                             msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
                             result_msgs.append(msg)        
@@ -2731,7 +2725,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["주문조회", "주문정정", "주문철회", "취소"], data_selected)
+            button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="일별체결 메뉴를 선택해 주세요.",
@@ -2747,7 +2741,7 @@ def callback_get(update, context) :
                                               message_id=update.callback_query.message.message_id)
                 return
 
-            elif data_selected.find("주문조회") != -1:
+            elif data_selected.find("전체주문") != -1:
 
                 ac = account()
                 acct_no = ac['acct_no']
@@ -2786,15 +2780,22 @@ def callback_get(update, context) :
                                                   chat_id=update.callback_query.message.chat_id,
                                                   message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("주문정정") != -1:
+            elif data_selected.find("개별주문") != -1:
                 menuNum = "141"
 
-                context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가(시장가=0)를 입력하세요.",
+                context.bot.edit_message_text(text="주문조회할 종목코드(종목명), 매매구분(전체:0 매수:1 매도:2)을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+            
+            elif data_selected.find("주문정정") != -1:
+                menuNum = "142"
+
+                context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가(시장가:0)를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
             elif data_selected.find("주문철회") != -1:
-                menuNum = "142"
+                menuNum = "143"
 
                 context.bot.edit_message_text(text="주문취소할 종목코드(종목명), 주문번호를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
@@ -3609,6 +3610,81 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 매매구분(전체:0 매수:1 매도:2)
+
+            # 매매구분(전체:0 매수:1 매도:2) 존재시
+            if commandBot[1].isdecimal():
+                   
+                # 매매구분(전체:0 매수:1 매도:2)
+                if commandBot[1] == '1':
+                    trade_dvsn = '01'
+                elif commandBot[1] == '2':
+                    trade_dvsn = '02'    
+                else:
+                    trade_dvsn = '00'
+                print("매매구분(전체:0 매수:1 매도:2) : "+trade_dvsn)
+
+                try:
+                    # 일별주문체결 조회
+                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, '')
+
+                    if len(output1) > 0:
+                    
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                        order_type = ""
+                        order_no = 0
+                        rmn_qty = 0
+
+                        if trade_dvsn == '00':
+
+                            for i, name in enumerate(d.index):
+                                d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
+                                d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                d_order_dt = d['ord_dt'][i]
+                                d_order_tmd = d['ord_tmd'][i]
+                                d_name = d['prdt_name'][i]
+                                d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                d_order_amount = d['ord_qty'][i]
+                                d_total_complete_qty = d['tot_ccld_qty'][i]
+                                d_remain_qty = d['rmn_qty'][i]
+                                d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
+                            
+                        else:
+
+                            for i, name in enumerate(d.index):
+                                
+                                # 매수매도구분코드 일치
+                                if trade_dvsn == d['sll_buy_dvsn_cd'][i]: 
+                                    d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
+                                    d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                    d_order_dt = d['ord_dt'][i]
+                                    d_order_tmd = d['ord_tmd'][i]
+                                    d_name = d['prdt_name'][i]
+                                    d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                    d_order_amount = d['ord_qty'][i]
+                                    d_total_complete_qty = d['tot_ccld_qty'][i]
+                                    d_remain_qty = d['rmn_qty'][i]
+                                    d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                    context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                
+                except Exception as e:
+                    print('일별주문체결 조회 오류.',e)
+                    context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 오류 [" + company + "] : "+str(e))
+
+            else:
+                print("매매구분(전체:0 매수:1 매도:2) 미존재")
+                context.bot.send_message(chat_id=user_id, text="매매구분(전체:0 매수:1 매도:2) 미존재 [" + company + "]")    
+        
+        elif menuNum == '142':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+               
                 commandBot = user_text.split(sep=',', maxsplit=3)
                 print("commandBot[1] : ", commandBot[1])    # 주문번호
                 print("commandBot[2] : ", commandBot[2])    # 정정가
@@ -3670,7 +3746,7 @@ def echo(update, context):
                 print("주문정정 주문번호 미존재")
                 context.bot.send_message(chat_id=user_id, text="주문정정 주문번호 미존재 [" + company + "]")                    
 
-        elif menuNum == '142':
+        elif menuNum == '143':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
