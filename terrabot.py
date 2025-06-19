@@ -71,10 +71,14 @@ chartReq = "1"
 g_buy_code = ""
 g_sell_code = ""
 g_company = ""
+g_order_no = ""
+g_dvsn_cd = ""
 g_buy_price = 0
 g_buy_amount = 0
 g_sell_price = 0
 g_sell_amount = 0
+g_revise_price = 0
+g_remain_qty = 0
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -130,6 +134,11 @@ def get_command3(update, context) :
     show_markup = InlineKeyboardMarkup([button_list])
 
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup    
+
+def get_command4(update, context) :
+    button_list = build_button(["정정진행", "7mjs정정", "7m정정", "js정정", "취소"]) # make button list
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
+    update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
 # ngrok URL 가져오기
 def get_ngrok_url(retries=5, delay=2):
@@ -763,6 +772,40 @@ def callback_get(update, context) :
                                       message_id=update.callback_query.message.message_id)
         return
 
+    elif data_selected.find("정정진행") != -1:
+
+        if menuNum != "0":
+            ac = account()
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
+
+            # 주문정정
+            try:
+                c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", g_order_no, g_remain_qty, g_revise_price)
+                if c['ODNO'] != "":
+                    print("주문정정 완료")
+                    context.bot.edit_message_text(text="주문정정 완료 [" + g_company + "], 주문번호 : <code>" + str(int(c['ODNO'])) + "</code>", parse_mode='HTML',
+                                                        chat_id=update.callback_query.message.chat_id,
+                                                        message_id=update.callback_query.message.message_id)
+                else:
+                    print("주문철회 실패")
+                    context.bot.edit_message_text(text="주문정정 실패 [" + g_company + "]",
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+                    
+            except Exception as e:
+                print('주문정정 오류.', e)
+                context.bot.edit_message_text(text="주문정정 오류 [" + g_company + "] : "+str(e),
+                                                    chat_id=update.callback_query.message.chat_id,
+                                                    message_id=update.callback_query.message.message_id)
+
+        else:
+            context.bot.edit_message_text(text="처음 메뉴부터 주문정정 진행하세요.",
+                                          chat_id=update.callback_query.message.chat_id,
+                                          message_id=update.callback_query.message.message_id)                
+    
     elif data_selected.find("매수진행") != -1:
 
         if menuNum != "0":
@@ -2214,7 +2257,7 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가(시장가=0)를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
-           
+
             elif data_selected.find("주문철회") != -1:
                 menuNum = "142"
 
@@ -2629,6 +2672,10 @@ def echo(update, context):
     global g_sell_code
     global g_company
     global chartReq
+    global g_order_no
+    global g_revise_price
+    global g_dvsn_cd
+    global g_remain_qty
 
     # 주식 현재가
     stck_prpr = ''
@@ -3040,17 +3087,19 @@ def echo(update, context):
                  # 정정가 존재시
                 if commandBot[2].isdecimal():
 
-                    replace_price = commandBot[2]
-                    print("정정가 : "+replace_price)
+                    revise_price = commandBot[2]
+                    print("정정가 : "+revise_price)
 
                     try:
                         # 일별주문체결 조회
                         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no)
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
-                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
                         for i, name in enumerate(d.index):
+
+                            d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                             d_order_type = d['sll_buy_dvsn_cd_name'][i]
                             d_order_dt = d['ord_dt'][i]
                             d_order_tmd = d['ord_tmd'][i]
@@ -3063,19 +3112,15 @@ def echo(update, context):
 
                             context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
 
-                        try:
-                            # 주문정정
-                            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, d_remain_qty, replace_price)
-                            if c['ODNO'] != "":
-                                print("주문정정 완료")
-                                context.bot.send_message(chat_id=user_id, text= "주문정정 완료 [" + company + "], 주문번호 : <code>" + str(int(c['ODNO'])) + "</code>", parse_mode='HTML')
-                            else:
-                                print("주문철회 실패")
-                                context.bot.send_message(chat_id=user_id, text="주문정정 실패 [" + company + "]")
-
-                        except Exception as e:
-                            print('주문정정 오류.', e)
-                            context.bot.send_message(chat_id=user_id, text="주문정정 오류 [" + company + "] : "+str(e))
+                        g_order_no = order_no
+                        g_revise_price = revise_price
+                        g_dvsn_cd = d_dvsn_cd
+                        g_remain_qty = int(d_remain_qty)
+                        g_company = company
+                        
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : " + format(int(revise_price), ',d') + "원, 정정수량 : " + format(int(d_remain_qty), ',d') + "주 => /revise")
+                        get_handler = CommandHandler('revise', get_command4)
+                        updater.dispatcher.add_handler(get_handler)
 
                     except Exception as e:
                         print('일별주문체결 조회 오류.',e)
