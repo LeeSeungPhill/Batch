@@ -774,40 +774,34 @@ def callback_get(update, context) :
 
     elif data_selected.find("정정진행") != -1:
 
-        if menuNum != "0":
-            ac = account()
-            acct_no = ac['acct_no']
-            access_token = ac['access_token']
-            app_key = ac['app_key']
-            app_secret = ac['app_secret']
+        ac = account()
+        acct_no = ac['acct_no']
+        access_token = ac['access_token']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
 
-            # 주문정정
-            try:
-                c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", g_order_no, g_remain_qty, g_revise_price)
-                if c['ODNO'] != "":
-                    print("주문정정 완료")
-                    context.bot.edit_message_text(text="주문정정 완료 [" + g_company + "], 주문번호 : <code>" + str(int(c['ODNO'])) + "</code>", parse_mode='HTML',
-                                                        chat_id=update.callback_query.message.chat_id,
-                                                        message_id=update.callback_query.message.message_id)
-                else:
-                    print("주문정정 실패")
-                    context.bot.edit_message_text(text="주문정정 실패 [" + g_company + "]",
+        # 주문정정
+        try:
+            c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", g_order_no, g_remain_qty, g_revise_price)
+            if c['ODNO'] != "":
+                print("주문정정 완료")
+                context.bot.edit_message_text(text="주문정정 완료 [" + g_company + "], 주문번호 : <code>" + str(int(c['ODNO'])) + "</code>", parse_mode='HTML',
                                                     chat_id=update.callback_query.message.chat_id,
                                                     message_id=update.callback_query.message.message_id)
-                    
-                menuNum = "0"                    
-                    
-            except Exception as e:
-                print('주문정정 오류.', e)
-                menuNum = "0"
-                context.bot.edit_message_text(text="주문정정 오류 [" + g_company + "] : "+str(e),
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
-
-        else:
-            context.bot.edit_message_text(text="처음 메뉴부터 주문정정 진행하세요.",
-                                          chat_id=update.callback_query.message.chat_id,
-                                          message_id=update.callback_query.message.message_id)                
+            else:
+                print("주문정정 실패")
+                context.bot.edit_message_text(text="주문정정 실패 [" + g_company + "]",
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
+                
+            menuNum = "0"                    
+                
+        except Exception as e:
+            print('주문정정 오류.', e)
+            menuNum = "0"
+            context.bot.edit_message_text(text="주문정정 오류 [" + g_company + "] : "+str(e),
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id)
     
     elif data_selected.find("매수진행") != -1:
 
