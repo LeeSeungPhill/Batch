@@ -341,7 +341,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ACNT_PRDT_CD": "01",
                "KRX_FWDG_ORD_ORGNO": "06010",
                "ORGN_ODNO": order_no,
-               "ORD_DVSN": "00",                # 지정가 : 00, 시장가 : 01
+               "ORD_DVSN": "00" if int(order_price) > 0 else "01",  # 지정가 : 00, 시장가 : 01
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
@@ -2211,7 +2211,7 @@ def callback_get(update, context) :
             elif data_selected.find("주문정정") != -1:
                 menuNum = "141"
 
-                context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가를 입력하세요.",
+                context.bot.edit_message_text(text="주문정정할 종목코드(종목명), 주문번호, 정정가(시장가=0)를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
            
