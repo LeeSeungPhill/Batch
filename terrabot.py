@@ -803,6 +803,8 @@ def callback_get(update, context) :
             context.bot.edit_message_text(text="주문정정 오류 [" + g_company + "] : "+str(e),
                                                 chat_id=update.callback_query.message.chat_id,
                                                 message_id=update.callback_query.message.message_id)
+
+        return    
     
     elif data_selected.find("7mjs정정") != -1:
 
@@ -853,7 +855,6 @@ def callback_get(update, context) :
 
                     else:
                         print("주문정정내역 미존재")
-                        
                         msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
                         result_msgs.append(msg)        
                     
@@ -877,7 +878,161 @@ def callback_get(update, context) :
                 parse_mode='HTML',
                 chat_id=update.callback_query.message.chat_id,
                 message_id=update.callback_query.message.message_id
-            )                
+            )
+
+        return                    
+    
+    elif data_selected.find("7m정정") != -1:
+
+        result_msgs = []
+        nickname_list = ['phills75', 'yh480825']
+        for nick in nickname_list:
+            ac = account(nick)
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
+        
+            try:
+                # 일별주문체결 조회
+                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_code, '')
+                
+                if len(output1) > 0:
+                
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                    order_type = ""
+                    order_no = 0
+                    rmn_qty = 0
+
+                    for i, name in enumerate(d.index):
+
+                        # 매수매도구분코드 일치하고 잔여수량 존재시
+                        if g_dvsn_cd == d['sll_buy_dvsn_cd'][i]: 
+                            order_type = "매도" if g_dvsn_cd == "01" else "매수"
+                            
+                            if int(d['rmn_qty'][i]) > 0: 
+                                order_no = int(d['odno'][i])
+                                rmn_qty = int(d['rmn_qty'][i])
+
+                    if rmn_qty > 0:
+                        # 주문정정
+                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                        if c['ODNO'] != "":
+                            print("주문정정 완료")
+                            msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                            result_msgs.append(msg)
+                            
+                        else:
+                            print("주문정정 실패")
+                            msg = f"[{nick}:{g_company}] 주문정정 실패"
+                            result_msgs.append(msg)
+
+                    else:
+                        print("주문정정내역 미존재")
+                        msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
+                        result_msgs.append(msg)        
+                    
+                else:
+                    print("주문내역 미존재")
+                    msg = f"[{nick}:{g_company}] 주문내역 미존재"
+                    result_msgs.append(msg)
+                
+                menuNum = "0"
+                    
+            except Exception as e:
+                print('주문정정 오류.', e)
+                msg = f"[{nick}:{g_company}] 주문정정 오류 - {str(e)}"
+                result_msgs.append(msg)
+                menuNum = "0"
+
+            final_message = "\n".join(result_msgs) if result_msgs else "주문정정 조건을 충족하지 못했습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )
+
+        return
+    
+    elif data_selected.find("js정정") != -1:
+
+        result_msgs = []
+        nickname_list = ['phills13', 'phills15']
+        for nick in nickname_list:
+            ac = account(nick)
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
+        
+            try:
+                # 일별주문체결 조회
+                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_code, '')
+                
+                if len(output1) > 0:
+                
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                    order_type = ""
+                    order_no = 0
+                    rmn_qty = 0
+
+                    for i, name in enumerate(d.index):
+
+                        # 매수매도구분코드 일치하고 잔여수량 존재시
+                        if g_dvsn_cd == d['sll_buy_dvsn_cd'][i]: 
+                            order_type = "매도" if g_dvsn_cd == "01" else "매수"
+                            
+                            if int(d['rmn_qty'][i]) > 0: 
+                                order_no = int(d['odno'][i])
+                                rmn_qty = int(d['rmn_qty'][i])
+
+                    if rmn_qty > 0:
+                        # 주문정정
+                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                        if c['ODNO'] != "":
+                            print("주문정정 완료")
+                            msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
+                            result_msgs.append(msg)
+                            
+                        else:
+                            print("주문정정 실패")
+                            msg = f"[{nick}:{g_company}] 주문정정 실패"
+                            result_msgs.append(msg)
+
+                    else:
+                        print("주문정정내역 미존재")
+                        msg = f"[{nick}:{g_company}] {order_type} 주문정정내역 미존재"
+                        result_msgs.append(msg)        
+                    
+                else:
+                    print("주문내역 미존재")
+                    msg = f"[{nick}:{g_company}] 주문내역 미존재"
+                    result_msgs.append(msg)
+                
+                menuNum = "0"
+                    
+            except Exception as e:
+                print('주문정정 오류.', e)
+                msg = f"[{nick}:{g_company}] 주문정정 오류 - {str(e)}"
+                result_msgs.append(msg)
+                menuNum = "0"
+
+            final_message = "\n".join(result_msgs) if result_msgs else "주문정정 조건을 충족하지 못했습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )
+
+        return
     
     elif data_selected.find("매수진행") != -1:
 
