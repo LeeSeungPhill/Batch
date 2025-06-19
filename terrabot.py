@@ -142,7 +142,7 @@ def get_command4(update, context) :
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
 def get_command5(update, context) :
-    button_list = build_button(["취소진행", "7mjs취소", "7m취소", "js취소", "취소"]) # make button list
+    button_list = build_button(["철회진행", "7mjs철회", "7m철회", "js철회", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -780,7 +780,7 @@ def callback_get(update, context) :
                                       message_id=update.callback_query.message.message_id)
         return
 
-    elif data_selected.find("취소진행") != -1:
+    elif data_selected.find("철회진행") != -1:
 
         if g_order_no != "":
             ac = account()
@@ -816,7 +816,7 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)                
     
-    elif data_selected.find("7mjs취소") != -1:
+    elif data_selected.find("7mjs철회") != -1:
 
         if g_order_no != "":
             result_msgs = []
@@ -897,7 +897,7 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)   
     
-    elif data_selected.find("7m취소") != -1:
+    elif data_selected.find("7m철회") != -1:
 
         if g_order_no != "":
             result_msgs = []
@@ -978,7 +978,7 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)  
             
-    elif data_selected.find("js취소") != -1:
+    elif data_selected.find("js철회") != -1:
 
         if g_order_no != "":
             result_msgs = []
@@ -2731,7 +2731,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["주문조회", "주문정정", "주문취소", "취소"], data_selected)
+            button_list = build_button(["주문조회", "주문정정", "주문철회", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="일별체결 메뉴를 선택해 주세요.",
@@ -2793,7 +2793,7 @@ def callback_get(update, context) :
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("주문취소") != -1:
+            elif data_selected.find("주문철회") != -1:
                 menuNum = "142"
 
                 context.bot.edit_message_text(text="주문취소할 종목코드(종목명), 주문번호를 입력하세요.",
