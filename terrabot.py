@@ -765,6 +765,8 @@ def handle_interest_buy(update, context):
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
+    global g_order_no
+    global g_remain_qty
 
     print("callback0 : ", data_selected)
     if data_selected.find("취소") != -1:
@@ -775,7 +777,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("정정진행") != -1:
 
-        if g_order_no != "" or int(g_remain_qty) > 0:
+        if g_order_no != "" and int(g_remain_qty) > 0:
             ac = account()
             acct_no = ac['acct_no']
             access_token = ac['access_token']
@@ -811,7 +813,7 @@ def callback_get(update, context) :
     
     elif data_selected.find("7mjs정정") != -1:
 
-        if g_order_no != "" or int(g_remain_qty) > 0:
+        if g_order_no != "" and int(g_remain_qty) > 0:
             result_msgs = []
             nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15']
             for nick in nickname_list:
@@ -893,7 +895,7 @@ def callback_get(update, context) :
     
     elif data_selected.find("7m정정") != -1:
 
-        if g_order_no != "" or int(g_remain_qty) > 0:
+        if g_order_no != "" and int(g_remain_qty) > 0:
             result_msgs = []
             nickname_list = ['phills75', 'yh480825']
             for nick in nickname_list:
@@ -975,7 +977,7 @@ def callback_get(update, context) :
     
     elif data_selected.find("js정정") != -1:
 
-        if g_order_no != "" or int(g_remain_qty) > 0:
+        if g_order_no != "" and int(g_remain_qty) > 0:
             result_msgs = []
             nickname_list = ['phills13', 'phills15']
             for nick in nickname_list:
