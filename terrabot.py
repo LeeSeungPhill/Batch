@@ -852,7 +852,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문취소
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
                                     if c['ODNO'] != "":
                                         print("주문취소 완료")
                                         msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -932,7 +932,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문취소
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
                                     if c['ODNO'] != "":
                                         print("주문취소 완료")
                                         msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -1012,7 +1012,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문취소
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", order_no, "0", "0")
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
                                     if c['ODNO'] != "":
                                         print("주문취소 완료")
                                         msg = f"[{nick}:{g_company}] 주문취소 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -1128,7 +1128,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문정정
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", str(order_no), rmn_qty, g_revise_price)
                                     if c['ODNO'] != "":
                                         print("주문정정 완료")
                                         msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -1209,7 +1209,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문정정
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", str(order_no), rmn_qty, g_revise_price)
                                     if c['ODNO'] != "":
                                         print("주문정정 완료")
                                         msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -1290,7 +1290,7 @@ def callback_get(update, context) :
                                     rmn_qty = int(d['rmn_qty'][i])
 
                                     # 주문정정
-                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, rmn_qty, g_revise_price)
+                                    c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", str(order_no), rmn_qty, g_revise_price)
                                     if c['ODNO'] != "":
                                         print("주문정정 완료")
                                         msg = f"[{nick}:{g_company}] 주문정정 완료, 주문번호 : <code>{str(int(c['ODNO']))}</code>"
@@ -2775,7 +2775,7 @@ def callback_get(update, context) :
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            msg = f"[{d_name}(<code>{d_order_no}</code>) - {d_order_dt}:{d_order_tmd}] 주문번호 : <code>{str(d_order_no)}</code>, {d_order_type}가 : {format(int(d_order_price), ',d')}원, {d_order_type}량 : {format(int(d_order_amount), ',d')}주, 체결수량 : {format(int(d_total_complete_qty), ',d')}주, 잔여수량 : {format(int(d_remain_qty), ',d')}주, 총체결금액 : {format(int(d_total_complete_amt), ',d')}원"
+                            msg = f"[{d_name} - {d_order_dt}:{d_order_tmd}] 주문번호 : <code>{str(d_order_no)}</code>, {d_order_type}가 : {format(int(d_order_price), ',d')}원, {d_order_type}량 : {format(int(d_order_amount), ',d')}주, 체결수량 : {format(int(d_total_complete_qty), ',d')}주, 잔여수량 : {format(int(d_remain_qty), ',d')}주, 총체결금액 : {format(int(d_total_complete_amt), ',d')}원"
                             result_msgs.append(msg)
 
                         final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
