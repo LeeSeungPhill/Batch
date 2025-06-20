@@ -3232,6 +3232,8 @@ def echo(update, context):
     global g_dvsn_cd
     global g_remain_qty
 
+    code = ""
+    company = ""
     # 주식 현재가
     stck_prpr = ''
     # 전일 대비율
@@ -3694,7 +3696,7 @@ def echo(update, context):
 
                                     context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
 
-                            if trade_list_chk != "":
+                            if trade_list_chk == "":
                                 context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
 
                     else:
