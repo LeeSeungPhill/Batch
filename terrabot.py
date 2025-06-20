@@ -2778,7 +2778,7 @@ def callback_get(update, context) :
                             msg = f"[{d_name} - {d_order_dt}:{d_order_tmd}] 주문번호 : <code>{str(d_order_no)}</code>, {d_order_type}가 : {format(int(d_order_price), ',d')}원, {d_order_type}량 : {format(int(d_order_amount), ',d')}주, 체결수량 : {format(int(d_total_complete_qty), ',d')}주, 잔여수량 : {format(int(d_remain_qty), ',d')}주, 총체결금액 : {format(int(d_total_complete_amt), ',d')}원"
                             result_msgs.append(msg)
 
-                        final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                        final_message = "\n".join(result_msgs) if result_msgs else "일별주문체결 조회 대상이 존재하지 않습니다."
 
                         context.bot.edit_message_text(
                             text=final_message,
@@ -3659,10 +3659,11 @@ def echo(update, context):
                         order_type = ""
                         order_no = 0
                         rmn_qty = 0
+                        trade_list_chk = ""
 
                         if trade_dvsn == '00':
-
                             for i, name in enumerate(d.index):
+                                trade_list_chk = "exists"
                                 d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                                 d_order_type = d['sll_buy_dvsn_cd_name'][i]
                                 d_order_dt = d['ord_dt'][i]
@@ -3677,8 +3678,6 @@ def echo(update, context):
                                 context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
                             
                         else:
-                            trade_list_chk = ""
-
                             for i, name in enumerate(d.index):
                                 # 매수매도구분코드 일치
                                 if trade_dvsn == d['sll_buy_dvsn_cd'][i]: 
@@ -3696,8 +3695,8 @@ def echo(update, context):
 
                                     context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
 
-                            if trade_list_chk == "":
-                                context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
+                        if trade_list_chk == "":
+                            context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
 
                     else:
                         context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 : " + company)
