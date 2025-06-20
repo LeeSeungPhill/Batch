@@ -2761,6 +2761,7 @@ def callback_get(update, context) :
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                        result_msgs = []
 
                         for i, name in enumerate(d.index):
                             d_order_no = int(d['odno'][i])
@@ -2774,10 +2775,22 @@ def callback_get(update, context) :
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            context.bot.send_message(chat_id=update.effective_chat.id, text="[" + d_name + "(<code>" + d['pdno'][i]+ "</code>) - " + d_order_dt + ":" + d_order_tmd + "] 주문번호 : {<code>" + str(d_order_no) + "</code>}, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d') + "원", parse_mode='HTML')
+                            msg = f"[{d_name}(<code>{d_order_no}</code>) - {d_order_dt}:{d_order_tmd}] 주문번호 : <code>{str(d_order_no)}</code>, {d_order_type}가 : {format(int(d_order_price), ',d')}원, {d_order_type}량 : {format(int(d_order_amount), ',d')}주, 체결수량 : {format(int(d_total_complete_qty), ',d')}주, 잔여수량 : {format(int(d_remain_qty), ',d')}주, 총체결금액 : {format(int(d_total_complete_amt), ',d')}원"
+                            result_msgs.append(msg)
+
+                        final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+
+                        context.bot.edit_message_text(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=update.callback_query.message.chat_id,
+                            message_id=update.callback_query.message.message_id
+                        )
 
                     else:
-                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")    
+                        context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
+                                                 chat_id=update.callback_query.message.chat_id,
+                                                 message_id=update.callback_query.message.message_id)
 
                 except Exception as e:
                     print('일별주문체결 조회 오류.', e)
@@ -3624,11 +3637,14 @@ def echo(update, context):
                 # 매매구분(전체:0 매수:1 매도:2)
                 if commandBot[1] == '1':
                     trade_dvsn = '02'
+                    trade_dvsn_nm = '매수'
                 elif commandBot[1] == '2':
-                    trade_dvsn = '01'    
+                    trade_dvsn = '01'
+                    trade_dvsn_nm = '매도'
                 else:
                     trade_dvsn = '00'
-                print("매매구분(전체:0 매수:1 매도:2) : "+trade_dvsn)
+                    trade_dvsn_nm = '전체'
+                print("매매구분(전체:0 매수:1 매도:2) : "+trade_dvsn_nm)
 
                 try:
                     # 일별주문체결 조회
@@ -3659,11 +3675,12 @@ def echo(update, context):
                                 context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
                             
                         else:
+                            trade_list_chk = ""
 
                             for i, name in enumerate(d.index):
-                                
                                 # 매수매도구분코드 일치
                                 if trade_dvsn == d['sll_buy_dvsn_cd'][i]: 
+                                    trade_list_chk = "exists"
                                     d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                                     d_order_type = d['sll_buy_dvsn_cd_name'][i]
                                     d_order_dt = d['ord_dt'][i]
@@ -3677,8 +3694,11 @@ def echo(update, context):
 
                                     context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
 
+                            if trade_list_chk != "":
+                                context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
+
                     else:
-                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 : " + company)
 
                 except Exception as e:
                     print('일별주문체결 조회 오류.',e)
@@ -3744,7 +3764,7 @@ def echo(update, context):
                             updater.dispatcher.add_handler(get_handler)
 
                         else:
-                            context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")
+                            context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 : " + company)
 
                     except Exception as e:
                         print('일별주문체결 조회 오류.',e)
@@ -3804,7 +3824,7 @@ def echo(update, context):
                         updater.dispatcher.add_handler(get_handler)
 
                     else:
-                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")   
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 : " + company)
 
                 except Exception as e:
                     print('일별주문체결 조회 오류.',e)
