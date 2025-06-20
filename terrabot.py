@@ -2756,23 +2756,28 @@ def callback_get(update, context) :
 
                     # 일별주문체결 조회
                     output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '')
-                    tdf = pd.DataFrame(output1)
-                    tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                    for i, name in enumerate(d.index):
-                        d_order_no = int(d['odno'][i])
-                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                        d_order_dt = d['ord_dt'][i]
-                        d_order_tmd = d['ord_tmd'][i]
-                        d_name = d['prdt_name'][i]
-                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                        d_order_amount = d['ord_qty'][i]
-                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                        d_remain_qty = d['rmn_qty'][i]
-                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                    if len(output1) > 0:
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                        context.bot.send_message(chat_id=update.effective_chat.id, text="[" + d_name + "(<code>" + d['pdno'][i]+ "</code>) - " + d_order_dt + ":" + d_order_tmd + "] 주문번호 : {<code>" + str(d_order_no) + "</code>}, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d') + "원", parse_mode='HTML')
+                        for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            context.bot.send_message(chat_id=update.effective_chat.id, text="[" + d_name + "(<code>" + d['pdno'][i]+ "</code>) - " + d_order_dt + ":" + d_order_tmd + "] 주문번호 : {<code>" + str(d_order_no) + "</code>}, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d') + "원", parse_mode='HTML')
+
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")    
 
                 except Exception as e:
                     print('일별주문체결 조회 오류.', e)
@@ -3618,9 +3623,9 @@ def echo(update, context):
                    
                 # 매매구분(전체:0 매수:1 매도:2)
                 if commandBot[1] == '1':
-                    trade_dvsn = '01'
+                    trade_dvsn = '02'
                 elif commandBot[1] == '2':
-                    trade_dvsn = '02'    
+                    trade_dvsn = '01'    
                 else:
                     trade_dvsn = '00'
                 print("매매구분(전체:0 매수:1 매도:2) : "+trade_dvsn)
@@ -3630,7 +3635,6 @@ def echo(update, context):
                     output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, '')
 
                     if len(output1) > 0:
-                    
                         tdf = pd.DataFrame(output1)
                         tdf.set_index('odno')
                         d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
@@ -3672,7 +3676,10 @@ def echo(update, context):
                                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                     context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
-                                
+
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")
+
                 except Exception as e:
                     print('일별주문체결 조회 오류.',e)
                     context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 오류 [" + company + "] : "+str(e))
@@ -3705,34 +3712,39 @@ def echo(update, context):
                     try:
                         # 일별주문체결 조회
                         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no)
-                        tdf = pd.DataFrame(output1)
-                        tdf.set_index('odno')
-                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                        for i, name in enumerate(d.index):
-                            d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
-                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            d_order_dt = d['ord_dt'][i]
-                            d_order_tmd = d['ord_tmd'][i]
-                            d_name = d['prdt_name'][i]
-                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            d_order_amount = d['ord_qty'][i]
-                            d_total_complete_qty = d['tot_ccld_qty'][i]
-                            d_remain_qty = d['rmn_qty'][i]
-                            d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
-
-                        g_order_no = order_no
-                        g_revise_price = revise_price
-                        g_dvsn_cd = d_dvsn_cd
-                        g_remain_qty = int(d_remain_qty)
-                        g_code = code
-                        g_company = company
                         
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : " + format(int(revise_price), ',d') + "원, 정정수량 : " + format(int(d_remain_qty), ',d') + "주 => /revise")
-                        get_handler = CommandHandler('revise', get_command4)
-                        updater.dispatcher.add_handler(get_handler)
+                        if len(output1) > 0:
+                            tdf = pd.DataFrame(output1)
+                            tdf.set_index('odno')
+                            d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                            for i, name in enumerate(d.index):
+                                d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
+                                d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                d_order_dt = d['ord_dt'][i]
+                                d_order_tmd = d['ord_tmd'][i]
+                                d_name = d['prdt_name'][i]
+                                d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                d_order_amount = d['ord_qty'][i]
+                                d_total_complete_qty = d['tot_ccld_qty'][i]
+                                d_remain_qty = d['rmn_qty'][i]
+                                d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
+
+                            g_order_no = order_no
+                            g_revise_price = revise_price
+                            g_dvsn_cd = d_dvsn_cd
+                            g_remain_qty = int(d_remain_qty)
+                            g_code = code
+                            g_company = company
+                            
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : " + format(int(revise_price), ',d') + "원, 정정수량 : " + format(int(d_remain_qty), ',d') + "주 => /revise")
+                            get_handler = CommandHandler('revise', get_command4)
+                            updater.dispatcher.add_handler(get_handler)
+
+                        else:
+                            context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")
 
                     except Exception as e:
                         print('일별주문체결 조회 오류.',e)
@@ -3762,32 +3774,37 @@ def echo(update, context):
                 try:
                     # 일별주문체결 조회
                     output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no)
-                    tdf = pd.DataFrame(output1)
-                    tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                    for i, name in enumerate(d.index):
-                        d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
-                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                        d_order_dt = d['ord_dt'][i]
-                        d_order_tmd = d['ord_tmd'][i]
-                        d_name = d['prdt_name'][i]
-                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                        d_order_amount = d['ord_qty'][i]
-                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                        d_remain_qty = d['rmn_qty'][i]
-                        d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                        context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
-
-                    g_order_no = order_no
-                    g_dvsn_cd = d_dvsn_cd
-                    g_code = code
-                    g_company = company
                     
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문가 : " + format(int(d_order_price), ',d') + "원, 취소수량 : " + format(int(d_remain_qty), ',d') + "주 => /cancel")
-                    get_handler = CommandHandler('cancel', get_command5)
-                    updater.dispatcher.add_handler(get_handler)
+                    if len(output1) > 0:
+                        tdf = pd.DataFrame(output1)
+                        tdf.set_index('odno')
+                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                        for i, name in enumerate(d.index):
+                            d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
+                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            d_order_dt = d['ord_dt'][i]
+                            d_order_tmd = d['ord_tmd'][i]
+                            d_name = d['prdt_name'][i]
+                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            d_order_amount = d['ord_qty'][i]
+                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                            d_remain_qty = d['rmn_qty'][i]
+                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                            context.bot.send_message(chat_id=user_id, text="일별체결정보 [" + d_name + " - " + d_order_dt + ":" + d_order_tmd + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결수량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔여수량 : " + format(int(d_remain_qty), ',d') + "주, 총체결금액 : " + format(int(d_total_complete_amt), ',d')+"원")
+
+                        g_order_no = order_no
+                        g_dvsn_cd = d_dvsn_cd
+                        g_code = code
+                        g_company = company
+                        
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문가 : " + format(int(d_order_price), ',d') + "원, 취소수량 : " + format(int(d_remain_qty), ',d') + "주 => /cancel")
+                        get_handler = CommandHandler('cancel', get_command5)
+                        updater.dispatcher.add_handler(get_handler)
+
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="일별주문체결 조회 미존재 [" + company + "] : ")   
 
                 except Exception as e:
                     print('일별주문체결 조회 오류.',e)
