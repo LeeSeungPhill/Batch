@@ -3664,6 +3664,7 @@ def echo(update, context):
                         if trade_dvsn == '00':
                             for i, name in enumerate(d.index):
                                 trade_list_chk = "exists"
+                                d_order_no = int(d['odno'][i])
                                 d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                                 d_order_type = d['sll_buy_dvsn_cd_name'][i]
                                 d_order_dt = d['ord_dt'][i]
@@ -3675,13 +3676,14 @@ def echo(update, context):
                                 d_remain_qty = d['rmn_qty'][i]
                                 d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
                             
                         else:
                             for i, name in enumerate(d.index):
                                 # 매수매도구분코드 일치
                                 if trade_dvsn == d['sll_buy_dvsn_cd'][i]: 
                                     trade_list_chk = "exists"
+                                    d_order_no = int(d['odno'][i])
                                     d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                                     d_order_type = d['sll_buy_dvsn_cd_name'][i]
                                     d_order_dt = d['ord_dt'][i]
@@ -3693,7 +3695,7 @@ def echo(update, context):
                                     d_remain_qty = d['rmn_qty'][i]
                                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                    context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                    context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
 
                         if trade_list_chk == "":
                             context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
@@ -3740,6 +3742,7 @@ def echo(update, context):
                             d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
                             for i, name in enumerate(d.index):
+                                d_order_no = int(d['odno'][i])
                                 d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                                 d_order_type = d['sll_buy_dvsn_cd_name'][i]
                                 d_order_dt = d['ord_dt'][i]
@@ -3751,7 +3754,7 @@ def echo(update, context):
                                 d_remain_qty = d['rmn_qty'][i]
                                 d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
 
                             g_order_no = order_no
                             g_revise_price = revise_price
@@ -3802,6 +3805,7 @@ def echo(update, context):
                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
                         for i, name in enumerate(d.index):
+                            d_order_no = int(d['odno'][i])
                             d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
                             d_order_type = d['sll_buy_dvsn_cd_name'][i]
                             d_order_dt = d['ord_dt'][i]
@@ -3813,7 +3817,7 @@ def echo(update, context):
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                            context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
 
                         g_order_no = order_no
                         g_dvsn_cd = d_dvsn_cd
