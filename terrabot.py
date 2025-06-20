@@ -3676,7 +3676,7 @@ def echo(update, context):
                                 d_remain_qty = d['rmn_qty'][i]
                                 d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원", parse_mode='HTML')
                             
                         else:
                             for i, name in enumerate(d.index):
@@ -3695,7 +3695,7 @@ def echo(update, context):
                                     d_remain_qty = d['rmn_qty'][i]
                                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                    context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                    context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원", parse_mode='HTML')
 
                         if trade_list_chk == "":
                             context.bot.send_message(chat_id=user_id, text="일별주문체결 " + trade_dvsn_nm + " 대상 미존재 : " + company)                
@@ -3754,7 +3754,7 @@ def echo(update, context):
                                 d_remain_qty = d['rmn_qty'][i]
                                 d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                                context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원", parse_mode='HTML')
 
                             g_order_no = order_no
                             g_revise_price = revise_price
@@ -3817,7 +3817,7 @@ def echo(update, context):
                             d_remain_qty = d['rmn_qty'][i]
                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                            context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원")
+                            context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원", parse_mode='HTML')
 
                         g_order_no = order_no
                         g_dvsn_cd = d_dvsn_cd
