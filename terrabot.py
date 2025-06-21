@@ -3423,7 +3423,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set through_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set through_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3460,7 +3460,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set leave_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set leave_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3497,7 +3497,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set resist_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set resist_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3534,7 +3534,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set support_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set support_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3571,7 +3571,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set trend_high_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set trend_high_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3608,7 +3608,7 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set trend_low_price = %s where acct_no = %s and code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set trend_low_price = %s where code = %s"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3940,7 +3940,7 @@ def echo(update, context):
 
                     # 보유종목 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_resist_price = %s where acct_no = %s and code = %s and proc_yn = 'Y'"
+                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_resist_price = %s where code = %s and proc_yn = 'Y'"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -3977,7 +3977,7 @@ def echo(update, context):
 
                     # 보유종목 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_support_price = %s where acct_no = %s and code = %s and proc_yn = 'Y'"
+                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_support_price = %s where code = %s and proc_yn = 'Y'"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -4014,7 +4014,7 @@ def echo(update, context):
 
                     # 보유종목 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set end_target_price = %s where acct_no = %s and code = %s and proc_yn = 'Y'"
+                    delete_query0 = "update \"stockBalance_stock_balance\" set end_target_price = %s where code = %s and proc_yn = 'Y'"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
@@ -4051,7 +4051,7 @@ def echo(update, context):
 
                     # 보유종목 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set end_loss_price = %s where acct_no = %s and code = %s and proc_yn = 'Y'"
+                    delete_query0 = "update \"stockBalance_stock_balance\" set end_loss_price = %s where code = %s and proc_yn = 'Y'"
                     # update 인자값 설정
                     record_to_update0 = ([commandBot[1], str(acct_no), code])
                     # DB 연결된 커서의 쿼리 수행
