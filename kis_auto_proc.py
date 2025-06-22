@@ -211,7 +211,7 @@ if result_one == None:
             result_three_one = cur31.fetchall()
             cur31.close()
 
-            # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
+            # 매매자동처리 거래량과 주식당일분봉조회의 최대 거래량 비교
             for i in result_three_one:
                 print("종목명 : " + i[1])
 
@@ -257,7 +257,7 @@ if result_one == None:
                         break
                     기준봉 = candidates.iloc[0]
 
-                # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우
+                # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우 매매자동처리 생성 및 기존 매매자동처리 변경(proc_yn = 'N')
                 if 기준봉['volume'] > i[10]:
                     avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
