@@ -19,6 +19,7 @@ conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
 time = datetime.now().strftime("%H%M")
+second = datetime.now().strftime("%H%M%S")
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -140,6 +141,29 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
 
     return pd.DataFrame(output)
 
+# 주식당일분봉조회
+def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "FHKST03010200",
+               "custtype": "P"}
+    params = {
+                'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
+                'FID_INPUT_ISCD': code,
+                'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
+                'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
+                'FID_ETC_CLS_CODE': ""
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output2
+
 async def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
@@ -181,14 +205,123 @@ if result_one == None:
             app_secret = ac['app_secret']
 
             # 매매자동처리 조회
-            cur03 = conn.cursor()
+            cur31 = conn.cursor()
 
-            cur03.execute("select id, name, code, base_dtm, trade_tp, signal_cd, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum from trade_auto_proc where base_day = '" + today + "' and proc_yn = 'Y' and acct_no = '" + str(acct_no) + "'")
-            result_three = cur03.fetchall()
-            cur03.close()
+            cur31.execute("select id, name, code, base_dtm, trade_tp, signal_cd, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum from trade_auto_proc where base_day = '" + today + "' and proc_yn = 'Y' and acct_no = '" + str(acct_no) + "'")
+            result_three_one = cur31.fetchall()
+            cur31.close()
 
             # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
-            for i in result_three:
+            for i in result_three_one:
+                print("종목명 : " + i[1])
+
+                # 주식당일분봉조회
+                minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, i[2], second)
+                minute_list = []
+                for item in minute_info:
+                    minute_list.append({
+                        '체결시간': item['stck_cntg_hour'],
+                        '종가': item['stck_prpr'],
+                        '시가': item['stck_oprc'],
+                        '고가': item['stck_hgpr'],
+                        '저가': item['stck_lwpr'],
+                        '거래량': item['cntg_vol']
+                    })
+
+                df = pd.DataFrame(minute_list)
+                df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
+                df = df.sort_values('체결시간').reset_index(drop=True)
+            
+                df.rename(columns={
+                    '종가': 'close',
+                    '시가': 'open',
+                    '고가': 'high',
+                    '저가': 'low',
+                    '거래량': 'volume',
+                    '체결시간': 'timestamp'
+                }, inplace=True)
+
+                df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
+                df['body'] = (df['close'] - df['open']).abs()
+
+                # 기준봉: 가장 거래량 많은 봉
+                idx = df['volume'].idxmax()
+                기준봉 = df.loc[idx]
+
+                while True:
+                    이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
+                    candidates = 이후_봉들[
+                        (이후_봉들['volume'] >= 기준봉['volume']) 
+                    ]
+                    if candidates.empty:
+                        break
+                    기준봉 = candidates.iloc[0]
+
+                # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우
+                if 기준봉['volume'] > i[10]:
+                    avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+
+                    # 몸통 유형 구분
+                    body_value = 기준봉['body']
+                    if body_value > avg_body * 1.5:
+                        candle_body = "L"   # 장봉
+                    elif body_value < avg_body * 0.5:
+                        candle_body = "S"   # 단봉
+                    else:
+                        candle_body = "M"   # 보통
+                    
+                    # 매매자동처리 insert
+                    cur500 = conn.cursor()
+                    insert_query = """
+                        INSERT INTO trade_auto_proc (
+                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                        )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                    """
+                    # insert 인자값 설정
+                    cur500.execute(insert_query, (
+                        acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                    ))
+
+                    was_inserted = cur500.rowcount == 1
+
+                    conn.commit()
+                    cur500.close()
+
+                    if was_inserted:
+                        # 매매자동처리 update
+                        cur501 = conn.cursor()
+                        update_query = """
+                            UPDATE trade_auto_proc
+                            SET
+                                proc_yn = 'N'
+                                , chgr_id = 'AUTO_UP_SELL'
+                                , chg_date = %s
+                            WHERE acct_no = %s
+                            AND code = %s
+                            AND base_day = %s
+                            AND base_dtm <> %s
+                            AND trade_tp = 'S'
+                            AND proc_yn = 'Y'
+                        """
+
+                        # update 인자값 설정
+                        cur501.execute(update_query, (
+                            datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                        ))
+
+                        conn.commit()
+                        cur501.close()
+
+            # 매매자동처리 조회
+            cur32 = conn.cursor()
+
+            cur32.execute("select id, name, code, base_dtm, trade_tp, signal_cd, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum from trade_auto_proc where base_day = '" + today + "' and proc_yn = 'Y' and acct_no = '" + str(acct_no) + "'")
+            result_three_two = cur32.fetchall()
+            cur32.close()
+
+            # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
+            for i in result_three_two:
                 print("종목명 : " + i[1])
 
                 trail_signal_code = ""
