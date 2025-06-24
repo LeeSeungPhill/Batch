@@ -213,7 +213,6 @@ if result_one == None:
 
             # 매매자동처리 거래량과 주식당일분봉조회의 최대 거래량 비교
             for i in result_three_one:
-                print("종목명 : " + i[1])
 
                 # 주식당일분봉조회
                 minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, i[2], second)
@@ -259,6 +258,7 @@ if result_one == None:
 
                 # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우 매매자동처리 생성 및 기존 매매자동처리 변경(proc_yn = 'N')
                 if 기준봉['volume'] > i[10]:
+                    print("종목명 : " + i[1] + " 거래량 돌파 : " + format(int(기준봉['close']), ',d') + "원")
                     avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
                     # 몸통 유형 구분
@@ -322,8 +322,6 @@ if result_one == None:
 
             # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
             for i in result_three_two:
-                print("종목명 : " + i[1])
-
                 trail_signal_code = ""
                 trail_signal_name = ""
                 vol_appear = 0
@@ -346,7 +344,7 @@ if result_one == None:
                     item_loss_sum = 0
 
                     if int(a['stck_prpr']) > i[7]:
-                        print("돌파가 돌파")
+                        print("종목명 : " + i[1] + "돌파가 : " + format(int(i[7]), ',d') + "원 돌파")
                         signal_cd = "01"
                         signal_cd_name = format(int(i[7]), ',d') + "원 {돌파가 돌파}"
                         # 매수금액
@@ -393,8 +391,6 @@ if result_one == None:
                 elif i[4] == 'S':
 
                     if int(a['stck_prpr']) < i[8]:
-                        print("이탈가 이탈")
-                        
                         # 계좌종목 조회
                         c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
@@ -402,6 +398,7 @@ if result_one == None:
 
                         for j, name in enumerate(c.index):
                             J_code = c['pdno'][j]
+                            j_hldg_qty = int(c['hldg_qty'][j])
                             j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
 
                             sell_rate = 0
@@ -410,6 +407,7 @@ if result_one == None:
 
                             # 잔고정보의 매매자동처리 종목이 존재할 경우
                             if J_code == i[2]:
+                                print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
                                 signal_cd = "02"
                                 signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
 
@@ -428,6 +426,7 @@ if result_one == None:
                                     # 텔레그램 메시지 전송
                                     asyncio.run(main(telegram_text))
 
+                                if j_hldg_qty > 0:
                                     cur400 = conn.cursor()
                                     # UPDATE
                                     cur400.execute("""
