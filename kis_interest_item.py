@@ -209,7 +209,7 @@ def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no):
     for i in result_one01:
 
         asset_risk_num = i[0]
-        print("자산리스크번호 : " + str(asset_risk_num))   
+        # print("자산리스크번호 : " + str(asset_risk_num))   
         if i[1] == "1":   # 하락 지속 후, 기술적 반등
             n_asset_sum = u_prvs_rcdl_excc_amt * 30 * 0.01
             if n_asset_sum < 10000000:
@@ -329,10 +329,10 @@ def fundTrail_proc():
         tot_evlu_amt = i[1]
         prvs_rcdl_excc_amt = i[2]
         asset_num = i[3]
-        print("코스피 추적 신호 : " + str(trail_signal_result1))   
-        print("총평가금액 : " + str(tot_evlu_amt))
-        print("가수도정산금액 : " + str(prvs_rcdl_excc_amt))
-        print("자산번호 : " + str(asset_num))
+        # print("코스피 추적 신호 : " + str(trail_signal_result1))   
+        # print("총평가금액 : " + str(tot_evlu_amt))
+        # print("가수도정산금액 : " + str(prvs_rcdl_excc_amt))
+        # print("자산번호 : " + str(asset_num))
             
         # 시장 신호 정보 변경 기준 현금 비율 변경
         if trail_signal_result1 == '03': # 저항가 돌파
@@ -362,8 +362,8 @@ def fundTrail_proc():
             cash_rate_amt = round(prvs_rcdl_excc_amt * remain_cash_rate * 0.01, 0)  # 가수도정산금액 기준 현금 비중 금액
             cash_rate = 100 - (tot_evlu_amt / (tot_evlu_amt + prvs_rcdl_excc_amt - cash_rate_amt)) * 100
 
-        print("현금비중 : " + format(int(cash_rate), ',d'))
-        print("현금비중금액 : " + format(int(cash_rate_amt), ',d'))
+        # print("현금비중 : " + format(int(cash_rate), ',d'))
+        # print("현금비중금액 : " + format(int(cash_rate_amt), ',d'))
         sell_plan_amt = cash_rate_amt - prvs_rcdl_excc_amt  # 매도예정자금(총평가금액 기준 현금비중금액 - 가수도 정산금액)
         if sell_plan_amt < 0:
             sell_plan_amt = 0
@@ -372,8 +372,8 @@ def fundTrail_proc():
         if buy_plan_amt < 0:
             buy_plan_amt = 0
 
-        print("매도예정자금 : " + format(int(sell_plan_amt), ',d'))
-        print("매수예정자금 : " + format(int(buy_plan_amt), ',d'))
+        # print("매도예정자금 : " + format(int(sell_plan_amt), ',d'))
+        # print("매수예정자금 : " + format(int(buy_plan_amt), ',d'))
 
         # 자산정보 변경
         cur400 = conn.cursor()
@@ -395,8 +395,8 @@ def fundTrail_proc():
 
         trail_signal_result2 = i[0]
         asset_num = i[1]
-        print("코스닥 추적 신호 : " + str(trail_signal_result2))   
-        print("자산번호 : " + str(asset_num))
+        # print("코스닥 추적 신호 : " + str(trail_signal_result2))   
+        # print("자산번호 : " + str(asset_num))
             
         if trail_signal_result2 == '03':  # 저항가 돌파
             kosdak_ratio = "H"  # 시장 상승
@@ -421,7 +421,7 @@ def fundTrail_proc():
         elif kospi_ratio == "D" and kosdak_ratio == "D":  # 코스피 약세 & 코스닥 약세
             market_ratio = 30
 
-        print("시장 승률 : " + str(market_ratio))
+        # print("시장 승률 : " + str(market_ratio))
 
         # 자산정보 변경
         cur600 = conn.cursor()
@@ -438,7 +438,7 @@ def fundTrail_proc():
             
             # 자산번호 생성
             new_asset_num = str(market_ratio) + today
-            print("신규 자산번호 : " + new_asset_num)
+            # print("신규 자산번호 : " + new_asset_num)
 
             if int(new_asset_num) != asset_num:
 
@@ -523,7 +523,7 @@ if result_one == None:
 
             # 관심종목 이탈가, 돌파가, 지지가, 저항가, 추세하단가, 추세상단가를 각각 실시간 종목시세의 최고가와 최저가 비교
             for i in result_three:
-                print("종목명 : " + i[1])
+                # print("종목명 : " + i[1])
 
                 trail_signal_code = ""
                 trail_signal_name = ""
@@ -549,7 +549,7 @@ if result_one == None:
                         if round(float(a['prdy_vrss_vol_rate'])) > 100:
                             vol_appear = 1
                     vol_appear = 1 # 전일대비거래량비율 체크 제외(20250406)        
-                    print("vol_appear : " + str(vol_appear))
+                    # print("vol_appear : " + str(vol_appear))
 
                     n_buy_amount = 0
                     n_buy_sum = 0
@@ -557,121 +557,121 @@ if result_one == None:
                     if time > '1430' and time < '1520':     # 장종료 1시간전 현재가 기준 돌파, 이탈 설정
 
                         if int(a['stck_prpr']) > i[2]:
-                            print("돌파가 돌파")
+                            # print("돌파가 돌파")
                             trail_signal_code = "01"
                             trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
-                            print("매수금액 : " + format(int(n_buy_sum), ',d'))
+                            # print("매수금액 : " + format(int(n_buy_sum), ',d'))
                         if int(a['stck_prpr']) < i[3]:
-                            print("이탈가 이탈")
+                            # print("이탈가 이탈")
                             trail_signal_code = "02"
                             trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
                         if int(a['stck_prpr']) > i[4]:
-                            print("저항가 돌파")
+                            # print("저항가 돌파")
                             trail_signal_code = "03"
                             trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
                         if int(a['stck_prpr']) < i[5]:
-                            print("지지가 이탈")
+                            # print("지지가 이탈")
                             trail_signal_code = "04"
                             trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
                         if int(a['stck_prpr']) > i[6]:
-                            print("추세상단가 돌파")
+                            # print("추세상단가 돌파")
                             trail_signal_code = "05"
                             trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)
                         if int(a['stck_prpr']) < i[7]:
-                            print("추세하단가 이탈")
+                            # print("추세하단가 이탈")
                             trail_signal_code = "06"
                             trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
 
                     else:   # 돌파시 최고가, 이탈시 최저가 기준 설정
 
                         if int(a['stck_hgpr']) > i[2]:
-                            print("돌파가 돌파")
+                            # print("돌파가 돌파")
                             trail_signal_code = "01"
                             trail_signal_name = format(int(i[2]), ',d') + "원 {돌파가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
                         if int(a['stck_lwpr']) < i[3]:
-                            print("이탈가 이탈")
+                            # print("이탈가 이탈")
                             trail_signal_code = "02"
                             trail_signal_name = format(int(i[3]), ',d') + "원 {이탈가 이탈}"
                         if int(a['stck_hgpr']) > i[4]:
-                            print("저항가 돌파")
+                            # print("저항가 돌파")
                             trail_signal_code = "03"
                             trail_signal_name = format(int(i[4]), ',d') + "원 {저항가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
                         if int(a['stck_lwpr']) < i[5]:
-                            print("지지가 이탈")
+                            # print("지지가 이탈")
                             trail_signal_code = "04"
                             trail_signal_name = format(int(i[5]), ',d') + "원 {지지가 이탈}"
                         if int(a['stck_hgpr']) > i[6]:
-                            print("추세상단가 돌파")
+                            # print("추세상단가 돌파")
                             trail_signal_code = "05"
                             trail_signal_name = format(int(i[6]), ',d') + "원 {추세상단가 돌파}"
                             # 손절금액
                             loss_price = int(i[3])
                             # 종목손실금액
                             item_loss_sum = i[8]
-                            print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
+                            # print("종목손실금액 : " + format(int(item_loss_sum), ',d'))
                             # 매수량
                             # n_buy_amount = item_loss_sum / (int(a['stck_prpr']) - loss_price)
                             n_buy_amount = round(2000000 / int(a['stck_prpr']))
-                            print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
+                            # print("매수량 : " + format(int(round(n_buy_amount)), ',d'))
                             # 매수금액
                             n_buy_sum = int(a['stck_prpr']) * round(n_buy_amount)                    
                         if int(a['stck_lwpr']) < i[7]:
-                            print("추세하단가 이탈")
+                            # print("추세하단가 이탈")
                             trail_signal_code = "06"
                             trail_signal_name = format(int(i[7]), ',d') + "원 {추세하단가 이탈}"
 
@@ -683,10 +683,10 @@ if result_one == None:
 
                     if len(result_four) > 0:
                         for j in result_four:
-                            print("trail_signal_code1 : " + j[0])
+                            # print("trail_signal_code1 : " + j[0])
                             if trail_signal_code != "":
                                 if trail_signal_code != j[0]:
-
+                                    print("종목명 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
                                     if vol_appear > 0:
                                         # 자산관리정보 조회
                                         cur041 = conn.cursor()
@@ -695,7 +695,7 @@ if result_one == None:
                                         cur041.close()
 
                                         for k in result_fourone:
-                                            print("시장승률 : "+str(k[0]))
+                                            # print("시장승률 : "+str(k[0]))
                                             if k[0] >= 50:   # 시장 상승인 경우
                                                 if n_buy_amount > 0:
                                                     buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
@@ -786,7 +786,7 @@ if result_one == None:
 
                                     # 돌파가 돌파, 저항가 돌파, 추세상단가 돌파시 
                                     if trail_signal_code == '01' or trail_signal_code == '03' or trail_signal_code == '05':
-                                    
+                                        print("종목명 : " + i[1] + "돌파가 돌파, 저항가 돌파, 추세상단가 돌파시 매매자동처리 : " + trail_signal_name)
                                         # 주식당일분봉조회
                                         minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, i[0], second)
                                         minute_list = []
@@ -885,10 +885,10 @@ if result_one == None:
                                             cur501.close()        
 
                     else:
-                        print("trail_signal_code2 : " + trail_signal_code)
+                        # print("trail_signal_code2 : " + trail_signal_code)
 
                         if trail_signal_code != "":
-
+                            print("종목명 : " + i[1] + "추적신호 : " + trail_signal_name)
                             if vol_appear > 0:
                                 # 자산관리정보 조회
                                 cur041 = conn.cursor()
@@ -897,7 +897,7 @@ if result_one == None:
                                 cur041.close()
 
                                 for k in result_fourone:
-                                    print("시장승률 : "+str(k[0]))
+                                    # print("시장승률 : "+str(k[0]))
                                     if k[0] >= 50:  # 시장 상승인 경우
                                         if n_buy_amount > 0:
                                             buy_command = f"/InterestBuy_{i[0]}_{a['stck_prpr']}"
@@ -988,7 +988,7 @@ if result_one == None:
 
                             # 돌파가 돌파, 저항가 돌파, 추세상단가 돌파시 
                             if trail_signal_code == '01' or trail_signal_code == '03' or trail_signal_code == '05':
-                            
+                                print("종목명 : " + i[1] + "돌파가 돌파, 저항가 돌파, 추세상단가 돌파시 매매자동처리 : " + trail_signal_name)
                                 # 주식당일분봉조회
                                 minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, i[0], second)
                                 minute_list = []
@@ -1105,7 +1105,7 @@ if result_one == None:
                     item_number = 0
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) > i[2]:
-                        print("돌파포인트 돌파")
+                        # print("돌파포인트 돌파")
                         trail_signal_code = "01"
                         trail_signal_name = format(int(i[2]), ',d') + " {돌파포인트 돌파}"
 
@@ -1119,7 +1119,7 @@ if result_one == None:
                                         item_number = 4
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) < i[3]:
-                        print("이탈포인트 이탈")
+                        # print("이탈포인트 이탈")
                         trail_signal_code = "02"
                         trail_signal_name = format(int(i[3]), ',d') + " {이탈포인트 이탈}"
 
@@ -1134,7 +1134,7 @@ if result_one == None:
 
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) > i[4]:
-                        print("저항포인트 돌파")
+                        # print("저항포인트 돌파")
                         trail_signal_code = "03"
                         trail_signal_name = format(int(i[4]), ',d') + " {저항포인트 돌파}"
 
@@ -1147,7 +1147,7 @@ if result_one == None:
                                         item_number = 8
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) < i[5]:
-                        print("지지포인트 이탈")
+                        # print("지지포인트 이탈")
                         trail_signal_code = "04"
                         trail_signal_name = format(int(i[5]), ',d') + " {지지포인트 이탈}"
 
@@ -1161,7 +1161,7 @@ if result_one == None:
                                         item_number = 2
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) > i[6]:
-                        print("추세상단포인트 돌파")
+                        # print("추세상단포인트 돌파")
                         trail_signal_code = "05"
                         trail_signal_name = format(int(i[6]), ',d') + " {추세상단포인트 돌파}"
 
@@ -1172,7 +1172,7 @@ if result_one == None:
                                 item_number = 6
 
                     if math.ceil(float(b['bstp_nmix_prpr'])) < i[7]:
-                        print("추세하단포인트 이탈")
+                        # print("추세하단포인트 이탈")
                         trail_signal_code = "06"
                         trail_signal_name = format(int(i[7]), ',d') + " {추세하단포인트 이탈}"
 
@@ -1190,9 +1190,10 @@ if result_one == None:
 
                     if len(result_four) > 0:
                         for j in result_four:
-                            print("trail_signal_code1 : " + j[0])
+                            # print("trail_signal_code1 : " + j[0])
                             if trail_signal_code != "":
                                 if trail_signal_code != j[0]:
+                                    print("시장 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
                                     telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주" 
                                     # 텔레그램 메시지 전송
                                     asyncio.run(main(telegram_text))
@@ -1243,9 +1244,10 @@ if result_one == None:
                                     fundTrail_proc()
 
                     else:
-                        print("trail_signal_code2 : " + trail_signal_code)
+                        # print("trail_signal_code2 : " + trail_signal_code)
 
                         if trail_signal_code != "":
+                            print("시장 : " + i[1] + "추적신호 : " + trail_signal_name)
                             telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
                             # 텔레그램 메시지 전송
                             asyncio.run(main(telegram_text))
