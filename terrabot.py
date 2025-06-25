@@ -106,12 +106,12 @@ def get_command(update, context) :
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
 def get_command1(update, context) :
-    button_list = build_button(["매수진행", "7mjs수진", "7m수진", "js수진", "취소"]) # make button list
+    button_list = build_button(["매수진행", "7mjs2c수진", "7m수진", "js수진", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
    
 def get_command2(update, context) :
-    button_list = build_button(["매도진행", "7mjs도진", "7m도진", "js도진", "취소"]) # make button list
+    button_list = build_button(["매도진행", "7mjs2c도진", "7m도진", "js도진", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -137,12 +137,12 @@ def get_command3(update, context) :
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup    
 
 def get_command4(update, context) :
-    button_list = build_button(["정정진행", "7mjs정정", "7m정정", "js정정", "취소"]) # make button list
+    button_list = build_button(["정정진행", "7mjs2c정정", "7m정정", "js정정", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
 def get_command5(update, context) :
-    button_list = build_button(["철회진행", "7mjs철회", "7m철회", "js철회", "취소"]) # make button list
+    button_list = build_button(["철회진행", "7mjs2c철회", "7m철회", "js철회", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -816,11 +816,11 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)                
     
-    elif data_selected.find("7mjs철회") != -1:
+    elif data_selected.find("7mjs2c철회") != -1:
 
         if g_order_no != "":
             result_msgs = []
-            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15']
+            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
             for nick in nickname_list:
                 ac = account(nick)
                 acct_no = ac['acct_no']
@@ -1092,11 +1092,11 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)
     
-    elif data_selected.find("7mjs정정") != -1:
+    elif data_selected.find("7mjs2c정정") != -1:
 
         if g_order_no != "" and int(g_remain_qty) > 0:
             result_msgs = []
-            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15']
+            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
             for nick in nickname_list:
                 ac = account(nick)
                 acct_no = ac['acct_no']
@@ -1441,11 +1441,11 @@ def callback_get(update, context) :
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id)
 
-    elif data_selected.find("7mjs수진") != -1:
+    elif data_selected.find("7mjs2c수진") != -1:
 
         if menuNum != "0":
             result_msgs = []
-            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15']
+            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
             for nick in nickname_list:
                 ac = account(nick)
                 acct_no = ac['acct_no']
@@ -1914,11 +1914,11 @@ def callback_get(update, context) :
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id)                                                
 
-    elif data_selected.find("7mjs도진") != -1:
+    elif data_selected.find("7mjs2c도진") != -1:
 
         if menuNum != "0":
             result_msgs = []
-            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15']
+            nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
             for nick in nickname_list:
                 ac = account(nick)
                 acct_no = ac['acct_no']
