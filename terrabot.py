@@ -2851,7 +2851,7 @@ def callback_get(update, context) :
             elif data_selected.find("보유종목수정") != -1:
 
                 if len(data_selected.split(",")) == 2:
-                    button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "취소"], data_selected)
+                    button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "매매계획", "취소"], data_selected)
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
                     context.bot.edit_message_text(text="수정할 메뉴를 선택해 주세요.",
@@ -2883,7 +2883,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
                 result_one00 = cur100.fetchall()
                 cur100.close()
 
@@ -2919,6 +2919,9 @@ def callback_get(update, context) :
                     # 매도가능수량
                     avail_amount = i[15]
                     print("매도가능수량 : " + format(avail_amount, ',d'))
+                    # 매메계획
+                    trading_plan = i[16]
+                    print("매매계획 : " + trading_plan)
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -2947,7 +2950,7 @@ def callback_get(update, context) :
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[<code>" + i[6] + "</code>]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주 => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
@@ -2987,29 +2990,99 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 최종이탈가를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                
+                
+            elif data_selected.find("매매계획") != -1:
+                menuNum = "165"
+
+                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)                                    
 
     if data_selected.find("자산") != -1:
-        context.bot.edit_message_text(text="[자산현황]",
+        if len(data_selected.split(",")) == 1:
+            button_list = build_button(["자산조회", "자산정리", "취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+
+            context.bot.edit_message_text(text="보유종목 메뉴를 선택해 주세요.",
+                                          chat_id=update.callback_query.message.chat_id,
+                                          message_id=update.callback_query.message.message_id,
+                                          reply_markup=show_markup)
+
+        elif len(data_selected.split(",")) == 2:
+
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+
+            elif data_selected.find("자산조회") != -1:
+
+                context.bot.edit_message_text(text="[자산현황]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
-        ac = account()
-        acct_no = ac['acct_no']
-        access_token = ac['access_token']
-        app_key = ac['app_key']
-        app_secret = ac['app_secret']
+                
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
 
-        # 자산정보 호출
-        fund_proc(access_token, app_key, app_secret, acct_no)
+                # 자산정보 호출
+                fund_proc(access_token, app_key, app_secret, acct_no)
 
-        # 자산관리정보 조회
-        cur300 = conn.cursor()
-        cur300.execute("select market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from (select row_number() over (order by id desc) as ROWNUM, COALESCE(market_ratio, 0) as market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
-        result_three00 = cur300.fetchall()
-        cur300.close()
-       
-        for i in result_three00:
+                # 자산관리정보 조회
+                cur300 = conn.cursor()
+                cur300.execute("select market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from (select row_number() over (order by id desc) as ROWNUM, COALESCE(market_ratio, 0) as market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
+                result_three00 = cur300.fetchall()
+                cur300.close()
+            
+                for i in result_three00:
 
-            context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액-" + format(int(i[2]), ',d') + "원, 현금액-" + format(int(i[3]), ',d') + "원, 현금비중[" + str(i[0]) + "%], 예수금-"+format(int(i[4]), ',d') + "원, 가수금-" + format(int(i[5]), ',d') + "원, 순자산-" + format(int(i[6]), ',d') + "원, 평가금-" + format(int(i[7]), ',d') + "원, 증감액(" + format(int(i[8]), ',d') + ")원, 승률[" + str(i[0]) + "%], 매도예정금-" + format(int(i[9]), ',d') + "원, 매수예정금-" + format(int(i[10]), ',d') + "원")        
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액-" + format(int(i[2]), ',d') + "원, 현금액-" + format(int(i[3]), ',d') + "원, 현금비중[" + str(i[0]) + "%], 예수금-"+format(int(i[4]), ',d') + "원, 가수금-" + format(int(i[5]), ',d') + "원, 순자산-" + format(int(i[6]), ',d') + "원, 평가금-" + format(int(i[7]), ',d') + "원, 증감액(" + format(int(i[8]), ',d') + ")원, 승률[" + str(i[0]) + "%], 매도예정금-" + format(int(i[9]), ',d') + "원, 매수예정금-" + format(int(i[10]), ',d') + "원")        
+
+
+            elif data_selected.find("자산정리") != -1:
+
+                if len(data_selected.split(",")) == 2:
+                    button_list = build_button(["100", "70", "50", "30", "취소"], data_selected)
+
+                    context.bot.edit_message_text(text="자산정리 비율 메뉴를 선택해 주세요.",
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id,
+                                                reply_markup=show_markup)
+    
+        elif len(data_selected.split(",")) == 3:
+
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+
+            elif data_selected.find("100") != -1:
+                    
+                context.bot.edit_message_text(text="[100% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("70") != -1:
+                    
+                context.bot.edit_message_text(text="[70% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("50") != -1:
+                    
+                context.bot.edit_message_text(text="[50% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+                
+            elif data_selected.find("30") != -1:
+                    
+                context.bot.edit_message_text(text="[30% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)    
 
     if data_selected.find("레벨") != -1:
         context.bot.edit_message_text(text="[시장레벨]",
@@ -3846,7 +3919,7 @@ def echo(update, context):
 
             # 보유종목정보 조회
             cur100 = conn.cursor()
-            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
+            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
             result_one00 = cur100.fetchall()
             cur100.close()
 
@@ -3883,6 +3956,9 @@ def echo(update, context):
                     # 매도가능수량
                     avail_amount = i[15]
                     print("매도가능수량 : " + format(avail_amount, ',d'))
+                    # 매메계획
+                    trading_plan = i[16]
+                    print("매매계획 : " + trading_plan)
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -3911,7 +3987,7 @@ def echo(update, context):
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[" + i[6] + "]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주 => {sell_command}"))
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주, 매매계획-{trading_plan} => {sell_command}"))
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
@@ -4068,6 +4144,31 @@ def echo(update, context):
             else:
                 print("최종이탈가 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 최종이탈가 미존재")
+
+        elif menuNum == '165':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 매매계획
+
+            # 매매계획 존재시
+            if commandBot[1].isdecimal():
+                # 보유종목 수정
+                cur121 = conn.cursor()
+                delete_query0 = "update \"stockBalance_stock_balance\" set trading_plan = %s where code = %s and proc_yn = 'Y'"
+                # update 인자값 설정
+                record_to_update0 = ([commandBot[1], code])
+                # DB 연결된 커서의 쿼리 수행
+                cur121.execute(delete_query0, record_to_update0)
+                conn.commit()
+                cur121.close()
+
+                context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 [" + format(int(commandBot[1]), ',d') + "] 수정")
+            
+            else:
+                print("매매계획 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 미존재")
 
         elif menuNum == '171':
             initMenuNum()
