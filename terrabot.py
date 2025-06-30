@@ -3046,7 +3046,8 @@ def callback_get(update, context) :
 
                 if len(data_selected.split(",")) == 2:
                     button_list = build_button(["100", "70", "50", "30", "취소"], data_selected)
-
+                    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+                    
                     context.bot.edit_message_text(text="자산정리 비율 메뉴를 선택해 주세요.",
                                                 chat_id=update.callback_query.message.chat_id,
                                                 message_id=update.callback_query.message.message_id,
@@ -4155,7 +4156,7 @@ def echo(update, context):
             trading_plan_list = ['33S', '50S','66S', '100S', '1B', '2B', '3B', '4B', '5B', 'H', 'I']
 
             # 매매계획 존재시
-            if len(commandBot[1]) > 1:
+            if len(commandBot[1]) > 0:
                 
                 if commandBot[1] in trading_plan_list:
                     # 보유종목 수정
