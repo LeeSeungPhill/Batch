@@ -4152,19 +4152,27 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 매매계획
 
-            # 매매계획 존재시
-            if commandBot[1].isdecimal():
-                # 보유종목 수정
-                cur121 = conn.cursor()
-                delete_query0 = "update \"stockBalance_stock_balance\" set trading_plan = %s where code = %s and proc_yn = 'Y'"
-                # update 인자값 설정
-                record_to_update0 = ([commandBot[1], code])
-                # DB 연결된 커서의 쿼리 수행
-                cur121.execute(delete_query0, record_to_update0)
-                conn.commit()
-                cur121.close()
+            trading_plan_list = ['33S', '50S','66S', '100S', '1B', '2B', '3B', '4B', '5B', 'H', 'I']
 
-                context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 [" + format(int(commandBot[1]), ',d') + "] 수정")
+            # 매매계획 존재시
+            if len(commandBot[1]) > 1:
+                
+                if commandBot[1] in trading_plan_list:
+                    # 보유종목 수정
+                    cur121 = conn.cursor()
+                    update_query0 = "update \"stockBalance_stock_balance\" set trading_plan = %s where code = %s and proc_yn = 'Y'"
+                    # update 인자값 설정
+                    record_to_update0 = ([commandBot[1], code])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur121.execute(update_query0, record_to_update0)
+                    conn.commit()
+                    cur121.close()
+
+                    context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 [" + commandBot[1] + "] 수정")
+
+                else:
+                    print("매매계획리스트 미존재")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 매매계획리스트 미존재")    
             
             else:
                 print("매매계획 미존재")
