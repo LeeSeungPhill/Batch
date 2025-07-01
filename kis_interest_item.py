@@ -513,7 +513,7 @@ if result_one == None:
             app_secret = ac['app_secret']
 
             # 자산정보 및 시장레벨정보 처리
-            fund_marketLevel_proc(access_token, app_key, app_secret, acct_no)
+            # fund_marketLevel_proc(access_token, app_key, app_secret, acct_no)
 
             # 관심정보 조회
             cur03 = conn.cursor()
@@ -1198,28 +1198,28 @@ if result_one == None:
                                     # 텔레그램 메시지 전송
                                     asyncio.run(main(telegram_text))
 
-                                    if i[0] == "0001":
-                                        if len(result_five) > 0:
-                                            for k in result_five:
-                                                # 시장레벨번호가 존재하는 경우
-                                                if len(market_level_num) > 0:
-                                                    # 시장레벨정보에 시장레벨번호가 미존재한 경우
-                                                    if k[0] != int(market_level_num + today):
-                                                        # 시장레벨정보 변경
-                                                        cur200 = conn.cursor()
-                                                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
-                                                        # update 인자값 설정
-                                                        record_to_update200 = ([acct_no])
-                                                        # DB 연결된 커서의 쿼리 수행
-                                                        cur200.execute(update_query200, record_to_update200)
+                                    # if i[0] == "0001":
+                                    #     if len(result_five) > 0:
+                                    #         for k in result_five:
+                                    #             # 시장레벨번호가 존재하는 경우
+                                    #             if len(market_level_num) > 0:
+                                    #                 # 시장레벨정보에 시장레벨번호가 미존재한 경우
+                                    #                 if k[0] != int(market_level_num + today):
+                                    #                     # 시장레벨정보 변경
+                                    #                     cur200 = conn.cursor()
+                                    #                     update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                                    #                     # update 인자값 설정
+                                    #                     record_to_update200 = ([acct_no])
+                                    #                     # DB 연결된 커서의 쿼리 수행
+                                    #                     cur200.execute(update_query200, record_to_update200)
 
-                                                        # 시장레벨정보 생성
-                                                        cur201 = conn.cursor()
-                                                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                                        # update 인자값 설정
-                                                        record_to_insert201 = ([int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
-                                                        # DB 연결된 커서의 쿼리 수행
-                                                        cur201.execute(insert_query201, record_to_insert201)
+                                    #                     # 시장레벨정보 생성
+                                    #                     cur201 = conn.cursor()
+                                    #                     insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                    #                     # update 인자값 설정
+                                    #                     record_to_insert201 = ([int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
+                                    #                     # DB 연결된 커서의 쿼리 수행
+                                    #                     cur201.execute(insert_query201, record_to_insert201)
 
                                     # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                     cur20 = conn.cursor()
@@ -1252,29 +1252,29 @@ if result_one == None:
                             # 텔레그램 메시지 전송
                             asyncio.run(main(telegram_text))
 
-                            if i[0] == "0001":
-                                if len(result_five) > 0:
-                                    for k in result_five:
-                                        # 시장레벨번호가 존재하는 경우
-                                        if len(market_level_num) > 0:
-                                            # 시장레벨정보에 시장레벨번호가 미존재한 경우
-                                            if k[0] != int(market_level_num + today):
-                                                # 시장레벨정보 변경
-                                                cur200 = conn.cursor()
-                                                update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
-                                                # update 인자값 설정
-                                                record_to_update200 = ([acct_no])
-                                                # DB 연결된 커서의 쿼리 수행
-                                                cur200.execute(update_query200, record_to_update200)
+                            # if i[0] == "0001":
+                            #     if len(result_five) > 0:
+                            #         for k in result_five:
+                            #             # 시장레벨번호가 존재하는 경우
+                            #             if len(market_level_num) > 0:
+                            #                 # 시장레벨정보에 시장레벨번호가 미존재한 경우
+                            #                 if k[0] != int(market_level_num + today):
+                            #                     # 시장레벨정보 변경
+                            #                     cur200 = conn.cursor()
+                            #                     update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                            #                     # update 인자값 설정
+                            #                     record_to_update200 = ([acct_no])
+                            #                     # DB 연결된 커서의 쿼리 수행
+                            #                     cur200.execute(update_query200, record_to_update200)
 
-                                                # 시장레벨정보 생성
-                                                cur201 = conn.cursor()
-                                                insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                                # update 인자값 설정
-                                                record_to_insert201 = (
-                                                [int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
-                                                # DB 연결된 커서의 쿼리 수행
-                                                cur201.execute(insert_query201, record_to_insert201)
+                            #                     # 시장레벨정보 생성
+                            #                     cur201 = conn.cursor()
+                            #                     insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            #                     # update 인자값 설정
+                            #                     record_to_insert201 = (
+                            #                     [int(market_level_num + today), acct_no, market_level_num, 0, risk_rate, 0, item_number, today, '99991231'])
+                            #                     # DB 연결된 커서의 쿼리 수행
+                            #                     cur201.execute(insert_query201, record_to_insert201)
 
                             # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                             cur20 = conn.cursor()
