@@ -2851,7 +2851,7 @@ def callback_get(update, context) :
             elif data_selected.find("보유종목수정") != -1:
 
                 if len(data_selected.split(",")) == 2:
-                    button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "매매계획", "취소"], data_selected)
+                    button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "매매계획", "손실금액", "취소"], data_selected)
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
                     context.bot.edit_message_text(text="수정할 메뉴를 선택해 주세요.",
@@ -2997,6 +2997,13 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                    
+
+            elif data_selected.find("손실금액") != -1:
+                menuNum = "166"
+
+                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 손실금액을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)                                        
 
     if data_selected.find("자산") != -1:
         if len(data_selected.split(",")) == 1:
@@ -4178,6 +4185,32 @@ def echo(update, context):
             else:
                 print("매매계획 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 미존재")
+
+        elif menuNum == '166':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                value = commandBot[1].strip()
+                print("commandBot[1] : ", value)    # 손실금액
+
+            # 손실금액(음수 및 양수) 존재시
+            if value.lstrip('-').isdigit():
+                    # 보유종목 수정
+                    cur121 = conn.cursor()
+                    update_query0 = "update \"stockBalance_stock_balance\" set limit_amt = %s where acct_no = %s and code = %s and proc_yn = 'Y'"
+                    # update 인자값 설정
+                    record_to_update0 = ([value, str(acct_no), code])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur121.execute(update_query0, record_to_update0)
+                    conn.commit()
+                    cur121.close()
+
+                    context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 [" + commandBot[1] + "] 수정")
+
+            else:
+                print("손실금액 음수 또는 양수만 입력 가능")
+                context.bot.send_message(chat_id=user_id, text=company + " : 손실금액 음수 또는 양수만 입력 가능")
 
         elif menuNum == '171':
             initMenuNum()
