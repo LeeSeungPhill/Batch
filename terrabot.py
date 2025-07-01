@@ -2852,7 +2852,7 @@ def callback_get(update, context) :
 
                 if len(data_selected.split(",")) == 2:
                     button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "매매계획", "손실금액", "취소"], data_selected)
-                    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+                    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 3))
 
                     context.bot.edit_message_text(text="수정할 메뉴를 선택해 주세요.",
                                                 chat_id=update.callback_query.message.chat_id,
@@ -3010,7 +3010,7 @@ def callback_get(update, context) :
             button_list = build_button(["자산조회", "자산정리", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
-            context.bot.edit_message_text(text="보유종목 메뉴를 선택해 주세요.",
+            context.bot.edit_message_text(text="자산관리 메뉴를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id,
                                           reply_markup=show_markup)
@@ -3093,27 +3093,141 @@ def callback_get(update, context) :
                                       message_id=update.callback_query.message.message_id)    
 
     if data_selected.find("레벨") != -1:
-        context.bot.edit_message_text(text="[시장레벨]",
+        if len(data_selected.split(",")) == 1:
+            button_list = build_button(["시장레벨조회", "시장레벨변경", "취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+
+            context.bot.edit_message_text(text="시장레벨관리 메뉴를 선택해 주세요.",
+                                          chat_id=update.callback_query.message.chat_id,
+                                          message_id=update.callback_query.message.message_id,
+                                          reply_markup=show_markup)
+
+        elif len(data_selected.split(",")) == 2:
+
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+
+            elif data_selected.find("시장레벨조회") != -1:
+
+                context.bot.edit_message_text(text="[시장레벨]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
-        ac = account()
-        acct_no = ac['acct_no']
-        access_token = ac['access_token']
-        app_key = ac['app_key']
-        app_secret = ac['app_secret']
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
 
-        # 시장레벨정보 호출
-        marketLevel_proc(access_token, app_key, app_secret, acct_no)
+                # 시장레벨정보 호출
+                # marketLevel_proc(access_token, app_key, app_secret, acct_no)
 
-        # 시장레벨정보 조회
-        cur400 = conn.cursor()
-        cur400.execute("select market_level_num, total_asset, risk_rate, risk_sum, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
-        result_four00 = cur400.fetchall()
-        cur400.close()
-       
-        for i in result_four00:
+                # 시장레벨정보 조회
+                cur400 = conn.cursor()
+                cur400.execute("select market_level_num, total_asset, risk_rate, risk_sum, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
+                result_four00 = cur400.fetchall()
+                cur400.close()
+            
+                for i in result_four00:
 
-            context.bot.send_message(chat_id=update.effective_chat.id, text="시장레벨번호[" + str(i[0]) + "], 총자산-" + format(int(i[1]), ',d') + "원, 리스크[" + str(i[2]) + "%], 리스크금액-"+format(int(i[3]), ',d') + "원, 종목수[" + format(int(i[4]), ',d') + "개], 종목리스크-" + format(int(i[3]/i[4]), ',d') + "원")        
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="시장레벨번호[" + str(i[0]) + "], 총자산-" + format(int(i[1]), ',d') + "원, 리스크[" + str(i[2]) + "%], 리스크금액-"+format(int(i[3]), ',d') + "원, 종목수[" + format(int(i[4]), ',d') + "개], 종목리스크-" + format(int(i[3]/i[4]), ',d') + "원")        
+
+            elif data_selected.find("시장레벨변경") != -1:
+
+                if len(data_selected.split(",")) == 2:
+                    button_list = build_button(["하락지속", "단기상승", "패턴", "눌림", "상승지속", "취소"], data_selected)
+                    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+                    
+                    context.bot.edit_message_text(text="시장레벨변경 메뉴를 선택해 주세요.",
+                                                chat_id=update.callback_query.message.chat_id,
+                                                message_id=update.callback_query.message.message_id,
+                                                reply_markup=show_markup)
+
+        elif len(data_selected.split(",")) == 3:
+
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+
+            elif data_selected.find("하락지속") != -1:
+                    
+                context.bot.edit_message_text(text="[하락지속 후, 기술적반등]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+                
+                ac = account()
+                acct_no = ac['acct_no']
+                market_level_num = "1"
+                today = datetime.now().strftime("%Y%m%d")
+                risk_rate = 2
+                item_number = 2
+                asset_sum = 10000000
+                risk_sum = asset_sum * risk_rate * 0.01
+
+                # 시장레벨정보 조회
+                cur300 = conn.cursor()
+                cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and asset_risk_num = '"+market_level_num + today+"'")
+                result_one01 = cur300.fetchall()
+                cur300.close()
+
+                if len(result_one01) < 1:
+
+                    # 시장레벨정보 변경
+                    cur200 = conn.cursor()
+                    update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                    # update 인자값 설정
+                    record_to_update200 = ([acct_no])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur200.execute(update_query200, record_to_update200)
+
+                    # 시장레벨정보 생성
+                    cur201 = conn.cursor()
+                    insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    # update 인자값 설정
+                    record_to_insert201 = (
+                    [int(market_level_num + today), acct_no, market_level_num, asset_sum, risk_rate, risk_sum, item_number, today, '99991231'])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur201.execute(insert_query201, record_to_insert201)
+
+                    conn.commit()
+                    cur200.close()
+                    cur201.close()
+
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="시장레벨번호[" + market_level_num + today + "], 총자산-" + format(asset_sum, ',d') + "원, 리스크[" + str(risk_rate) + "%], 리스크금액-"+format(risk_sum, ',d') + "원, 종목수[" + format(item_number, ',d') + "개], 종목리스크-" + format(int(risk_sum/item_number), ',d') + "원")        
+
+                else:
+
+                    context.bot.edit_message_text(text="시장레벨정보 기존재",
+                                          chat_id=update.callback_query.message.chat_id,
+                                          message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("단기상승") != -1:
+                    
+                context.bot.edit_message_text(text="[단기상승 후, 기술적반등]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("패턴") != -1:
+                    
+                context.bot.edit_message_text(text="[패턴내 기술적반등]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("눌림") != -1:
+                    
+                context.bot.edit_message_text(text="[눌림 후, 기술적반등]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("상승지속") != -1:
+                    
+                context.bot.edit_message_text(text="[상승지속 후, 기술적반등]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)                
 
     if data_selected.find("검색") != -1:
         if len(data_selected.split(",")) == 1:
