@@ -3162,6 +3162,66 @@ def callback_get(update, context) :
                     acct_no = ac['acct_no']
                     market_level_num = "1"
                     today = datetime.now().strftime("%Y%m%d")
+                    risk_rate = 1
+                    item_number = 1
+                    asset_sum = 10000000
+                    risk_sum = asset_sum * risk_rate * 0.01
+
+                    # 시장레벨정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and asset_risk_num = '"+market_level_num + today+"'")
+                    result_one01 = cur300.fetchall()
+                    cur300.close()
+
+                    if len(result_one01) < 1:
+
+                        # 시장레벨정보 변경
+                        cur200 = conn.cursor()
+                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                        # update 인자값 설정
+                        record_to_update200 = ([acct_no])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur200.execute(update_query200, record_to_update200)
+
+                        # 시장레벨정보 생성
+                        cur201 = conn.cursor()
+                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        # update 인자값 설정
+                        record_to_insert201 = (
+                        [int(market_level_num + today), acct_no, market_level_num, asset_sum, risk_rate, risk_sum, item_number, today, '99991231'])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur201.execute(insert_query201, record_to_insert201)
+
+                        conn.commit()
+                        cur200.close()
+                        cur201.close()
+
+                        msg = f"[{nick}:하락지속 후, 기술적반등] 자산리스크번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
+                        result_msgs.append(msg)
+
+                    else:
+
+                        msg = f"[{nick}:하락지속 후, 기술적반등] 자산리스크번호 기존재"
+                        result_msgs.append(msg)
+                    
+                final_message = "\n".join(result_msgs) if result_msgs else "시장레벨변경 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )    
+
+            elif data_selected.find("단기상승") != -1:
+
+                result_msgs = []
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
+                for nick in nickname_list:
+                    ac = account(nick)
+                    acct_no = ac['acct_no']
+                    market_level_num = "2"
+                    today = datetime.now().strftime("%Y%m%d")
                     risk_rate = 2
                     item_number = 2
                     asset_sum = 10000000
@@ -3196,15 +3256,15 @@ def callback_get(update, context) :
                         cur200.close()
                         cur201.close()
 
-                        msg = f"[{nick}:하락지속 후, 기술적반등] 시장레벨번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
+                        msg = f"[{nick}:단기상승 후, 기술적반등] 자산리스크번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
                         result_msgs.append(msg)
 
                     else:
 
-                        msg = f"[{nick}:하락지속 후, 기술적반등] 시장레벨정보 기존재"
+                        msg = f"[{nick}:단기상승 후, 기술적반등] 자산리스크번호 기존재"
                         result_msgs.append(msg)
                     
-                final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "시장레벨변경 조건을 충족하지 못했습니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
@@ -3213,29 +3273,185 @@ def callback_get(update, context) :
                     message_id=update.callback_query.message.message_id
                 )    
 
-            elif data_selected.find("단기상승") != -1:
-                    
-                context.bot.edit_message_text(text="[단기상승 후, 기술적반등]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
-
             elif data_selected.find("패턴") != -1:
+
+                result_msgs = []
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
+                for nick in nickname_list:
+                    ac = account(nick)
+                    acct_no = ac['acct_no']
+                    market_level_num = "3"
+                    today = datetime.now().strftime("%Y%m%d")
+                    risk_rate = 3
+                    item_number = 3
+                    asset_sum = 10000000
+                    risk_sum = asset_sum * risk_rate * 0.01
+
+                    # 시장레벨정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and asset_risk_num = '"+market_level_num + today+"'")
+                    result_one01 = cur300.fetchall()
+                    cur300.close()
+
+                    if len(result_one01) < 1:
+
+                        # 시장레벨정보 변경
+                        cur200 = conn.cursor()
+                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                        # update 인자값 설정
+                        record_to_update200 = ([acct_no])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur200.execute(update_query200, record_to_update200)
+
+                        # 시장레벨정보 생성
+                        cur201 = conn.cursor()
+                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        # update 인자값 설정
+                        record_to_insert201 = (
+                        [int(market_level_num + today), acct_no, market_level_num, asset_sum, risk_rate, risk_sum, item_number, today, '99991231'])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur201.execute(insert_query201, record_to_insert201)
+
+                        conn.commit()
+                        cur200.close()
+                        cur201.close()
+
+                        msg = f"[{nick}:패턴내 기술적반등] 자산리스크번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
+                        result_msgs.append(msg)
+
+                    else:
+
+                        msg = f"[{nick}:패턴내 기술적반등] 자산리스크번호 기존재"
+                        result_msgs.append(msg)
                     
-                context.bot.edit_message_text(text="[패턴내 기술적반등]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
+                final_message = "\n".join(result_msgs) if result_msgs else "시장레벨변경 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )        
 
             elif data_selected.find("눌림") != -1:
+
+                result_msgs = []
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
+                for nick in nickname_list:
+                    ac = account(nick)
+                    acct_no = ac['acct_no']
+                    market_level_num = "4"
+                    today = datetime.now().strftime("%Y%m%d")
+                    risk_rate = 4
+                    item_number = 2
+                    asset_sum = 10000000
+                    risk_sum = asset_sum * risk_rate * 0.01
+
+                    # 시장레벨정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and asset_risk_num = '"+market_level_num + today+"'")
+                    result_one01 = cur300.fetchall()
+                    cur300.close()
+
+                    if len(result_one01) < 1:
+
+                        # 시장레벨정보 변경
+                        cur200 = conn.cursor()
+                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                        # update 인자값 설정
+                        record_to_update200 = ([acct_no])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur200.execute(update_query200, record_to_update200)
+
+                        # 시장레벨정보 생성
+                        cur201 = conn.cursor()
+                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        # update 인자값 설정
+                        record_to_insert201 = (
+                        [int(market_level_num + today), acct_no, market_level_num, asset_sum, risk_rate, risk_sum, item_number, today, '99991231'])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur201.execute(insert_query201, record_to_insert201)
+
+                        conn.commit()
+                        cur200.close()
+                        cur201.close()
+
+                        msg = f"[{nick}:상승전환 후, 눌림구간에서 반등] 자산리스크번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
+                        result_msgs.append(msg)
+
+                    else:
+
+                        msg = f"[{nick}:상승전환 후, 눌림구간에서 반등] 자산리스크번호 기존재"
+                        result_msgs.append(msg)
                     
-                context.bot.edit_message_text(text="[눌림 후, 기술적반등]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
+                final_message = "\n".join(result_msgs) if result_msgs else "시장레벨변경 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )        
 
             elif data_selected.find("상승지속") != -1:
+
+                result_msgs = []
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2','chichipa']
+                for nick in nickname_list:
+                    ac = account(nick)
+                    acct_no = ac['acct_no']
+                    market_level_num = "5"
+                    today = datetime.now().strftime("%Y%m%d")
+                    risk_rate = 4
+                    item_number = 4
+                    asset_sum = 10000000
+                    risk_sum = asset_sum * risk_rate * 0.01
+
+                    # 시장레벨정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and asset_risk_num = '"+market_level_num + today+"'")
+                    result_one01 = cur300.fetchall()
+                    cur300.close()
+
+                    if len(result_one01) < 1:
+
+                        # 시장레벨정보 변경
+                        cur200 = conn.cursor()
+                        update_query200 = "update \"stockMarketMng_stock_market_mng\" set aply_end_dt = TO_CHAR(now(), 'YYYYMMDD') where acct_no = %s and aply_end_dt = '99991231'"
+                        # update 인자값 설정
+                        record_to_update200 = ([acct_no])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur200.execute(update_query200, record_to_update200)
+
+                        # 시장레벨정보 생성
+                        cur201 = conn.cursor()
+                        insert_query201 = "insert into \"stockMarketMng_stock_market_mng\"(asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        # update 인자값 설정
+                        record_to_insert201 = (
+                        [int(market_level_num + today), acct_no, market_level_num, asset_sum, risk_rate, risk_sum, item_number, today, '99991231'])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur201.execute(insert_query201, record_to_insert201)
+
+                        conn.commit()
+                        cur200.close()
+                        cur201.close()
+
+                        msg = f"[{nick}:상승지속 후, 패턴내에서 기술적반등] 자산리스크번호 : {market_level_num + today}, 총자산 : {int(asset_sum):,}원, 리스크 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 종목리스크 : {int(risk_sum/item_number):,}원"
+                        result_msgs.append(msg)
+
+                    else:
+
+                        msg = f"[{nick}:상승지속 후, 패턴내에서 기술적반등] 자산리스크번호 기존재"
+                        result_msgs.append(msg)
                     
-                context.bot.edit_message_text(text="[상승지속 후, 기술적반등]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)                
+                final_message = "\n".join(result_msgs) if result_msgs else "시장레벨변경 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )        
 
     if data_selected.find("검색") != -1:
         if len(data_selected.split(",")) == 1:
