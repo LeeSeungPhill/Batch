@@ -292,20 +292,28 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
         # 보유종목 손실금액 조회
         cur101 = conn.cursor()
-        cur101.execute("select limit_amt from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and code = '"+e_code+"'")
-        result_one01 = cur101.fetchall()
+        cur101.execute("""
+            SELECT limit_amt
+            FROM "stockBalance_stock_balance"
+            WHERE acct_no = %s AND code = %s
+        """, (acct_no, e_code))
+
+        row = cur101.fetchone()
         cur101.close()
 
         limit_price = 0
 
-        for i in result_one01:
-            value = i[0].strip()
-            # 보유종목 손실금액 존재시 손절가 설정
-            if value.lstrip('-').isdigit():
-                limit_price = int((e_purchase_sum + int(i[0])) / e_purchase_amount)
-            else: 
-                # 보유종목 손실금액 미존재시 종목리스크 금액 기준 손절가 설정
+        if row and row[0] is not None:
+            try:
+                # 공백 제거 후 정수로 변환 (양수/음수 모두 지원)
+                limit_amt = int(row[0].strip())
+                limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
+            except (ValueError, TypeError):
+                # 정수 변환 불가한 경우 예외 처리
                 limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
+        else:
+            # row가 없거나 limit_amt가 NULL인 경우
+            limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
 
         balance_list.append({
             '계좌번호': str(acct_no),
