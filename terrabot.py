@@ -4498,7 +4498,8 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 매매계획
 
-            trading_plan_list = ['33S', '50S','66S', '100S', '1B', '2B', '3B', '4B', '5B', 'H', 'I']
+            # 20% 물량 매도, 25% 물량 매도, 33% 물량 매도, 50% 물량 매도, 66% 물량 매도, 전체 물량 매도, 1차 매수, 2차 매수, 3차 매수, 4차 매수, 5차 매수, 홀딩, 투자
+            trading_plan_list = ['20s', '25s', '33s', '50s','66s', 'as', '1b', '2b', '3b', '4b', '5b', 'h', 'i']
 
             # 매매계획 존재시
             if len(commandBot[1]) > 0:
