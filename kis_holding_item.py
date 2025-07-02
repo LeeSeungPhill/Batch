@@ -306,7 +306,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         if row and row[0] is not None:
             try:
                 # 공백 제거 후 정수로 변환 (양수/음수 모두 지원)
-                limit_amt = int(row[0].strip())
+                limit_amt = int(str(row[0]).strip())
                 limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
             except (ValueError, TypeError):
                 # 정수 변환 불가한 경우 예외 처리
