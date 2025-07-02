@@ -3052,7 +3052,7 @@ def callback_get(update, context) :
             elif data_selected.find("자산정리") != -1:
 
                 if len(data_selected.split(",")) == 2:
-                    button_list = build_button(["100", "70", "50", "30", "취소"], data_selected)
+                    button_list = build_button(["100", "66", "50", "33", "25", "20", "취소"], data_selected)
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
                     
                     context.bot.edit_message_text(text="자산정리 비율 메뉴를 선택해 주세요.",
@@ -3074,9 +3074,9 @@ def callback_get(update, context) :
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("70") != -1:
+            elif data_selected.find("66") != -1:
                     
-                context.bot.edit_message_text(text="[70% 자산정리]",
+                context.bot.edit_message_text(text="[66% 자산정리]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
 
@@ -3086,11 +3086,23 @@ def callback_get(update, context) :
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)
                 
-            elif data_selected.find("30") != -1:
+            elif data_selected.find("33") != -1:
                     
-                context.bot.edit_message_text(text="[30% 자산정리]",
+                context.bot.edit_message_text(text="[33% 자산정리]",
                                       chat_id=update.callback_query.message.chat_id,
                                       message_id=update.callback_query.message.message_id)    
+
+            elif data_selected.find("25") != -1:
+                    
+                context.bot.edit_message_text(text="[25% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)    
+
+            elif data_selected.find("20") != -1:
+                    
+                context.bot.edit_message_text(text="[20% 자산정리]",
+                                      chat_id=update.callback_query.message.chat_id,
+                                      message_id=update.callback_query.message.message_id)            
 
     if data_selected.find("레벨") != -1:
         if len(data_selected.split(",")) == 1:
