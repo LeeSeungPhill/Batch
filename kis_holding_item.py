@@ -299,8 +299,9 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         limit_price = 0
 
         for i in result_one01:
+            value = i[0].strip()
             # 보유종목 손실금액 존재시 손절가 설정
-            if i[0].lstrip('-').isdigit():
+            if value.lstrip('-').isdigit():
                 limit_price = int((e_purchase_sum + int(i[0])) / e_purchase_amount)
             else: 
                 # 보유종목 손실금액 미존재시 종목리스크 금액 기준 손절가 설정
