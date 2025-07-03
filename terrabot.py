@@ -310,6 +310,27 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
 
     return ar.getBody().output['nrcvb_buy_amt']
 
+# 매도 가능 수량 조회
+def inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code):
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8408R",
+               "custtype": "P"
+    }            
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "PDNO": code                      # 종목번호(6자리)
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-sell"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output1
+
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price):
 
@@ -489,18 +510,18 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
     # 자산정보 조회
     cur100 = conn.cursor()
-    cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
+    cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt, (select (risk_sum / item_number)::int from public.\"stockMarketMng_stock_market_mng\" where acct_no = A.acct_no and aply_end_dt = '99991231') as risk_amt from \"stockFundMng_stock_fund_mng\" A where acct_no = '" + str(acct_no) + "'")
     result_one00 = cur100.fetchall()
     cur100.close()
 
     asset_num = 0
     sell_plan_amt = 0
+    risk_amt = 0 
 
     for i in result_one00:
         asset_num = i[0]
         sell_plan_amt = i[4]
-        print("자산번호 : " + str(asset_num))  
-        print("매도예정금액 : " + str(sell_plan_amt))
+        risk_amt = i[5]
 
     # 자산정보 변경
     cur200 = conn.cursor()
@@ -535,13 +556,38 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         e_eval_sum = int(c['evlu_amt'][i])
         e_earnings_rate = c['evlu_pfls_rt'][i]
         e_valuation_sum = int(c['evlu_pfls_amt'][i])
-        e_avail_amount = int(c['ord_psbl_qty'][i])
+
+        # 보유종목 손실금액 조회
+        cur101 = conn.cursor()
+        cur101.execute("""
+            SELECT limit_amt
+            FROM "stockBalance_stock_balance"
+            WHERE acct_no = %s AND code = %s
+        """, (acct_no, e_code))
+
+        row = cur101.fetchone()
+        cur101.close()
+
+        limit_price = 0
+
+        if e_purchase_amount > 0:
+            if row and row[0] is not None:
+                try:
+                    # 공백 제거 후 정수로 변환 (양수/음수 모두 지원)
+                    limit_amt = int(str(row[0]).strip())
+                    limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
+                except (ValueError, TypeError):
+                    # 정수 변환 불가한 경우 예외 처리
+                    limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
+            else:
+                # row가 없거나 limit_amt가 NULL인 경우
+                limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
 
         # 자산번호의 매도예정자금이 존재하는 경우, 보유종목 비중별 매도가능금액 및 매도가능수량 계산
         if sell_plan_amt > 0:
             # 종목 매입금액 비중 = 평가금액 / 총평가금액(예수금총금액 + 유저평가금액) * 100
             item_eval_gravity = e_eval_sum / u_tot_evlu_amt * 100
-            print("종목 매입금액 비중 : " + format(int(item_eval_gravity), ',d'))
+            # print("종목 매입금액 비중 : " + format(int(item_eval_gravity), ',d'))
             # 종목 매도가능금액 = 매도예정자금 * 종목 매입금액 비중 * 0.01
             e_sell_plan_sum = sell_plan_amt * item_eval_gravity * 0.01
 
@@ -549,11 +595,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
             e_sell_plan_amount = e_sell_plan_sum / e_current_price
 
             cur301 = conn.cursor()
-            update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, avail_amount = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, sell_plan_sum = %s, sell_plan_amount = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, avail_amount, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sell_plan_sum, sell_plan_amount, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), %s, %s where not exists(select * from upsert)";
+            update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, sell_plan_sum = %s, sell_plan_amount = %s, limit_price = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sell_plan_sum, sell_plan_amount, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.limit_price from (select row_number() over(order by last_chg_date desc) as num, b.limit_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num = 1), %s, %s where not exists(select * from upsert)";
             # update 인자값 설정
-            record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_avail_amount, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, e_sell_plan_sum, e_sell_plan_amount, datetime.now(), acct_no, e_code, asset_num,
-                                    acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_avail_amount, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num, e_sell_plan_sum, e_sell_plan_amount,
-                                    acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
+            record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, e_sell_plan_sum, e_sell_plan_amount, limit_price, datetime.now(), acct_no, e_code, asset_num,
+                                    acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num, e_sell_plan_sum, e_sell_plan_amount, 
+                                    acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
                                     'Y', datetime.now()])
             # DB 연결된 커서의 쿼리 수행
             cur301.execute(update_query301, record_to_update301)
@@ -562,11 +608,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
         else:
             cur301 = conn.cursor()
-            update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, avail_amount = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, avail_amount, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), %s, %s where not exists(select * from upsert)";
+            update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, limit_price = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.limit_price from (select row_number() over(order by last_chg_date desc) as num, b.limit_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where	A.num = 1), %s, %s where not exists(select * from upsert)";
             # update 인자값 설정
-            record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_avail_amount, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, datetime.now(), acct_no, e_code, asset_num,
-                                    acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_avail_amount, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num,
-                                    acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
+            record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, limit_price, datetime.now(), acct_no, e_code, asset_num,
+                                    acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num, 
+                                    acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
                                     'Y', datetime.now()])
             # DB 연결된 커서의 쿼리 수행
             cur301.execute(update_query301, record_to_update301)
@@ -2956,7 +3002,7 @@ def callback_get(update, context) :
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[<code>" + i[6] + "</code>]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액-{format(limit_amt, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액({format(limit_amt, ',d')})원, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
@@ -3074,9 +3120,83 @@ def callback_get(update, context) :
 
             elif data_selected.find("100") != -1:
                     
-                context.bot.edit_message_text(text="[100% 자산정리]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
+
+                # 잔고정보 호출
+                balance_proc(access_token, app_key, app_secret, acct_no)
+
+                # 보유종목정보 조회
+                cur100 = conn.cursor()
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                result_one00 = cur100.fetchall()
+                cur100.close()
+                result_msgs = []
+                
+                for i in result_one00:
+                    trading_plan = i[0]
+                    purchase_price = i[1]
+                    purchase_amount = i[2]
+                    code = [7]
+                    company_name = i[8]
+
+                    # 100% 매도 계획 대상
+                    if trading_plan == "as":
+                        try:
+                            # 매도 가능 수량 조회
+                            b = inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code)
+                            print("매도 가능 수량 : " + format(int(b['ord_psbl_qty']), ',d'))
+                            print("현재가 : " + format(int(b['now_pric']), ',d'))
+
+                            # 매도
+                            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", b['ord_psbl_qty'], b['now_pric'])
+                    
+                            if c['ODNO'] != "":
+
+                                # 일별주문체결 조회
+                                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                                tdf = pd.DataFrame(output1)
+                                tdf.set_index('odno')
+                                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                for i, name in enumerate(d.index):
+                                    d_order_no = int(d['odno'][i])
+                                    d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                    d_order_dt = d['ord_dt'][i]
+                                    d_order_tmd = d['ord_tmd'][i]
+                                    d_name = d['prdt_name'][i]
+                                    d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                    d_order_amount = d['ord_qty'][i]
+                                    d_total_complete_qty = d['tot_ccld_qty'][i]
+                                    d_remain_qty = d['rmn_qty'][i]
+                                    d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                    print("매도주문 완료")
+                                    msg = f"[100% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                                    result_msgs.append(msg)
+
+                            else:
+                                print("매도주문 실패")
+                                msg = f"[100% 정리-{company_name}] 매도가 : {int(b['now_pric']):,}원, 매도량 : {int(b['now_pric']):,}주 매도주문 실패"
+                                result_msgs.append(msg)
+
+
+                        except Exception as e:
+                            print('매도주문 오류.', e)
+                            msg = f"[100% 정리-{company_name}] 매도가 : {int(b['now_pric']):,}원, 매도량 : {int(b['now_pric']):,}주 [매도주문 오류] - {str(e)}"
+                            result_msgs.append(msg)
+
+                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )
 
             elif data_selected.find("66") != -1:
                     
@@ -4354,7 +4474,7 @@ def echo(update, context):
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[" + i[6] + "]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액-{format(limit_amt, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액({format(limit_amt, ',d')})원, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
                     updater.dispatcher.add_handler(get_handler)
