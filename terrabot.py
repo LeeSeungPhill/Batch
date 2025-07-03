@@ -2923,11 +2923,11 @@ def callback_get(update, context) :
                     trading_plan = i[16]
                     print("매매계획 : " + trading_plan)
                     # 손절가
-                    limit_price = int(i[17])
-                    print("손절가 : " + limit_price)
+                    limit_price = i[17]
+                    print("손절가 : " + format(limit_price, ',d'))
                     # 손절금액
-                    limit_amt = int(i[18])
-                    print("손절금액 : " + limit_amt)
+                    limit_amt = i[18]
+                    print("손절금액 : " + format(limit_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -4321,11 +4321,11 @@ def echo(update, context):
                     trading_plan = i[16]
                     print("매매계획 : " + trading_plan)
                     # 손절가
-                    limit_price = int(i[17])
-                    print("손절가 : " + limit_price)
+                    limit_price = i[17]
+                    print("손절가 : " + format(limit_price, ',d'))
                     # 손절금액
-                    limit_amt = int(i[18])
-                    print("손절금액 : " + limit_amt)
+                    limit_amt = i[18]
+                    print("손절금액 : " + format(limit_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
