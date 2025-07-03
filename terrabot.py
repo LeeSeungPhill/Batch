@@ -2883,7 +2883,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan, COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
                 result_one00 = cur100.fetchall()
                 cur100.close()
 
@@ -2922,6 +2922,12 @@ def callback_get(update, context) :
                     # 매메계획
                     trading_plan = i[16]
                     print("매매계획 : " + trading_plan)
+                    # 손절가
+                    limit_price = int(i[17])
+                    print("손절가 : " + limit_price)
+                    # 손절금액
+                    limit_amt = int(i[18])
+                    print("손절금액 : " + limit_amt)
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -2950,7 +2956,7 @@ def callback_get(update, context) :
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[<code>" + i[6] + "</code>]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액-{format(limit_amt, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
@@ -3045,9 +3051,7 @@ def callback_get(update, context) :
                 cur300.close()
             
                 for i in result_three00:
-
-                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액-" + format(int(i[2]), ',d') + "원, 현금액-" + format(int(i[3]), ',d') + "원, 현금비중[" + str(i[0]) + "%], 예수금-"+format(int(i[4]), ',d') + "원, 가수금-" + format(int(i[5]), ',d') + "원, 순자산-" + format(int(i[6]), ',d') + "원, 평가금-" + format(int(i[7]), ',d') + "원, 증감액(" + format(int(i[8]), ',d') + ")원, 승률[" + str(i[0]) + "%], 매도예정금-" + format(int(i[9]), ',d') + "원, 매수예정금-" + format(int(i[10]), ',d') + "원")        
-
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
 
             elif data_selected.find("자산정리") != -1:
 
@@ -3138,13 +3142,12 @@ def callback_get(update, context) :
 
                 # 시장레벨정보 조회
                 cur400 = conn.cursor()
-                cur400.execute("select market_level_num, total_asset, risk_rate, risk_sum, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
+                cur400.execute("select asset_risk_num, total_asset, risk_rate, risk_sum, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
                 result_four00 = cur400.fetchall()
                 cur400.close()
             
                 for i in result_four00:
-
-                    context.bot.send_message(chat_id=update.effective_chat.id, text="시장레벨번호[" + str(i[0]) + "], 총자산-" + format(int(i[1]), ',d') + "원, 리스크[" + str(i[2]) + "%], 리스크금액-"+format(int(i[3]), ',d') + "원, 종목수[" + format(int(i[4]), ',d') + "개], 종목리스크-" + format(int(i[3]/i[4]), ',d') + "원")        
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="자산리스크번호 : " + str(i[0]) + ", 총자산 : " + format(int(i[1]), ',d') + "원, 리스크 : " + str(i[2]) + "%, 리스크금액 : "+format(int(i[3]), ',d') + "원, 종목수 : " + format(int(i[4]), ',d') + "개], 종목리스크 : " + format(int(i[3]/i[4]), ',d') + "원")
 
             elif data_selected.find("시장레벨변경") != -1:
 
@@ -4277,7 +4280,7 @@ def echo(update, context):
 
             # 보유종목정보 조회
             cur100 = conn.cursor()
-            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
+            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan, COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
             result_one00 = cur100.fetchall()
             cur100.close()
 
@@ -4317,6 +4320,12 @@ def echo(update, context):
                     # 매메계획
                     trading_plan = i[16]
                     print("매매계획 : " + trading_plan)
+                    # 손절가
+                    limit_price = int(i[17])
+                    print("손절가 : " + limit_price)
+                    # 손절금액
+                    limit_amt = int(i[18])
+                    print("손절금액 : " + limit_amt)
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -4345,8 +4354,7 @@ def echo(update, context):
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[" + i[6] + "]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 매도예정금액-{format(sell_plan_sum, ',d')}원({format(sell_plan_amount, ',d')}주), 매도가능수량-{format(avail_amount, ',d')}주, 매매계획-{trading_plan} => {sell_command}"))
-           
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액-{format(limit_amt, ',d')}주, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
                     updater.dispatcher.add_handler(get_handler)
