@@ -303,17 +303,18 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
         limit_price = 0
 
-        if row and row[0] is not None:
-            try:
-                # 공백 제거 후 정수로 변환 (양수/음수 모두 지원)
-                limit_amt = int(str(row[0]).strip())
-                limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
-            except (ValueError, TypeError):
-                # 정수 변환 불가한 경우 예외 처리
+        if e_purchase_amount > 0:
+            if row and row[0] is not None:
+                try:
+                    # 공백 제거 후 정수로 변환 (양수/음수 모두 지원)
+                    limit_amt = int(str(row[0]).strip())
+                    limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
+                except (ValueError, TypeError):
+                    # 정수 변환 불가한 경우 예외 처리
+                    limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
+            else:
+                # row가 없거나 limit_amt가 NULL인 경우
                 limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
-        else:
-            # row가 없거나 limit_amt가 NULL인 경우
-            limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
 
         balance_list.append({
             '계좌번호': str(acct_no),
