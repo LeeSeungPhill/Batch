@@ -3161,6 +3161,7 @@ def callback_get(update, context) :
                             sell_qty = b['ord_psbl_qty']
                             sell_price = b['now_pric']
                             base_dtm = datetime.now().strftime("%H%M%S")
+                            sell_rate = 100
 
                             # 주식당일분봉조회
                             minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
@@ -3226,7 +3227,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3244,7 +3245,7 @@ def callback_get(update, context) :
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
