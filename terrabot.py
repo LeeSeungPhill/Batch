@@ -331,7 +331,7 @@ def inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code):
     res = requests.get(URL, headers=headers, params=params, verify=False)
     ar = resp.APIResp(res)
 
-    return ar.getBody().output1
+    return ar.getBody().output
 
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price):
@@ -3142,17 +3142,17 @@ def callback_get(update, context) :
                     trading_plan = i[0]
                     purchase_price = i[1]
                     purchase_amount = i[2]
-                    code = [7]
+                    code = i[7]
                     company_name = i[8]
 
                     # 100% 매도 계획 대상
                     if trading_plan == "as":
-                        try:
-                            # 매도 가능 수량 조회
-                            b = inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code)
-                            print("매도 가능 수량 : " + format(int(b['ord_psbl_qty']), ',d'))
-                            print("현재가 : " + format(int(b['now_pric']), ',d'))
+                        # 매도 가능 수량 조회
+                        b = inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code)
+                        print("매도 가능 수량 : " + format(int(b['ord_psbl_qty']), ',d'))
+                        print("현재가 : " + format(int(b['now_pric']), ',d'))
 
+                        try:
                             # 매도
                             c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", b['ord_psbl_qty'], b['now_pric'])
                     
