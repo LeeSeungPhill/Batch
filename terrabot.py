@@ -3349,7 +3349,7 @@ def callback_get(update, context) :
 
                         if int(b['ord_psbl_qty']) > 0:
 
-                            sell_qty = round(int(b['ord_psbl_qty']) * 2/3)
+                            sell_qty = round(int(b['ord_psbl_qty']) * 0.66)
                             sell_price = b['now_pric']
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 66
@@ -3731,7 +3731,7 @@ def callback_get(update, context) :
 
                         if int(b['ord_psbl_qty']) > 0:
 
-                            sell_qty = round(int(b['ord_psbl_qty']) / 3)
+                            sell_qty = round(int(b['ord_psbl_qty']) / 0.33)
                             sell_price = b['now_pric']
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 33
