@@ -3235,7 +3235,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"100% 정리 {company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime("%H:%M:%S")}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 정보 등록"
+                                msg = f"100% 정리 {company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 정보 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
