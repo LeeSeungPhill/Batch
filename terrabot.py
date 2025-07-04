@@ -3313,9 +3313,194 @@ def callback_get(update, context) :
 
             elif data_selected.find("66") != -1:
                     
-                context.bot.edit_message_text(text="[66% 자산정리]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
+
+                # 잔고정보 호출
+                balance_proc(access_token, app_key, app_secret, acct_no)
+
+                # 보유종목정보 조회
+                cur100 = conn.cursor()
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                result_one00 = cur100.fetchall()
+                cur100.close()
+                result_msgs = []
+                
+                for i in result_one00:
+                    trading_plan = i[0]
+                    purchase_price = i[1]
+                    purchase_amount = i[2]
+                    sign_resist_price = i[3]
+                    sign_support_price = i[4]
+                    end_target_price = i[5]
+                    end_loss_price = i[6]
+                    code = i[7]
+                    company_name = i[8]
+
+                    # 66% 매도 계획 대상
+                    if trading_plan == "66s":
+                        # 매도 가능 수량 조회
+                        b = inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code)
+                        print("매도 가능 수량 : " + format(int(b['ord_psbl_qty']), ',d'))
+                        print("현재가 : " + format(int(b['now_pric']), ',d'))
+
+                        if int(b['ord_psbl_qty']) > 0:
+
+                            sell_qty = round(int(b['ord_psbl_qty']) * 2/3)
+                            sell_price = b['now_pric']
+                            base_dtm = datetime.now().strftime("%H%M%S")
+                            sell_rate = 66
+
+                            # 주식당일분봉조회
+                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            minute_list = []
+                            for item in minute_info:
+                                minute_list.append({
+                                    '체결시간': item['stck_cntg_hour'],
+                                    '종가': item['stck_prpr'],
+                                    '시가': item['stck_oprc'],
+                                    '고가': item['stck_hgpr'],
+                                    '저가': item['stck_lwpr'],
+                                    '거래량': item['cntg_vol']
+                                })
+
+                            df = pd.DataFrame(minute_list)
+                            df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
+                            df = df.sort_values('체결시간').reset_index(drop=True)
+                        
+                            df.rename(columns={
+                                '종가': 'close',
+                                '시가': 'open',
+                                '고가': 'high',
+                                '저가': 'low',
+                                '거래량': 'volume',
+                                '체결시간': 'timestamp'
+                            }, inplace=True)
+
+                            df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
+                            df['body'] = (df['close'] - df['open']).abs()
+
+                            # 기준봉: 가장 거래량 많은 봉
+                            idx = df['volume'].idxmax()
+                            기준봉 = df.loc[idx]
+
+                            while True:
+                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
+                                candidates = 이후_봉들[
+                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
+                                    (이후_봉들['low'] < 기준봉['low'])
+                                ]
+                                if candidates.empty:
+                                    break
+                                기준봉 = candidates.iloc[0]
+
+                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+
+                            # 몸통 유형 구분
+                            body_value = 기준봉['body']
+                            if body_value > avg_body * 1.5:
+                                candle_body = "L"   # 장봉
+                            elif body_value < avg_body * 0.5:
+                                candle_body = "S"   # 단봉
+                            else:
+                                candle_body = "M"   # 보통
+
+                            # 매매자동처리 insert
+                            cur500 = conn.cursor()
+                            insert_query = """
+                                INSERT INTO trade_auto_proc (
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                            """
+                            # insert 인자값 설정
+                            cur500.execute(insert_query, (
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                            ))
+
+                            was_inserted = cur500.rowcount == 1
+
+                            conn.commit()
+                            cur500.close()
+
+                            if was_inserted:
+                                msg = f"66% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
+                                # 매매자동처리 update
+                                cur501 = conn.cursor()
+                                update_query = """
+                                    UPDATE trade_auto_proc
+                                    SET
+                                        proc_yn = 'N'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chg_date = %s
+                                    WHERE acct_no = %s
+                                    AND code = %s
+                                    AND base_day = %s
+                                    AND base_dtm <> %s
+                                    AND trade_tp = 'S'
+                                    AND proc_yn = 'Y'
+                                """
+
+                                # update 인자값 설정
+                                cur501.execute(update_query, (
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                ))
+
+                                conn.commit()
+                                cur501.close()
+
+                            try:
+                                # 매도
+                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                        
+                                if c['ODNO'] != "":
+
+                                    # 일별주문체결 조회
+                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                                    tdf = pd.DataFrame(output1)
+                                    tdf.set_index('odno')
+                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                    for i, name in enumerate(d.index):
+                                        d_order_no = int(d['odno'][i])
+                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                        d_order_dt = d['ord_dt'][i]
+                                        d_order_tmd = d['ord_tmd'][i]
+                                        d_name = d['prdt_name'][i]
+                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                        d_order_amount = d['ord_qty'][i]
+                                        d_total_complete_qty = d['tot_ccld_qty'][i]
+                                        d_remain_qty = d['rmn_qty'][i]
+                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                        print("매도주문 완료")
+                                        msg = f"[66% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                                        result_msgs.append(msg)
+
+                                else:
+                                    print("매도주문 실패")
+                                    msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                                    result_msgs.append(msg)
+
+
+                            except Exception as e:
+                                print('매도주문 오류.', e)
+                                msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                                result_msgs.append(msg)
+
+                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )
 
             elif data_selected.find("50") != -1:
 
@@ -3509,10 +3694,195 @@ def callback_get(update, context) :
                 )
                 
             elif data_selected.find("33") != -1:
-                    
-                context.bot.edit_message_text(text="[33% 자산정리]",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)    
+
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
+
+                # 잔고정보 호출
+                balance_proc(access_token, app_key, app_secret, acct_no)
+
+                # 보유종목정보 조회
+                cur100 = conn.cursor()
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                result_one00 = cur100.fetchall()
+                cur100.close()
+                result_msgs = []
+                
+                for i in result_one00:
+                    trading_plan = i[0]
+                    purchase_price = i[1]
+                    purchase_amount = i[2]
+                    sign_resist_price = i[3]
+                    sign_support_price = i[4]
+                    end_target_price = i[5]
+                    end_loss_price = i[6]
+                    code = i[7]
+                    company_name = i[8]
+
+                    # 33% 매도 계획 대상
+                    if trading_plan == "33s":
+                        # 매도 가능 수량 조회
+                        b = inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code)
+                        print("매도 가능 수량 : " + format(int(b['ord_psbl_qty']), ',d'))
+                        print("현재가 : " + format(int(b['now_pric']), ',d'))
+
+                        if int(b['ord_psbl_qty']) > 0:
+
+                            sell_qty = round(int(b['ord_psbl_qty']) / 3)
+                            sell_price = b['now_pric']
+                            base_dtm = datetime.now().strftime("%H%M%S")
+                            sell_rate = 33
+
+                            # 주식당일분봉조회
+                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            minute_list = []
+                            for item in minute_info:
+                                minute_list.append({
+                                    '체결시간': item['stck_cntg_hour'],
+                                    '종가': item['stck_prpr'],
+                                    '시가': item['stck_oprc'],
+                                    '고가': item['stck_hgpr'],
+                                    '저가': item['stck_lwpr'],
+                                    '거래량': item['cntg_vol']
+                                })
+
+                            df = pd.DataFrame(minute_list)
+                            df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
+                            df = df.sort_values('체결시간').reset_index(drop=True)
+                        
+                            df.rename(columns={
+                                '종가': 'close',
+                                '시가': 'open',
+                                '고가': 'high',
+                                '저가': 'low',
+                                '거래량': 'volume',
+                                '체결시간': 'timestamp'
+                            }, inplace=True)
+
+                            df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
+                            df['body'] = (df['close'] - df['open']).abs()
+
+                            # 기준봉: 가장 거래량 많은 봉
+                            idx = df['volume'].idxmax()
+                            기준봉 = df.loc[idx]
+
+                            while True:
+                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
+                                candidates = 이후_봉들[
+                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
+                                    (이후_봉들['low'] < 기준봉['low'])
+                                ]
+                                if candidates.empty:
+                                    break
+                                기준봉 = candidates.iloc[0]
+
+                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+
+                            # 몸통 유형 구분
+                            body_value = 기준봉['body']
+                            if body_value > avg_body * 1.5:
+                                candle_body = "L"   # 장봉
+                            elif body_value < avg_body * 0.5:
+                                candle_body = "S"   # 단봉
+                            else:
+                                candle_body = "M"   # 보통
+
+                            # 매매자동처리 insert
+                            cur500 = conn.cursor()
+                            insert_query = """
+                                INSERT INTO trade_auto_proc (
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                            """
+                            # insert 인자값 설정
+                            cur500.execute(insert_query, (
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                            ))
+
+                            was_inserted = cur500.rowcount == 1
+
+                            conn.commit()
+                            cur500.close()
+
+                            if was_inserted:
+                                msg = f"33% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
+                                # 매매자동처리 update
+                                cur501 = conn.cursor()
+                                update_query = """
+                                    UPDATE trade_auto_proc
+                                    SET
+                                        proc_yn = 'N'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chg_date = %s
+                                    WHERE acct_no = %s
+                                    AND code = %s
+                                    AND base_day = %s
+                                    AND base_dtm <> %s
+                                    AND trade_tp = 'S'
+                                    AND proc_yn = 'Y'
+                                """
+
+                                # update 인자값 설정
+                                cur501.execute(update_query, (
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                ))
+
+                                conn.commit()
+                                cur501.close()
+
+                            try:
+                                # 매도
+                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                        
+                                if c['ODNO'] != "":
+
+                                    # 일별주문체결 조회
+                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                                    tdf = pd.DataFrame(output1)
+                                    tdf.set_index('odno')
+                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                    for i, name in enumerate(d.index):
+                                        d_order_no = int(d['odno'][i])
+                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                        d_order_dt = d['ord_dt'][i]
+                                        d_order_tmd = d['ord_tmd'][i]
+                                        d_name = d['prdt_name'][i]
+                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                        d_order_amount = d['ord_qty'][i]
+                                        d_total_complete_qty = d['tot_ccld_qty'][i]
+                                        d_remain_qty = d['rmn_qty'][i]
+                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                        print("매도주문 완료")
+                                        msg = f"[33% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                                        result_msgs.append(msg)
+
+                                else:
+                                    print("매도주문 실패")
+                                    msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                                    result_msgs.append(msg)
+
+
+                            except Exception as e:
+                                print('매도주문 오류.', e)
+                                msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                                result_msgs.append(msg)
+
+                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )
 
             elif data_selected.find("25") != -1:
                     
