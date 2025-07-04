@@ -44,7 +44,7 @@ stock_code = stock_code[['회사명', '종목코드']]
 # 한글 컬럼명을 영어로 변경
 stock_code = stock_code.rename(columns={'회사명': 'company', '종목코드': 'code'})
 # 종목코드가 6자리이기 때문에 6자리를 맞춰주기 위해 설정해줌
-stock_code.code = stock_code.code.map('{:06d}'.format)
+stock_code['code'] = stock_code['code'].astype(int).map('{:06d}'.format)
 
 # 텔레그램봇 사용할 token
 if arguments[1] == 'chichipa':
