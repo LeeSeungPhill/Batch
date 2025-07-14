@@ -35,39 +35,36 @@ def auth(APP_KEY, APP_SECRET):
     return ACCESS_TOKEN
 
 # 계정정보 조회
-def account():
-
+def account(nickname):
     cur01 = conn.cursor()
-    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+    cur01.execute("""
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day
+        FROM "stockAccount_stock_account"
+        WHERE nick_name = %s
+    """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no = result_two[0]
-    access_token = result_two[1]
-    app_key = result_two[2]
-    app_secret = result_two[3]
-
-    YmdHMS = datetime.now()
-    validTokenDate = datetime.strptime(result_two[4], '%Y%m%d%H%M%S')
-    diff = YmdHMS - validTokenDate
-    # print("diff : " + str(diff.days))
-    if diff.days >= 1 or result_two[5] != today:  # 토큰 유효기간(1일) 만료 재발급
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day = result_two
+    validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
+    if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
-        token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
-        print("new access_token : " + access_token)
-        # 계정정보 토큰값 변경
+        token_publ_date = datetime.now().strftime('%Y%m%d%H%M%S')
         cur02 = conn.cursor()
-        update_query = "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s"
-        # update 인자값 설정
-        record_to_update = ([access_token, token_publ_date, datetime.now(), acct_no])
-        # DB 연결된 커서의 쿼리 수행
-        cur02.execute(update_query, record_to_update)
+        cur02.execute("""
+            UPDATE "stockAccount_stock_account"
+            SET access_token = %s, token_publ_date = %s, last_chg_date = %s
+            WHERE acct_no = %s
+        """, (access_token, token_publ_date, datetime.now(), acct_no))
         conn.commit()
         cur02.close()
 
-    account_rtn = {'acct_no':acct_no, 'access_token':access_token, 'app_key':app_key, 'app_secret':app_secret}
-
-    return account_rtn
+    return {
+        'acct_no': acct_no,
+        'access_token': access_token,
+        'app_key': app_key,
+        'app_secret': app_secret
+    }
 
 # 주식분봉 조회
 def inquire_time_itemchartprice(access_token, app_key, app_secret, code, time):
@@ -191,24 +188,42 @@ def stock_minute_get(access_token, app_key, app_secret, code, company):
 
     cur1.close()
 
-ac = account()
-acct_no = ac['acct_no']
-access_token = ac['access_token']
-app_key = ac['app_key']
-app_secret = ac['app_secret']
+cur0 = conn.cursor()
+cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
+result_one = cur0.fetchone()
+cur0.close()
 
-# 잔고정보 및 관심종목 조회
-cur100 = conn.cursor()
-cur100.execute("select code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' UNION ALL select code, name from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and length(code) > 4")
-result_one00 = cur100.fetchall()
-cur100.close()
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
 
-for i in result_one00:
-    time.sleep(3)
-    code = i[0]
-    name = i[1]
+if result_one == None:
 
-    # 종목 당일 현재시간까지 10분봉 저장(OHLCV)
-    stock_minute_get(access_token, app_key, app_secret, code, name)
-    
-conn.close()
+    for nick in nickname_list:
+        try:
+            ac = account(nick)
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
+
+            # 잔고정보 및 관심종목 조회
+            cur100 = conn.cursor()
+            cur100.execute("select code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' UNION ALL select code, name from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and length(code) > 4")
+            result_one00 = cur100.fetchall()
+            cur100.close()
+
+            for i in result_one00:
+                time.sleep(3)
+                code = i[0]
+                name = i[1]
+
+                # 종목 당일 현재시간까지 10분봉 저장(OHLCV)
+                stock_minute_get(access_token, app_key, app_secret, code, name)
+
+        except Exception as ex:
+            print('종목별 분봉 저장 처리 에러 : ', ex)
+
+    conn.close()
+
+else:
+    conn.close()    
+    print("Today is Holiday")
