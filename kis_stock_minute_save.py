@@ -5,12 +5,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 import time
 import psycopg2 as db
-import sys
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
-
-arguments = sys.argv
 
 # PostgreSQL 연결 설정
 #conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
