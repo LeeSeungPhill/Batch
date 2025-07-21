@@ -277,7 +277,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, strt_dt, end_dt)
         print("일별주문체결조회 중 오류 발생:", e)
         return []
 
-nickname = ['phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
+nickname = ['phills2', 'chichipa', 'phills75', 'yh480825', 'phills13', 'phills15']
 # nickname = ['yh480825']
 my_choice = st.selectbox('닉네임을 선택하세요', nickname)   
 
@@ -331,6 +331,23 @@ else:
     else:
         # Streamlit 앱 구성
         st.title("잔고정보 조회")
+
+        total_amt = df0['평가금액'].sum()
+        cash_amt = df0[df0['종목명'] == '현금']['평가금액'].sum()
+        df_filtered = df0[~df0['종목명'].isin(['현금'])]
+        total_hold_amt = df_filtered['매입금액'].sum()
+        total_eval_amt = df_filtered['평가금액'].sum()
+        total_profit_amt = df_filtered['손익금액'].sum()
+        profit_rate = (total_profit_amt / total_hold_amt * 100) if total_hold_amt != 0 else 0.0
+        
+        st.subheader("📊 총 집계 정보")
+        col1, col2 = st.columns(2)
+        col1.metric("총 금액", f"{total_amt:,.0f}원")
+        col2.metric("현금", f"{cash_amt:,.0f}원")
+        col3, col4, col5 = st.columns(3)
+        col3.metric("총 매입금액", f"{total_hold_amt:,.0f}원")
+        col4.metric("총 평가금액", f"{total_eval_amt:,.0f}원")
+        col5.metric("총 손익금액", f"{total_profit_amt:,.0f}원", delta=f"{profit_rate:+.2f}%")
 
         # 전체 평가금액 기준 비중 계산
         df0['비중(%)'] = df0['평가금액'] / df0['평가금액'].sum() * 100
