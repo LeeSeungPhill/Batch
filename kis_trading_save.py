@@ -15,6 +15,12 @@ conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
 
+def format_number(value):
+    try:
+        return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
+    except:
+        return str(value)
+    
 def auth(APP_KEY, APP_SECRET):
     headers = {"content-type": "application/json"}
     body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
@@ -190,7 +196,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         f_volumn = int(f['acml_vol'])                   # 누적거래량
         f_volumn_rate = float(f['prdy_vrss_vol_rate'])  # 전일대비거래량비율
 
-        print(f"[{acct_no}] 종목코드 : {e_code} 종목명 : {e_name} 매입단가 : {format(int(e_purchase_price), ',d')} 보유수량 : {format(int(e_purchase_qty), ',d')} 현재가 : {format(int(e_current_price), ',d')} 평가손익 : {format(int(e_valuation_amt), ',d')}")
+        print(f"[{acct_no}] 종목코드 : {e_code} 종목명 : {e_name} 매입단가 : {format_number(e_purchase_price)} 보유수량 : {format_number(e_purchase_qty)} 현재가 : {format_number(e_current_price)} 평가손익 : {format_number(e_valuation_amt)}")
 
         insert_query2 = "with upsert as (update dly_stock_balance set buy_qty = %s, sell_qty = %s, purchase_price = %s, purchase_qty = %s, purchase_amt = %s, current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, last_chg_date = %s, sign_resist_price = (select COALESCE(sign_resist_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), sign_support_price = (select COALESCE(sign_support_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), end_target_price = (select COALESCE(end_target_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), end_loss_price = (select COALESCE(end_loss_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), trading_plan = (select COALESCE(trading_plan, '') from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), limit_price = (select COALESCE(limit_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), limit_amt = (select COALESCE(limit_amt, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"') where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_balance(acct, dt, name, code, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, open_price, high_price, low_price, volumn, volumn_rate, eval_sum, earnings_rate, valuation_sum, last_chg_date, sign_resist_price, sign_support_price, end_target_price, end_loss_price, trading_plan, limit_price, limit_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select COALESCE(sign_resist_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(sign_support_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(end_target_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(end_loss_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(trading_plan, '') from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(limit_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(limit_amt, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"') where not exists(select * from upsert)"
         # insert 인자값 설정
@@ -209,7 +215,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
 
     # 관심종목 이탈가, 돌파가, 지지가, 저항가, 추세하단가, 추세상단가를 각각 현재시세의 최고가 최저가 비교
     for i in result:
-        print(f"[{acct_no}] 종목코드 : {i[0]} 종목명 : {i[1]} 돌파가 : {format(int(i[2]), ',d')} 이탈가 : {format(int(i[3]), ',d')} 저항가 : {format(int(i[4]), ',d')} 지지가 : {format(int(i[5]), ',d')} 추세상단가 : {format(int(i[6]), ',d')} 추세하단가 : {format(int(i[7]), ',d')}")
+        print(f"[{acct_no}] 종목코드 : {i[0]} 종목명 : {i[1]} 돌파가 : {format_number(i[2])} 이탈가 : {format_number(i[3])} 저항가 : {format_number(i[4])} 지지가 : {format_number(i[5])} 추세상단가 : {format_number(i[6])} 추세하단가 : {format_number(i[7])}")
         code = i[0]                                         # 종목코드
         name = i[1]                                         # 종목명
 
