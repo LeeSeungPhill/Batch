@@ -531,7 +531,11 @@ if result_one == None:
 
                 if len(i[0]) == 6:
 
-                    a = inquire_price(access_token, app_key, app_secret, i[0])
+                    try:
+                        time.sleep(0.3)  # 초당 3건 이하로 제한
+                        a = inquire_price(access_token, app_key, app_secret, i[0])
+                    except Exception as ex:
+                        print(f"현재가 시세 에러 : [{i[2]}] {ex}")
 
                     if time > '0900' and time < '0910':
                         if round(float(a['prdy_vrss_vol_rate'])) > 10:

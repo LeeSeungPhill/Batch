@@ -332,8 +332,11 @@ if result_one == None:
                 elif i[11] == 'S': 
                     candle_type  = "[단봉] "
 
-                # 주식현재가 시세
-                a = inquire_price(access_token, app_key, app_secret, i[2])
+                try:
+                    time.sleep(0.3)  # 초당 3건 이하로 제한
+                    a = inquire_price(access_token, app_key, app_secret, i[2])
+                except Exception as ex:
+                    print(f"현재가 시세 에러 : [{i[2]}] {ex}")
 
                 # 매수 대상
                 if i[4] == 'B':

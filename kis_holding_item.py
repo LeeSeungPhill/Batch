@@ -678,7 +678,11 @@ if result_one == None:
             for i in result_three:
                 # print("종목명 : " + i[1])
 
-                a = inquire_price(access_token, app_key, app_secret, i[0])
+                try:
+                    time.sleep(0.3)  # 초당 3건 이하로 제한
+                    a = inquire_price(access_token, app_key, app_secret, i[0])
+                except Exception as ex:
+                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")
 
                 trail_signal_code = ""
                 trail_signal_name = ""

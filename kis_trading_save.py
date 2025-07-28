@@ -4,6 +4,7 @@ import requests
 import json
 import kis_api_resp as resp
 import pandas as pd
+import time
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -189,12 +190,16 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         e_earnings_rate = e['evlu_pfls_rt'][i]          # 수익율
         e_valuation_amt = int(e['evlu_pfls_amt'][i])    # 평가손익금액
 
-        f = inquire_price(access_token, app_key, app_secret, e_code)
-        f_open_price = int(f['stck_oprc'])              # 시가
-        f_high_price = int(f['stck_hgpr'])              # 최고가
-        f_low_price = int(f['stck_lwpr'])               # 최저가
-        f_volumn = int(f['acml_vol'])                   # 누적거래량
-        f_volumn_rate = float(f['prdy_vrss_vol_rate'])  # 전일대비거래량비율
+        try:
+            time.sleep(0.3)  # 초당 3건 이하로 제한
+            f = inquire_price(access_token, app_key, app_secret, e_code)
+            f_open_price = int(f['stck_oprc'])              # 시가
+            f_high_price = int(f['stck_hgpr'])              # 최고가
+            f_low_price = int(f['stck_lwpr'])               # 최저가
+            f_volumn = int(f['acml_vol'])                   # 누적거래량
+            f_volumn_rate = float(f['prdy_vrss_vol_rate'])  # 전일대비거래량비율
+        except Exception as ex:
+            print(f"현재가 시세 에러 : [{e_code}] {ex}")
 
         print(f"[{acct_no}-{e_name}] 보유가 : {format_number(e_purchase_price)}, 보유량 : {format_number(e_purchase_qty)}, 현재가 : {format_number(e_current_price)}, 평가손익 : {format_number(e_valuation_amt)}, 처리일시 : {datetime.now()}")
 
@@ -229,13 +234,17 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
             volumn_rate = float(int(b['acml_vol']) / int(b['prdy_vol']) * 100)   # 전일대비거래량비율
 
         else:
-            f = inquire_price(access_token, app_key, app_secret, code)
-            open_price = int(f['stck_oprc'])                # 시가
-            high_price = int(f['stck_hgpr'])                # 최고가
-            low_price = int(f['stck_lwpr'])                 # 최저가
-            current_price = int(f['stck_prpr'])             # 종가
-            volumn = int(f['acml_vol'])                     # 누적거래량
-            volumn_rate = float(f['prdy_vrss_vol_rate'])    # 전일대비거래량비율    
+            try:
+                time.sleep(0.3)  # 초당 3건 이하로 제한
+                f = inquire_price(access_token, app_key, app_secret, code)
+                open_price = int(f['stck_oprc'])                # 시가
+                high_price = int(f['stck_hgpr'])                # 최고가
+                low_price = int(f['stck_lwpr'])                 # 최저가
+                current_price = int(f['stck_prpr'])             # 종가
+                volumn = int(f['acml_vol'])                     # 누적거래량
+                volumn_rate = float(f['prdy_vrss_vol_rate'])    # 전일대비거래량비율  
+            except Exception as ex:
+                print(f"현재가 시세 에러 : [{code}] {ex}")          
         
         insert_query22 = "with upsert as (update dly_stock_interest set current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, through_price = %s, leave_price = %s, resist_price = %s, support_price = %s, trend_high_price = %s, trend_low_price = %s, last_chg_date = %s where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_interest(acct, dt, name, code, current_price, open_price, high_price, low_price, volumn, volumn_rate, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
         # insert 인자값 설정
