@@ -7,6 +7,7 @@ import telegram
 import asyncio
 import pandas as pd
 from decimal import Decimal
+import time
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스

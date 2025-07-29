@@ -5,8 +5,8 @@ import requests
 import json
 import telegram
 import asyncio
-import math
 import pandas as pd
+import time
 
 #URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
