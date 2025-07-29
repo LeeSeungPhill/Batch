@@ -18,7 +18,7 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
-time = datetime.now().strftime("%H%M")
+cur_time = datetime.now().strftime("%H%M")
 second = datetime.now().strftime("%H%M%S")
 
 # 인증처리
