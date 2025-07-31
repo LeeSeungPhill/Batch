@@ -2715,7 +2715,7 @@ def callback_get(update, context) :
                 cur200.close()
 
                 for i in result_two00:
-
+                    a = ""
                     a = inquire_price(access_token, app_key, app_secret, i[0])
 
                     company = i[1] + "[<code>" + i[0] + "</code>]"
@@ -4894,7 +4894,7 @@ def echo(update, context):
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
-
+        a = ""
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
         stck_prpr = a['stck_prpr']                      # 현재가

@@ -189,6 +189,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         e_eval_amt = int(e['evlu_amt'][i])              # 평가금액
         e_earnings_rate = e['evlu_pfls_rt'][i]          # 수익율
         e_valuation_amt = int(e['evlu_pfls_amt'][i])    # 평가손익금액
+        f = ""
 
         try:
             time.sleep(0.3)  # 초당 3건 이하로 제한
@@ -223,6 +224,8 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         print(f"[{acct_no}-{i[1]}] 돌파가 : {format_number(i[2])}, 이탈가 : {format_number(i[3])}, 저항가 : {format_number(i[4])}, 지지가 : {format_number(i[5])}, 추세상단가 : {format_number(i[6])}, 추세하단가 : {format_number(i[7])}")
         code = i[0]                                         # 종목코드
         name = i[1]                                         # 종목명
+        b = ""
+        f = ""
 
         if len(i[0]) == 4:
             b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
