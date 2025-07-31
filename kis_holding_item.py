@@ -678,7 +678,7 @@ if result_one == None:
             # 보유종목 최종이탈가, 최종목표가를 각각 실시간 종목시세의 최고가와 최저가 비교
             for i in result_three:
                 # print("종목명 : " + i[1])
-
+                a = ""
                 try:
                     time.sleep(0.3)  # 초당 3건 이하로 제한
                     a = inquire_price(access_token, app_key, app_secret, i[0])
