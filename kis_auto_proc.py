@@ -326,6 +326,7 @@ if result_one == None:
                 trail_signal_name = ""
                 vol_appear = 0
                 candle_type = ""
+                a = ""
 
                 if i[11] == 'L': 
                     candle_type  = "[장봉] "
@@ -335,125 +336,126 @@ if result_one == None:
                 try:
                     time.sleep(0.3)  # 초당 3건 이하로 제한
                     a = inquire_price(access_token, app_key, app_secret, i[2])
+
+                    # 매수 대상
+                    if i[4] == 'B':
+
+                        n_buy_sum = 0
+                        n_buy_amount = 0
+                        loss_price = 0
+                        item_loss_sum = 0
+
+                        if int(a['stck_prpr']) > i[7]:
+                            print("종목명 : " + i[1] + "돌파가 : " + format(int(i[7]), ',d') + "원 돌파")
+                            signal_cd = "01"
+                            signal_cd_name = format(int(i[7]), ',d') + "원 {돌파가 돌파}"
+                            # 매수금액
+                            n_buy_sum = int(i[12])
+                            # 매수량 = round(매수금액 / 현재가)
+                            n_buy_amount = round(n_buy_sum / int(a['stck_prpr']))
+                            # 손절가
+                            loss_price = i[8]
+                            # 손절금액 = (현재가 - 손절가) * 매수량
+                            item_loss_sum = (int(a['stck_prpr']) - int(loss_price)) * n_buy_amount
+
+                            buy_command = f"/InterestBuy_{i[2]}_{a['stck_prpr']}"
+
+                            telegram_text = (f"[자동매수]{i[1]}[<code>{i[2]}</code>] : {candle_type}{trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
+                            # 텔레그램 메시지 전송
+                            asyncio.run(main(telegram_text))
+
+                            cur400 = conn.cursor()
+                            # UPDATE
+                            cur400.execute("""
+                                UPDATE trade_auto_proc
+                                SET
+                                    signal_cd = %s,
+                                    proc_yn = 'N',
+                                    chgr_id = 'AUTO_UP_PROC_BAT',
+                                    chg_date = now()
+                                WHERE acct_no = %s 
+                                AND proc_yn = 'Y' 
+                                AND base_day = %s 
+                                AND code = %s
+                                AND trade_tp = 'B'
+                            """
+                            , (
+                                signal_cd, 
+                                str(acct_no),
+                                today,
+                                i[2]
+                            ))    
+
+                            conn.commit()
+                            cur400.close()
+
+                    # 매도 대상
+                    elif i[4] == 'S':
+
+                        if int(a['stck_prpr']) < i[8]:
+                            # 계좌종목 조회
+                            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+
+                            balance_list = []
+
+                            for j, name in enumerate(c.index):
+                                J_code = c['pdno'][j]
+                                j_hldg_qty = int(c['hldg_qty'][j])
+                                j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+
+                                sell_rate = 0
+                                sell_amount = 0
+                                sell_sum = 0
+
+                                # 잔고정보의 매매자동처리 종목이 존재할 경우
+                                if J_code == i[2]:
+                                    print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
+                                    signal_cd = "02"
+                                    signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
+
+                                    # 주문가능수량 존재시
+                                    if j_ord_psbl_qty > 0:
+                                        # 매도비율(%)
+                                        sell_rate = int(i[12])
+                                        # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                        sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
+                                        # 매도금액 = 매도량 * 현재가
+                                        sell_sum = sell_amount * int(a['stck_prpr'])
+
+                                        sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
+
+                                        telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                        # 텔레그램 메시지 전송
+                                        asyncio.run(main(telegram_text))
+
+                                    if j_hldg_qty > 0:
+                                        cur400 = conn.cursor()
+                                        # UPDATE
+                                        cur400.execute("""
+                                            UPDATE trade_auto_proc
+                                            SET
+                                                signal_cd = %s,
+                                                proc_yn = 'N',
+                                                chgr_id = 'AUTO_PROC_BAT',
+                                                chg_date = now()
+                                            WHERE acct_no = %s 
+                                            AND proc_yn = 'Y' 
+                                            AND base_day = %s 
+                                            AND code = %s
+                                            AND trade_tp = 'S'
+                                        """
+                                        , (
+                                            signal_cd, 
+                                            str(acct_no),
+                                            today,
+                                            i[2]
+                                        ))    
+
+                                        conn.commit()
+                                        cur400.close()
+
                 except Exception as ex:
-                    print(f"현재가 시세 에러 : [{i[2]}] {ex}")
-
-                # 매수 대상
-                if i[4] == 'B':
-
-                    n_buy_sum = 0
-                    n_buy_amount = 0
-                    loss_price = 0
-                    item_loss_sum = 0
-
-                    if int(a['stck_prpr']) > i[7]:
-                        print("종목명 : " + i[1] + "돌파가 : " + format(int(i[7]), ',d') + "원 돌파")
-                        signal_cd = "01"
-                        signal_cd_name = format(int(i[7]), ',d') + "원 {돌파가 돌파}"
-                        # 매수금액
-                        n_buy_sum = int(i[12])
-                        # 매수량 = round(매수금액 / 현재가)
-                        n_buy_amount = round(n_buy_sum / int(a['stck_prpr']))
-                        # 손절가
-                        loss_price = i[8]
-                        # 손절금액 = (현재가 - 손절가) * 매수량
-                        item_loss_sum = (int(a['stck_prpr']) - int(loss_price)) * n_buy_amount
-
-                        buy_command = f"/InterestBuy_{i[2]}_{a['stck_prpr']}"
-
-                        telegram_text = (f"[자동매수]{i[1]}[<code>{i[2]}</code>] : {candle_type}{trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
-                        # 텔레그램 메시지 전송
-                        asyncio.run(main(telegram_text))
-
-                        cur400 = conn.cursor()
-                        # UPDATE
-                        cur400.execute("""
-                            UPDATE trade_auto_proc
-                            SET
-                                signal_cd = %s,
-                                proc_yn = 'N',
-                                chgr_id = 'AUTO_UP_PROC_BAT',
-                                chg_date = now()
-                            WHERE acct_no = %s 
-                            AND proc_yn = 'Y' 
-                            AND base_day = %s 
-                            AND code = %s
-                            AND trade_tp = 'B'
-                        """
-                        , (
-                            signal_cd, 
-                            str(acct_no),
-                            today,
-                            i[2]
-                        ))    
-
-                        conn.commit()
-                        cur400.close()
-
-                # 매도 대상
-                elif i[4] == 'S':
-
-                    if int(a['stck_prpr']) < i[8]:
-                        # 계좌종목 조회
-                        c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
-                        balance_list = []
-
-                        for j, name in enumerate(c.index):
-                            J_code = c['pdno'][j]
-                            j_hldg_qty = int(c['hldg_qty'][j])
-                            j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                            sell_rate = 0
-                            sell_amount = 0
-                            sell_sum = 0
-
-                            # 잔고정보의 매매자동처리 종목이 존재할 경우
-                            if J_code == i[2]:
-                                print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
-                                signal_cd = "02"
-                                signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
-
-                                # 주문가능수량 존재시
-                                if j_ord_psbl_qty > 0:
-                                    # 매도비율(%)
-                                    sell_rate = int(i[12])
-                                    # 매도량 = round((주문가능수량 / 매도비율 )* 100)
-                                    sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                                    # 매도금액 = 매도량 * 현재가
-                                    sell_sum = sell_amount * int(a['stck_prpr'])
-
-                                    sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
-
-                                    telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
-                                    # 텔레그램 메시지 전송
-                                    asyncio.run(main(telegram_text))
-
-                                if j_hldg_qty > 0:
-                                    cur400 = conn.cursor()
-                                    # UPDATE
-                                    cur400.execute("""
-                                        UPDATE trade_auto_proc
-                                        SET
-                                            signal_cd = %s,
-                                            proc_yn = 'N',
-                                            chgr_id = 'AUTO_PROC_BAT',
-                                            chg_date = now()
-                                        WHERE acct_no = %s 
-                                        AND proc_yn = 'Y' 
-                                        AND base_day = %s 
-                                        AND code = %s
-                                        AND trade_tp = 'S'
-                                    """
-                                    , (
-                                        signal_cd, 
-                                        str(acct_no),
-                                        today,
-                                        i[2]
-                                    ))    
-
-                                    conn.commit()
-                                    cur400.close()
+                    print(f"현재가 시세 에러 : [{i[2]}] {ex}")                                        
 
         except Exception as e:
             print(f"[{nick}] Error kis_auto_proc : {e}")      
