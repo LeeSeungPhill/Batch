@@ -1,5 +1,5 @@
 import psycopg2 as db
-from datetime import datetime
+from datetime import datetime, timedelta
 import kis_api_resp as resp
 import requests
 import json
@@ -316,9 +316,38 @@ if result_one == None:
             # 매매자동처리 조회
             cur32 = conn.cursor()
 
-            cur32.execute("select id, name, code, base_dtm, trade_tp, signal_cd, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum from trade_auto_proc where base_day = '" + today + "' and proc_yn = 'Y' and acct_no = '" + str(acct_no) + "'")
+            sql = """
+                SELECT 
+                    tap.id,
+                    tap.name,
+                    tap.code,
+                    tap.base_dtm,
+                    tap.trade_tp,
+                    tap.signal_cd,
+                    tap.open_price,
+                    tap.high_price,
+                    tap.low_price,
+                    tap.close_price,
+                    tap.vol,
+                    tap.candle_body,
+                    tap.trade_sum,
+                    sb.trading_plan
+                FROM public.trade_auto_proc tap
+                LEFT OUTER JOIN public."stockBalance_stock_balance" sb
+                ON tap.acct_no = CAST(sb.acct_no AS varchar)
+                AND tap.code = sb.code
+                AND sb.proc_yn = 'Y'
+                WHERE tap.base_day = %s
+                AND tap.proc_yn = 'Y'
+                AND tap.acct_no = %s
+            """
+
+            cur32.execute(sql, (today, str(acct_no)))
             result_three_two = cur32.fetchall()
             cur32.close()
+
+            current_time = datetime.now()
+            sell_trading_plan_list = ['20s', '25s', '33s', '50s','66s', 'as']
 
             # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
             for i in result_three_two:
@@ -327,6 +356,12 @@ if result_one == None:
                 vol_appear = 0
                 candle_type = ""
                 a = ""
+
+                base_dtm = datetime.strptime(today + i[3], '%Y%m%d%H%M%S')
+
+                # 현재시간이 base_dtm 보다 10분미만이면 미처리
+                if current_time < base_dtm + timedelta(minutes=10):
+                    continue
 
                 if i[11] == 'L': 
                     candle_type  = "[장봉] "
@@ -392,67 +427,70 @@ if result_one == None:
                     # 매도 대상
                     elif i[4] == 'S':
 
-                        if int(a['stck_prpr']) < i[8]:
-                            # 계좌종목 조회
-                            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                        # '20s', '25s', '33s', '50s','66s', 'as' 매도 계획이 존재하는 경우
+                        if i[13] in sell_trading_plan_list:                        
 
-                            balance_list = []
+                            if int(a['stck_prpr']) < i[8]:
+                                # 계좌종목 조회
+                                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
-                            for j, name in enumerate(c.index):
-                                J_code = c['pdno'][j]
-                                j_hldg_qty = int(c['hldg_qty'][j])
-                                j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+                                balance_list = []
 
-                                sell_rate = 0
-                                sell_amount = 0
-                                sell_sum = 0
+                                for j, name in enumerate(c.index):
+                                    J_code = c['pdno'][j]
+                                    j_hldg_qty = int(c['hldg_qty'][j])
+                                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
 
-                                # 잔고정보의 매매자동처리 종목이 존재할 경우
-                                if J_code == i[2]:
-                                    print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
-                                    signal_cd = "02"
-                                    signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
+                                    sell_rate = 0
+                                    sell_amount = 0
+                                    sell_sum = 0
 
-                                    # 주문가능수량 존재시
-                                    if j_ord_psbl_qty > 0:
-                                        # 매도비율(%)
-                                        sell_rate = int(i[12])
-                                        # 매도량 = round((주문가능수량 / 매도비율 )* 100)
-                                        sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                                        # 매도금액 = 매도량 * 현재가
-                                        sell_sum = sell_amount * int(a['stck_prpr'])
+                                    # 잔고정보의 매매자동처리 종목이 존재할 경우
+                                    if J_code == i[2]:
+                                        print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
+                                        signal_cd = "02"
+                                        signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
 
-                                        sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
+                                        # 주문가능수량 존재시
+                                        if j_ord_psbl_qty > 0:
+                                            # 매도비율(%)
+                                            sell_rate = int(i[12])
+                                            # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                            sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
+                                            # 매도금액 = 매도량 * 현재가
+                                            sell_sum = sell_amount * int(a['stck_prpr'])
 
-                                        telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
-                                        # 텔레그램 메시지 전송
-                                        asyncio.run(main(telegram_text))
+                                            sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
 
-                                    if j_hldg_qty > 0:
-                                        cur400 = conn.cursor()
-                                        # UPDATE
-                                        cur400.execute("""
-                                            UPDATE trade_auto_proc
-                                            SET
-                                                signal_cd = %s,
-                                                proc_yn = 'N',
-                                                chgr_id = 'AUTO_PROC_BAT',
-                                                chg_date = now()
-                                            WHERE acct_no = %s 
-                                            AND proc_yn = 'Y' 
-                                            AND base_day = %s 
-                                            AND code = %s
-                                            AND trade_tp = 'S'
-                                        """
-                                        , (
-                                            signal_cd, 
-                                            str(acct_no),
-                                            today,
-                                            i[2]
-                                        ))    
+                                            telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                            # 텔레그램 메시지 전송
+                                            asyncio.run(main(telegram_text))
 
-                                        conn.commit()
-                                        cur400.close()
+                                        if j_hldg_qty > 0:
+                                            cur400 = conn.cursor()
+                                            # UPDATE
+                                            cur400.execute("""
+                                                UPDATE trade_auto_proc
+                                                SET
+                                                    signal_cd = %s,
+                                                    proc_yn = 'N',
+                                                    chgr_id = 'AUTO_PROC_BAT',
+                                                    chg_date = now()
+                                                WHERE acct_no = %s 
+                                                AND proc_yn = 'Y' 
+                                                AND base_day = %s 
+                                                AND code = %s
+                                                AND trade_tp = 'S'
+                                            """
+                                            , (
+                                                signal_cd, 
+                                                str(acct_no),
+                                                today,
+                                                i[2]
+                                            ))    
+
+                                            conn.commit()
+                                            cur400.close()
 
                 except Exception as ex:
                     print(f"현재가 시세 에러 : [{i[2]}] {ex}")                                        
