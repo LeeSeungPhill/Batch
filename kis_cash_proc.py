@@ -219,11 +219,11 @@ if result_one == None:
                         cash_rate_amt = int(int(j[4]) * cash_transfer_rate)
                         cash_rate_qty = int(cash_rate_amt / current_price)
 
-                        sell_command = f"/HoldingSell_{j[0]}_{cash_rate_qty}"
-
-                        telegram_text = (f"[{round(cash_transfer_rate * 100, 2)}% 현금비중]{j[1]}[<code>{j[0]}</code>] 현재가 : {format(current_price, ',d')}원, 매도량 : {format(cash_rate_qty, ',d')}주, 매도금액 : {format(cash_rate_amt, ',d')}원 => {sell_command}")
-                        # 텔레그램 메시지 전송
-                        asyncio.run(main(telegram_text))
+                        if cash_rate_qty > 0:
+                            sell_command = f"/HoldingSell_{j[0]}_{cash_rate_qty}"
+                            telegram_text = (f"[{round(cash_transfer_rate * 100, 2)}% 현금비중]{j[1]}[<code>{j[0]}</code>] 현재가 : {format(current_price, ',d')}원, 매도량 : {format(cash_rate_qty, ',d')}주, 매도금액 : {format(cash_rate_amt, ',d')}원 => {sell_command}")
+                            # 텔레그램 메시지 전송
+                            asyncio.run(main(telegram_text))
 
                     except Exception as ex:
                         print(f"현재가 시세 에러 : [{j[0]}] {ex}")    
