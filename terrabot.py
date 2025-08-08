@@ -5333,6 +5333,7 @@ def echo(update, context):
                             tdf.set_index('odno')
                             d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
+                            udt_qty = 0
                             for i, name in enumerate(d.index):
                                 d_order_no = int(d['odno'][i])
                                 d_dvsn_cd = d['sll_buy_dvsn_cd'][i]
@@ -5348,14 +5349,17 @@ def echo(update, context):
 
                                 context.bot.send_message(chat_id=user_id, text="[" + d_name + " - " + d_order_tmd[:2] + ":" + d_order_tmd[2:4] + ":" + d_order_tmd[4:] + "] 주문번호 : <code>" + str(d_order_no) + "</code>, " + d_order_type + "가 : " + format(int(d_order_price), ',d') + "원, " + d_order_type + "량 : " + format(int(d_order_amount), ',d') + "주, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 잔량 : " + format(int(d_remain_qty), ',d') + "주, 체결금 : " + format(int(d_total_complete_amt), ',d')+"원", parse_mode='HTML')
 
+                                if int(d_remain_qty) > 0:
+                                    udt_qty = int(d_remain_qty)
+
                             g_order_no = order_no
                             g_revise_price = revise_price
                             g_dvsn_cd = d_dvsn_cd
-                            g_remain_qty = int(d_remain_qty)
+                            g_remain_qty = udt_qty
                             g_code = code
                             g_company = company
                             
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : " + format(int(revise_price), ',d') + "원, 정정수량 : " + format(int(d_remain_qty), ',d') + "주 => /revise")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : " + format(int(revise_price), ',d') + "원, 정정수량 : " + format(udt_qty, ',d') + "주 => /revise")
                             get_handler = CommandHandler('revise', get_command4)
                             updater.dispatcher.add_handler(get_handler)
 
