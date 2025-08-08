@@ -382,19 +382,52 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
             orgn_odno = item['orgn_odno']
             pfls_rate = 0
             pfls_amt = 0
-            paid_tax= 0
-            paid_fee= 0
+            paid_tax = 0
+            paid_fee = 0
             
             if float(item['tot_ccld_qty']) > 0:
-                # 기간별손익일별합산조회
-                period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
 
-                for item2 in period_profit_loss_sum_output:
-                
-                    pfls_rate = float(item2['pfls_rt'])
-                    pfls_amt = float(item2['rlzt_pfls'])
-                    paid_tax = float(item2['tl_tax'])
-                    paid_fee = float(item2['fee'])
+                # 현재일 최근 체결된 해당종목의 일별체결정보 조회
+                cur302 = conn.cursor()
+                cur302.execute("select paid_fee, profit_loss_rate, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0 order by order_tmd DESC LIMIT 1")
+                result_one32 = cur302.fetchall()
+                cur302.close()
+
+                if len(result_one32) > 0:
+                    last_paid_fee = 0
+                    last_pfls_rate = 0
+                    last_pfls_amt = 0
+                    last_paid_tax = 0
+
+                    for comp_info in result_one32:
+                        # 기존 수수료, 수익손실률, 수익손실금, 세금값 존재시
+                        if int(comp_info[0]) > 0:
+                            # 수수료, 수익손실률, 수익손실금, 세금값 설정
+                            last_paid_fee = int(comp_info[0])
+                            last_pfls_rate = float(comp_info[1])
+                            last_pfls_amt = int(comp_info[1])
+                            last_paid_tax = int(comp_info[2])
+
+                            # 기간별손익일별합산조회
+                            period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+
+                            for item2 in period_profit_loss_sum_output:
+                    
+                                pfls_rate = last_pfls_rate - float(item2['pfls_rt'])
+                                pfls_amt = last_pfls_amt - float(item2['rlzt_pfls'])
+                                paid_tax = last_paid_tax - float(item2['tl_tax'])
+                                paid_fee = last_paid_fee - float(item2['fee'])
+
+                else:
+                    # 기간별손익일별합산조회
+                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+
+                    for item2 in period_profit_loss_sum_output:
+                    
+                        pfls_rate = float(item2['pfls_rt'])
+                        pfls_amt = float(item2['rlzt_pfls'])
+                        paid_tax = float(item2['tl_tax'])
+                        paid_fee = float(item2['fee'])
 
             order_complete_list.append({
                 '계좌번호': str(acct_no),
@@ -502,7 +535,21 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                 # 주문(주문정정) 생성 후, 주문체결정보 현행화(1분단위)되기전에 전량 체결되어 잔고정보의 보유단가와 보유수량이 0 인 경우, 
                 # 보유단가 = 체결금액 - 수익금액(세금 및 수수료 포함) / 체결수량
                 if new_complete_qty > 0:
-                    hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) - int(item['paid_tax']) - int(item['paid_fee'])) / new_complete_qty)
+                    if item['원주문번호'] != "":
+                        # 원주문번호의 일별체결정보 조회
+                        cur401 = conn.cursor()
+                        cur401.execute("select hold_price from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and order_no = '" + item['원주문번호'] + "' and order_dt = '" + today_str + "'")
+                        result_one41 = cur401.fetchall()
+                        cur401.close()
+
+                        # 주문정정인 경우, 이전 주문체결정보의 보유단가로 설정
+                        if len(result_one41) > 0:
+                            for org_comp_info in result_one41:
+                                hold_price = float(org_comp_info[0])
+                        else:
+                            hold_price = 0        
+                    else:    
+                        hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) - int(item['paid_tax']) - int(item['paid_fee'])) / new_complete_qty)
 
                     cur400.execute("""
                         INSERT INTO \"stockOrderComplete_stock_order_complete\" (
