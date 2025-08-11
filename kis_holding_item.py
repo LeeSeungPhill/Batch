@@ -389,7 +389,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 현재일 최근 체결된 해당종목의 일별체결정보 조회
                 cur302 = conn.cursor()
-                cur302.execute("select paid_fee, profit_loss_rate, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0 order by order_tmd DESC LIMIT 1")
+                cur302.execute("select paid_fee, profit_loss_rate, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0 and order_type like '%매도%' order by order_tmd DESC LIMIT 1")
                 result_one32 = cur302.fetchall()
                 cur302.close()
 
