@@ -389,13 +389,12 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 현재일 최근 체결된 해당종목의 일별체결정보 조회
                 cur302 = conn.cursor()
-                cur302.execute("select paid_fee, profit_loss_rate, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0 and order_type like '%매도%' order by order_tmd DESC LIMIT 1")
+                cur302.execute("select paid_fee, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0 order by order_tmd DESC LIMIT 1")
                 result_one32 = cur302.fetchall()
                 cur302.close()
 
                 if len(result_one32) > 0:
                     last_paid_fee = 0
-                    last_pfls_rate = 0
                     last_pfls_amt = 0
                     last_paid_tax = 0
 
@@ -403,20 +402,19 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         # 기존 수수료, 수익손실률, 수익손실금, 세금값 존재시
                         if int(comp_info[0]) > 0:
                             # 수수료, 수익손실률, 수익손실금, 세금값 설정
-                            last_paid_fee = int(comp_info[0])
-                            last_pfls_rate = float(comp_info[1])
-                            last_pfls_amt = int(comp_info[1])
-                            last_paid_tax = int(comp_info[2])
+                            last_paid_fee += int(comp_info[0])
+                            last_pfls_amt += int(comp_info[1])
+                            last_paid_tax += int(comp_info[2])
 
-                            # 기간별손익일별합산조회
-                            period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+                    # 기간별손익일별합산조회
+                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
 
-                            for item2 in period_profit_loss_sum_output:
-                    
-                                pfls_rate = last_pfls_rate - float(item2['pfls_rt'])
-                                pfls_amt = last_pfls_amt - float(item2['rlzt_pfls'])
-                                paid_tax = last_paid_tax - float(item2['tl_tax'])
-                                paid_fee = last_paid_fee - float(item2['fee'])
+                    for item2 in period_profit_loss_sum_output:
+            
+                        pfls_rate = float(item2['pfls_rt'])
+                        pfls_amt = float(item2['rlzt_pfls']) - last_pfls_amt
+                        paid_tax = float(item2['tl_tax']) - last_paid_tax
+                        paid_fee = float(item2['fee']) - last_paid_fee
 
                 else:
                     # 기간별손익일별합산조회
