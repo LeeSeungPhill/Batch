@@ -2478,8 +2478,8 @@ def callback_get(update, context) :
 
     elif data_selected.find("매도") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["전체", "절반", "1/4", "1/3", "2/3", "3/4", "현재가", "도가도량", "취소"], data_selected)
-            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 3))
+            button_list = build_button(["전체", "절반", "1/4", "1/3", "2/3", "3/4", "현재가", "도가도량", "손수익율", "취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
 
             context.bot.edit_message_text(text="매도 종류를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
@@ -2535,6 +2535,14 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="3/4 매도의 종목코드(종목명), 매도가를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                                                                                      
+            
+            elif data_selected.find("손수익율") != -1:
+                menuNum = "39"
+
+                context.bot.edit_message_text(text="종목코드(종목명), 매입가, 매도비율(%), 손실수익율(%)을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+
 
             elif data_selected.find("현재가") != -1:
                 menuNum = "33"
@@ -4729,6 +4737,15 @@ updater.dispatcher.add_handler(get_handler_info)
 
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
+def is_positive_int(val: str) -> bool:
+    """양수 정수만 허용"""
+    return val.isdigit() and int(val) > 0
+
+def is_signed_float_2dec(val: str) -> bool:
+    """양수/음수 실수 허용, 소숫점 2자리까지"""
+    pattern = r"^-?\d+(\.\d{1,2})?$"
+    return re.match(pattern, val) is not None
+
 def get_tick_size(price):
     """가격에 따른 국내 주식 호가단위 계산 (2025년 기준)"""
     if price < 2000:
@@ -6401,6 +6418,77 @@ def echo(update, context):
                 print("매도가 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 매도가 미존재")
 
+        elif menuNum == '39':
+            chartReq = "0"
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=4)
+                print("commandBot[1] : ", commandBot[1])    # 매입가
+                print("commandBot[2] : ", commandBot[2])    # 매도비율(%)
+                print("commandBot[3] : ", commandBot[3])    # 손실수익율(%)
+
+            # 매입가-양수, 매도비율(%)-양수, 손실수익율(%)-양수/음수 소숫점 2자리까지 실수
+            if (is_positive_int(commandBot[1]) and is_positive_int(commandBot[2]) and is_signed_float_2dec(commandBot[3])):
+
+                # 매입가
+                hold_price = commandBot[1]
+                print("매입가 : " + format(int(hold_price), ',d'))
+
+                # 매도비율
+                sell_rate = commandBot[2]
+
+                # 계좌잔고 조회
+                e = stock_balance(access_token, app_key, app_secret, acct_no, "")
+               
+                ord_psbl_qty = 0
+                for j, name in enumerate(e.index):
+                    e_code = e['pdno'][j]
+                    if e_code == code:
+                        ord_psbl_qty = int(e['ord_psbl_qty'][j])
+
+                if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
+                    sell_amount = int(round(ord_psbl_qty * int(sell_rate) / 100))
+                    print(f"매도수량 {format(sell_amount, ',d')}")
+                    if ord_psbl_qty >= int(sell_amount):  # 주문가능수량이 매도량보다 큰 경우
+                        # 손실수익율
+                        loss_profie_rate = commandBot[3]
+                        sell_price = int(hold_price) + int(round(int(hold_price) * int(loss_profie_rate) / 100))
+                        print(f"매도가 : {format(sell_price, ',d')}")
+
+                        # 가격에 따른 국내 주식 호가단위 계산
+                        tick = get_tick_size(sell_price)
+                        # 입력 가격을 호가단위에 맞게 조정
+                        corrected_price = round_to_valid_price(sell_price, tick)
+
+                        # 상하한가 범위 안으로 보정
+                        if corrected_price < lower_limit:
+                            corrected_price = round_to_valid_price(lower_limit, tick, direction="up")
+                        elif corrected_price > upper_limit:
+                            corrected_price = round_to_valid_price(upper_limit, tick, direction="down")
+
+                        # 매도금액
+                        n_sell_sum = int(corrected_price) * sell_amount
+                        print("매도금액 : " + format(n_sell_sum, ',d'))
+
+                        g_sell_amount = sell_amount
+                        g_sell_price = corrected_price
+                        g_sell_code = code
+                        g_company = company
+
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(corrected_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
+                        get_handler = CommandHandler('sell', get_command2)
+                        updater.dispatcher.add_handler(get_handler)
+
+                    else:
+                        print("주문가능수량 매도량보다 부족")
+                        context.bot.send_message(chat_id=user_id, text=company + " : 주문가능수량 매도량보다 부족")
+                else:
+                    print("주문가능수량 부족")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 주문가능수량 부족")
+            else:
+                print("매입가 또는 매도비율(%) 또는 손실수익율(%) 입력값이 유효하지 않습니다.")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매입가 또는 매도비율(%) 또는 손실수익율(%) 입력값이 유효하지 않습니다.")
+        
         elif menuNum == '41':
             chartReq = "0"
             if len(user_text.split(",")) > 0:
