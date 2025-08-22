@@ -2539,7 +2539,7 @@ def callback_get(update, context) :
             elif data_selected.find("손수익율") != -1:
                 menuNum = "39"
 
-                context.bot.edit_message_text(text="종목코드(종목명), 매입가, 매도비율(%), 손실수익율(%)을 입력하세요.",
+                context.bot.edit_message_text(text="종목코드(종목명), 매입가(보유단가:0), 매도비율(%), 손실수익율(%)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
@@ -4738,8 +4738,11 @@ updater.dispatcher.add_handler(get_handler_info)
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
 def is_positive_int(val: str) -> bool:
-    """양수 정수만 허용"""
-    return val.isdigit() and int(val) > 0
+    """양수 정수만 허용 (1~100 범위)"""
+    if val.isdigit():
+        num = int(val)
+        return 0 < num <= 100
+    return False    
 
 def is_signed_float_2dec(val: str) -> bool:
     """양수/음수 실수 허용, 소숫점 2자리까지"""
@@ -6139,7 +6142,7 @@ def echo(update, context):
                 print("commandBot[1] : ", commandBot[1])    # 매도비율
 
             # 매도비율 존재시
-            if commandBot[1].isdecimal():
+            if is_positive_int(commandBot[1]):
                 # 매도비율
                 sell_rate = commandBot[1]
 
@@ -6427,32 +6430,35 @@ def echo(update, context):
                 print("commandBot[2] : ", commandBot[2])    # 매도비율(%)
                 print("commandBot[3] : ", commandBot[3])    # 손실수익율(%)
 
-            # 매입가-양수, 매도비율(%)-양수, 손실수익율(%)-양수/음수 소숫점 2자리까지 실수
-            if (is_positive_int(commandBot[1]) and is_positive_int(commandBot[2]) and is_signed_float_2dec(commandBot[3])):
-
-                # 매입가
-                hold_price = commandBot[1]
-                print("매입가 : " + format(int(hold_price), ',d'))
-
-                # 매도비율
-                sell_rate = commandBot[2]
+            # 매입가-양수/음수 소숫점 2자리까지 실수, 매도비율(%)-양수, 손실수익율(%)-양수/음수 소숫점 2자리까지 실수
+            if (is_signed_float_2dec(commandBot[1]) and is_positive_int(commandBot[2]) and is_signed_float_2dec(commandBot[3])):
 
                 # 계좌잔고 조회
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
+                hold_price = 0
                 ord_psbl_qty = 0
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
+                        if float(commandBot[1]) == 0:
+                            # 매입가 = 보유단가
+                            hold_price = e['pchs_avg_pric'][j]
+                        else:
+                            # 매입가
+                            hold_price = commandBot[1]
+                        print("매입가 : " + format(float(hold_price), ',.2f'))    
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
 
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
+                    # 매도비율
+                    sell_rate = commandBot[2]
                     sell_amount = int(round(ord_psbl_qty * int(sell_rate) / 100))
                     print(f"매도수량 {format(sell_amount, ',d')}")
                     if ord_psbl_qty >= int(sell_amount):  # 주문가능수량이 매도량보다 큰 경우
                         # 손실수익율
                         loss_profie_rate = commandBot[3]
-                        sell_price = int(hold_price) + int(round(int(hold_price) * int(loss_profie_rate) / 100))
+                        sell_price = int(round(float(hold_price))) + int(round(float(hold_price) * float(loss_profie_rate) / 100))
                         print(f"매도가 : {format(sell_price, ',d')}")
 
                         # 가격에 따른 국내 주식 호가단위 계산
@@ -6630,7 +6636,7 @@ def echo(update, context):
                 print("commandBot[2] : ", commandBot[2])    # 매도비율(%)
 
             # 시분초(00)-6자리, 매도비율(%) 존재시
-            if commandBot[1].isdecimal() & len(commandBot[1]) == 6 & commandBot[2].isdecimal():
+            if commandBot[1].isdecimal() & len(commandBot[1]) == 6 & is_positive_int(commandBot[2]):
                
                 # 시분초(00)-6자리
                 base_dtm = commandBot[1]
@@ -6760,7 +6766,7 @@ def echo(update, context):
                 print("commandBot[3] : ", commandBot[3])    # 매도비율
 
             # 저가, 고가, 매도비율 존재시
-            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & commandBot[3].isdecimal():
+            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & is_positive_int(commandBot[3]):
 
                 # 저가
                 low_price = commandBot[1]
@@ -6829,7 +6835,7 @@ def echo(update, context):
                 print("commandBot[3] : ", commandBot[3])    # 매도비율
 
             # 저가, 고가, 매도비율 존재시
-            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & commandBot[3].isdecimal():
+            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & is_positive_int(commandBot[3]):
 
                 # 저가
                 low_price = commandBot[1]
@@ -6898,7 +6904,7 @@ def echo(update, context):
                 print("commandBot[3] : ", commandBot[3])    # 매도비율
 
             # 저가, 고가, 매도비율 존재시
-            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & commandBot[3].isdecimal():
+            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & is_positive_int(commandBot[3]):
 
                 # 저가
                 low_price = commandBot[1]
