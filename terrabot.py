@@ -5630,8 +5630,12 @@ def echo(update, context):
                         if order_amount < int(buy_expect_sum):
                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 입력금액 " + format(int(buy_expect_sum), ',d') + "원이 매도호가 2구간 체결가능금액 " + format(ask_trade_sum, ',d') + "원 초과, " + format(order_amount, ',d') + "원만 주문 진행합니다.")
 
+                        # 매수량
+                        n_buy_amount = round(int(order_amount) / int(stck_prpr))
+                        print("매수량 : " + format(int(n_buy_amount), ',d'))
+
                         # 매수
-                        c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(order_amount), str(0))
+                        c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(n_buy_amount), str(0))
                 
                         if c['ODNO'] != "":
 
@@ -5865,8 +5869,12 @@ def echo(update, context):
                             if order_amount < n_sell_sum:
                                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도금액 " + format(n_sell_sum, ',d') + "원이 매수호가 2구간 체결가능금액 " + format(bid_trade_sum, ',d') + "원 초과, " + format(order_amount, ',d') + "원만 주문 진행합니다.")
 
+                            # 매도량
+                            n_sell_amount = round(int(order_amount) / int(hold_price))
+                            print("매도량 : " + format(int(n_sell_amount), ',d'))
+
                             # 매도
-                            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(order_amount), str(0))
+                            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(n_sell_amount), str(0))
                     
                             if c['ODNO'] != "":
 
