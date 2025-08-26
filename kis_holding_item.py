@@ -703,7 +703,7 @@ if result_one == None:
             elif nick == 'yh480825':
                 token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
             else:
-                token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"  
+                token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"  
 
             ac = account(nick)
             acct_no = ac['acct_no']

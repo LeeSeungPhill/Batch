@@ -20,7 +20,7 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 CHAT_ID = "2147256258"
-TOKEN = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"
+TOKEN = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"
 
 # 텔레그램 메시지 전송 함수
 async def send_telegram_message(message_text: str, parse_mode: str = 'HTML'):

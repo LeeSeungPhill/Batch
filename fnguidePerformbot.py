@@ -27,7 +27,7 @@ stock_code = stock_code.rename(columns={'회사명': 'company', '종목코드': 
 stock_code.code = stock_code.code.map('{:06d}'.format)
 
 # 텔레그램봇 사용할 token
-token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"
+token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
