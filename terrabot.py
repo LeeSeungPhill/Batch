@@ -62,7 +62,7 @@ elif arguments[1] == 'phills75':
 elif arguments[1] == 'yh480825':
     token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
 else:
-    token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"    
+    token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"    
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
