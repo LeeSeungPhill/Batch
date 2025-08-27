@@ -83,6 +83,12 @@ g_sell_amount = 0
 g_revise_price = 0
 g_remain_qty = 0
 
+def format_number(value):
+    try:
+        return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
+    except:
+        return str(value)
+
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
     if header_buttons:
@@ -147,6 +153,82 @@ def get_command5(update, context) :
     button_list = build_button(["철회진행", "7mjs2c철회", "7m철회", "js철회", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
+
+# 시장가 재주문
+def get_command6(update, context) :
+    
+    ac = account()
+    acct_no = ac['acct_no']
+    access_token = ac['access_token']
+    app_key = ac['app_key']
+    app_secret = ac['app_secret']
+
+    ord_dvsn = "01"
+
+    try:
+
+        # 입력 종목코드 현재가 호가/예상체결
+        a1 = inquire_asking_price(access_token, app_key, app_secret, g_code)
+
+        # 2-ask trade_qty
+        ask_trade_qty = int(a1['askp_rsqn1'])+int(a1['askp_rsqn2'])
+
+        # 매수량
+        n_buy_amount = min(g_buy_amount, ask_trade_qty)
+        # 매수예정금액
+        buy_expect_sum = n_buy_amount * int(a1['askp_rsqn1'])
+
+        # 매수 가능(현금) 조회
+        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+        print("매수 가능(현금) : " + format(int(b), ',d'));
+               
+        if int(b) > int(buy_expect_sum):  # 매수가능(현금)이 매수예정금액보다 큰 경우
+
+            if ask_trade_qty < g_buy_amount:
+                message = f"[{g_company}] 주문수량 {format_number(g_buy_amount)}주가 매도호가 2구간 체결가능수량 {format_number(ask_trade_qty)}주 초과, {format(n_buy_amount)}주만 주문 진행합니다."
+                update.message.reply_text(message)
+
+            # 매수
+            c = order_cash(True, access_token, app_key, app_secret, str(acct_no), g_code, ord_dvsn, str(n_buy_amount), str(0))
+
+            if c['ODNO'] != "":
+
+                # 일별주문체결 조회
+                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_code, c['ODNO'])
+                tdf = pd.DataFrame(output1)
+                tdf.set_index('odno')
+                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                for i, name in enumerate(d.index):
+                    d_order_no = int(d['odno'][i])
+                    d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                    d_order_dt = d['ord_dt'][i]
+                    d_order_tmd = d['ord_tmd'][i]
+                    d_name = d['prdt_name'][i]
+                    d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                    d_order_amount = d['ord_qty'][i]
+                    d_total_complete_qty = d['tot_ccld_qty'][i]
+                    d_remain_qty = d['rmn_qty'][i]
+                    d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                    print("매수주문 완료")
+                    message = f"[{g_company}] 매수가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /rebuy"
+                    update.message.reply_text(message, parse_mode='HTML')
+
+            else:
+                print("매수주문 실패")
+                message = f"[{g_company}] 매수량 : {format_number(int(n_buy_amount))}주 매수주문 실패"
+                update.message.reply_text(message)
+
+        else:
+            print("매수 가능(현금) 부족")
+            message = f"[{g_company}] 매수 가능(현금) : {format_number(int(b) - int(buy_expect_sum))}원 부족"
+            update.message.reply_text(message)
+
+    except Exception as e:
+        print('매수주문 오류.', e)
+        message = f"[{g_company}] 매수량 : {format_number(int(n_buy_amount))}주 [매수주문 오류] - {str(e)}"
+        update.message.reply_text(message)
 
 # ngrok URL 가져오기
 def get_ngrok_url(retries=5, delay=2):
@@ -5631,7 +5713,7 @@ def echo(update, context):
                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 입력금액 " + format(int(buy_expect_sum), ',d') + "원이 매도호가 2구간 체결가능금액 " + format(ask_trade_sum, ',d') + "원 초과, " + format(order_amount, ',d') + "원만 주문 진행합니다.")
 
                         # 매수량
-                        n_buy_amount = round(int(order_amount) / int(stck_prpr))
+                        n_buy_amount = round(int(order_amount) / int(a1['askp1']))
                         print("매수량 : " + format(int(n_buy_amount), ',d'))
 
                         # 매수
@@ -5658,7 +5740,12 @@ def echo(update, context):
                                 d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                 print("매수주문 완료")
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 체결금액 : " + format(int(d_total_complete_amt), ',d') + "원, 주문번호 : <code>" + str(d_order_no) +"</code>", parse_mode='HTML')
+                                g_buy_amount = n_buy_amount
+                                g_buy_code = code
+                                g_company = company
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 체결량 : " + format(int(d_total_complete_qty), ',d') + "주, 체결금액 : " + format(int(d_total_complete_amt), ',d') + "원, 주문번호 : <code>" + str(d_order_no) +"</code> => /rebuy", parse_mode='HTML')
+                                get_handler = CommandHandler('rebuy', get_command6)
+                                updater.dispatcher.add_handler(get_handler)
 
                         else:
                             print("매수주문 실패")
