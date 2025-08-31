@@ -501,7 +501,7 @@ def inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code):
     return ar.getBody().output
 
 # 주식주문(현금)
-def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price):
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
 
     if buy_flag:
         tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
@@ -519,10 +519,14 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "PDNO": stock_code,
-               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가
+               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
     }
+    # 스톱지정가일 때만 조건가격 추가
+    if ord_dvsn == "22":
+        params["CNDT_PRIC"] = str(cndt_price)
+
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
     #res = requests.get(URL, headers=headers, params=params, verify=False)
@@ -3098,44 +3102,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", sell_qty, sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", sell_qty, sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[100% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[100% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3289,44 +3293,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[66% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[66% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3480,44 +3484,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[50% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[50% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3671,44 +3675,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[33% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[33% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3862,44 +3866,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[25% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[25% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -4053,44 +4057,44 @@ def callback_get(update, context) :
                                 conn.commit()
                                 cur501.close()
 
-                            try:
-                                # 매도
-                                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
+                            # try:
+                            #     # 매도
+                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
                         
-                                if c['ODNO'] != "":
+                            #     if c['ODNO'] != "":
 
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                    tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            #         # 일별주문체결 조회
+                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                            #         tdf = pd.DataFrame(output1)
+                            #         tdf.set_index('odno')
+                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                    for i, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][i])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                        d_order_dt = d['ord_dt'][i]
-                                        d_order_tmd = d['ord_tmd'][i]
-                                        d_name = d['prdt_name'][i]
-                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                        d_order_amount = d['ord_qty'][i]
-                                        d_total_complete_qty = d['tot_ccld_qty'][i]
-                                        d_remain_qty = d['rmn_qty'][i]
-                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+                            #         for i, name in enumerate(d.index):
+                            #             d_order_no = int(d['odno'][i])
+                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                            #             d_order_dt = d['ord_dt'][i]
+                            #             d_order_tmd = d['ord_tmd'][i]
+                            #             d_name = d['prdt_name'][i]
+                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                            #             d_order_amount = d['ord_qty'][i]
+                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
+                            #             d_remain_qty = d['rmn_qty'][i]
+                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                                        print("매도주문 완료")
-                                        msg = f"[20% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                        result_msgs.append(msg)
+                            #             print("매도주문 완료")
+                            #             msg = f"[20% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                            #             result_msgs.append(msg)
 
-                                else:
-                                    print("매도주문 실패")
-                                    msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                                    result_msgs.append(msg)
+                            #     else:
+                            #         print("매도주문 실패")
+                            #         msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
+                            #         result_msgs.append(msg)
 
 
-                            except Exception as e:
-                                print('매도주문 오류.', e)
-                                msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                                result_msgs.append(msg)
+                            # except Exception as e:
+                            #     print('매도주문 오류.', e)
+                            #     msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
+                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
