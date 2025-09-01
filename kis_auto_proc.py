@@ -437,10 +437,10 @@ if result_one == None:
                 LEFT OUTER JOIN public."stockBalance_stock_balance" sb
                 ON tap.acct_no = CAST(sb.acct_no AS varchar)
                 AND tap.code = sb.code
-                AND sb.proc_yn = 'Y'
-                AND sb.trading_plan NOT IN ('i', 'h')
                 WHERE tap.base_day = %s
+                AND sb.trading_plan NOT IN ('i', 'h')
                 AND tap.proc_yn = 'Y'
+                AND sb.proc_yn = 'Y'
                 AND tap.acct_no = %s
             """
 
