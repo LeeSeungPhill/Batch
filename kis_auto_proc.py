@@ -208,60 +208,148 @@ def get_candle_start_time(dt: datetime) -> datetime:
         candle_minute = ((minute // 10) + 1) * 10
     return dt.replace(minute=candle_minute, second=0, microsecond=0)
 
-def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
+def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     """
-    base_dtm을 포함하는 10분봉 이상 데이터를 반환.
-    최대 30개 제한으로 base_dtm이 포함되지 않을 경우 과거 시간 기준 2차 조회
+    1분봉을 조회한 뒤 10분봉으로 리샘플링하여 base_dtm 포함 여부 확인.
+    필요하면 과거 데이터를 추가 조회.
+    최종 반환값은 원본 API 결과(dict 리스트).
     """
-    def inquire_time_itemchartprice(start_minute_str):
-        headers = {
-            "Content-Type": "application/json",
-            "authorization": f"Bearer {access_token}",
-            "appKey": app_key,
-            "appSecret": app_secret,
-            "tr_id": "FHKST03010200",
-            "custtype": "P"
-        }
+
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST03010200",
+        "custtype": "P"
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+    URL = f"{URL_BASE}/{PATH}"
+
+    def request_candles(start_time):
+        """API 호출 → 원본 dict 리스트 반환"""
         params = {
             'FID_COND_MRKT_DIV_CODE': "J",
             'FID_INPUT_ISCD': code,
-            'FID_INPUT_HOUR_1': start_minute_str,
+            'FID_INPUT_HOUR_1': start_time,  # 기준 시각
             'FID_PW_DATA_INCU_YN': 'N',
             'FID_ETC_CLS_CODE': ""
         }
-        PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-        URL = f"{URL_BASE}/{PATH}"
         res = requests.get(URL, headers=headers, params=params, verify=False)
         ar = resp.APIResp(res)
-        return ar.getBody().output2
+        return ar.getBody().output2  # 원본 dict 리스트
 
-    # 1차 조회: 현재 시간 기준 최대 30개
-    now_str = datetime.now().strftime("%H%M%S")
-    candle_list = inquire_time_itemchartprice(now_str)
+    def convert_to_df(candle_list):
+        """dict 리스트 → DataFrame(1분봉)"""
+        minute_list = []
+        for item in candle_list:
+            minute_list.append({
+                'timestamp': pd.to_datetime(item['stck_cntg_hour'], format='%H%M%S'),
+                'open': float(item['stck_oprc']),
+                'high': float(item['stck_hgpr']),
+                'low': float(item['stck_lwpr']),
+                'close': float(item['stck_prpr']),
+                'volume': float(item['cntg_vol'])
+            })
+        return pd.DataFrame(minute_list).sort_values('timestamp').reset_index(drop=True)
 
-    # base_dtm이 포함되어 있는지 확인
-    base_candle_start = get_candle_start_time(base_dtm)
-    included = any(item['stck_cntg_hour'] == base_candle_start.strftime("%H%M%S") for item in candle_list)
+    def resample_to_10min(df):
+        """1분봉 → 10분봉 변환"""
+        df = df.set_index('timestamp')
+        df_10 = df.resample('10T').agg({
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }).dropna().reset_index()
+        return df_10
 
-    # 포함되지 않으면 2차 조회: 30건 조회된 데이터 이전 시간부터 재조회
-    if not included and candle_list:
-        # 1차 조회 결과 중 가장 오래된(첫 번째) 캔들의 시간
-        oldest_time = candle_list[-1]['stck_cntg_hour']  
-        oldest_dt = datetime.strptime(oldest_time, "%H%M%S")
+    # 1차 조회
+    cur_time = datetime.now().strftime("%H%M%S")
+    candle_list = request_candles(cur_time)
+    df_1m = convert_to_df(candle_list)
+    df_10m = resample_to_10min(df_1m)
 
-        # 가장 오래된 봉이 속한 10분봉 시작시간 구하기
-        oldest_candle_start = oldest_dt.replace(minute=(oldest_dt.minute // 10) * 10, second=0)
+    # base_dtm이 속한 봉 시작시간
+    base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0)
 
-        # 직전 10분봉 시작시간 구하기
-        prev_candle_start = oldest_candle_start - timedelta(minutes=10)
+    included = any(df_10m['timestamp'] == base_candle_start)
 
-        # 문자열 변환
-        prev_minute_str = prev_candle_start.strftime("%H%M%S")
+    # 포함 안 되면 과거 조회 반복
+    while not included:
+        oldest_time = df_1m['timestamp'].min() - timedelta(minutes=1)
+        start_time_str = oldest_time.strftime("%H%M%S")
 
-        # 2차 조회
-        candle_list = inquire_time_itemchartprice(access_token, app_key, app_secret, code, prev_minute_str)
+        extra_candles = request_candles(start_time_str)
+        if not extra_candles:  # 더 이상 데이터 없음
+            break
+
+        extra_df = convert_to_df(extra_candles)
+        df_1m = pd.concat([extra_df, df_1m]).drop_duplicates().sort_values('timestamp').reset_index(drop=True)
+        df_10m = resample_to_10min(df_1m)
+
+        # 원본도 합쳐줌
+        candle_list = extra_candles + candle_list
+
+        included = any(df_10m['timestamp'] == base_candle_start)
 
     return candle_list
+
+# def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
+#     """
+#     base_dtm을 포함하는 10분봉 이상 데이터를 반환.
+#     최대 30개 제한으로 base_dtm이 포함되지 않을 경우 과거 시간 기준 2차 조회
+#     """
+#     def inquire_time_itemchartprice(start_minute_str):
+#         headers = {
+#             "Content-Type": "application/json",
+#             "authorization": f"Bearer {access_token}",
+#             "appKey": app_key,
+#             "appSecret": app_secret,
+#             "tr_id": "FHKST03010200",
+#             "custtype": "P"
+#         }
+#         params = {
+#             'FID_COND_MRKT_DIV_CODE': "J",
+#             'FID_INPUT_ISCD': code,
+#             'FID_INPUT_HOUR_1': start_minute_str,
+#             'FID_PW_DATA_INCU_YN': 'N',
+#             'FID_ETC_CLS_CODE': ""
+#         }
+#         PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+#         URL = f"{URL_BASE}/{PATH}"
+#         res = requests.get(URL, headers=headers, params=params, verify=False)
+#         ar = resp.APIResp(res)
+#         return ar.getBody().output2
+
+#     # 1차 조회: 현재 시간 10분 기준 최대 30개
+#     now_str = "600"
+#     candle_list = inquire_time_itemchartprice(now_str)
+
+#     # base_dtm이 포함되어 있는지 확인
+#     base_candle_start = get_candle_start_time(base_dtm)
+#     included = any(item['stck_cntg_hour'] == base_candle_start.strftime("%H%M%S") for item in candle_list)
+
+#     # 포함되지 않으면 2차 조회: 30건 조회된 데이터 이전 시간부터 재조회
+#     if not included and candle_list:
+#         # 1차 조회 결과 중 가장 오래된(첫 번째) 캔들의 시간
+#         oldest_time = candle_list[-1]['stck_cntg_hour']  
+#         oldest_dt = datetime.strptime(oldest_time, "%H%M%S")
+
+#         # 가장 오래된 봉이 속한 10분봉 시작시간 구하기
+#         oldest_candle_start = oldest_dt.replace(minute=(oldest_dt.minute // 10) * 10, second=0)
+
+#         # 직전 10분봉 시작시간 구하기
+#         prev_candle_start = oldest_candle_start - timedelta(minutes=10)
+
+#         # 문자열 변환
+#         prev_minute_str = prev_candle_start.strftime("%H%M%S")
+
+#         # 2차 조회
+#         candle_list = inquire_time_itemchartprice(access_token, app_key, app_secret, code, prev_minute_str)
+
+#     return candle_list
 
 async def main(telegram_text):
     chat_id = "2147256258"
@@ -316,7 +404,8 @@ if result_one == None:
                 # base_dtm datetime 변환
                 base_dtm = datetime.strptime(today + i[3], '%Y%m%d%H%M%S')
                 # 10분봉 조회 (필요시 과거 조회 포함)
-                candle_list = fetch_candles_for_base(access_token, app_key, app_secret, i[2], base_dtm)
+                # candle_list = fetch_candles_for_base(access_token, app_key, app_secret, i[2], base_dtm)
+                candle_list = fetch_candles_with_base(access_token, app_key, app_secret, i[2], base_dtm)
 
                 minute_list = []
                 for item in candle_list:
