@@ -433,27 +433,69 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
     return ar.getBody().output1
 
 # 주식당일분봉조회
-def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
+# def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
 
-    headers = {"Content-Type": "application/json",
-               "authorization": f"Bearer {access_token}",
-               "appKey": app_key,
-               "appSecret": app_secret,
-               "tr_id": "FHKST03010200",
-               "custtype": "P"}
-    params = {
-                'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
-                'FID_INPUT_ISCD': code,
-                'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
-                'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
-                'FID_ETC_CLS_CODE': ""
-    }
-    PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-    URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
-    ar = resp.APIResp(res)
+#     headers = {"Content-Type": "application/json",
+#                "authorization": f"Bearer {access_token}",
+#                "appKey": app_key,
+#                "appSecret": app_secret,
+#                "tr_id": "FHKST03010200",
+#                "custtype": "P"}
+#     params = {
+#                 'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
+#                 'FID_INPUT_ISCD': code,
+#                 'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
+#                 'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
+#                 'FID_ETC_CLS_CODE': ""
+#     }
+#     PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+#     URL = f"{URL_BASE}/{PATH}"
+#     res = requests.get(URL, headers=headers, params=params, verify=False)
+#     ar = resp.APIResp(res)
 
-    return ar.getBody().output2
+#     return ar.getBody().output2
+
+def get_candle_start_time(dt: datetime) -> datetime:
+    """base_dtm이 속한 10분봉 시작 시간 반환"""
+    minute = dt.minute
+    if minute <= 7:
+        candle_minute = (minute // 10) * 10
+    else:  # 8~9분이면 다음 10분봉 기준
+        candle_minute = ((minute // 10) + 1) * 10
+    return dt.replace(minute=candle_minute, second=0, microsecond=0)
+
+def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
+    """
+    base_dtm을 포함하는 10분봉 이상 데이터를 반환.
+    최대 30개 제한으로 base_dtm이 포함되지 않을 경우 과거 시간 기준 2차 조회
+    """
+    def inquire_time_itemchartprice(start_minute_str):
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "appKey": app_key,
+            "appSecret": app_secret,
+            "tr_id": "FHKST03010200",
+            "custtype": "P"
+        }
+        params = {
+            'FID_COND_MRKT_DIV_CODE': "J",
+            'FID_INPUT_ISCD': code,
+            'FID_INPUT_HOUR_1': start_minute_str,
+            'FID_PW_DATA_INCU_YN': 'N',
+            'FID_ETC_CLS_CODE': ""
+        }
+        PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+        URL = f"{URL_BASE}/{PATH}"
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+        return ar.getBody().output2
+
+    # 현재 시간 기준 최대 30개
+    now_str = datetime.now().strftime("%H%M%S")
+    candle_list = inquire_time_itemchartprice(now_str)
+
+    return candle_list
 
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
@@ -3002,10 +3044,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 100
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3034,16 +3076,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -3193,10 +3225,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 66
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3225,16 +3257,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -3384,10 +3406,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 50
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3416,16 +3438,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -3575,10 +3587,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 33
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3607,16 +3619,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -3766,10 +3768,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 25
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3798,16 +3800,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -3957,10 +3949,10 @@ def callback_get(update, context) :
                             base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 20
 
-                            # 주식당일분봉조회
-                            minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                             minute_list = []
-                            for item in minute_info:
+                            for item in candle_list:
                                 minute_list.append({
                                     '체결시간': item['stck_cntg_hour'],
                                     '종가': item['stck_prpr'],
@@ -3989,16 +3981,6 @@ def callback_get(update, context) :
                             # 기준봉: 가장 거래량 많은 봉
                             idx = df['volume'].idxmax()
                             기준봉 = df.loc[idx]
-
-                            while True:
-                                이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                                candidates = 이후_봉들[
-                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                    (이후_봉들['low'] < 기준봉['low'])
-                                ]
-                                if candidates.empty:
-                                    break
-                                기준봉 = candidates.iloc[0]
 
                             avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -6438,10 +6420,10 @@ def echo(update, context):
                 b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                 print("매수 가능(현금) : " + format(int(b), ',d'));
                 if int(b) > int(buy_amount):  # 매수가능(현금)이 매수금액이 더 큰 경우
-                    # 주식당일분봉조회
-                    minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                    candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                     minute_list = []
-                    for item in minute_info:
+                    for item in candle_list:
                         minute_list.append({
                             '체결시간': item['stck_cntg_hour'],
                             '종가': item['stck_prpr'],
@@ -6470,16 +6452,6 @@ def echo(update, context):
                     # 기준봉: 가장 거래량 많은 봉
                     idx = df['volume'].idxmax()
                     기준봉 = df.loc[idx]
-
-                    while True:
-                        이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                        candidates = 이후_봉들[
-                            (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                            (이후_봉들['high'] > 기준봉['high'])
-                        ]
-                        if candidates.empty:
-                            break
-                        기준봉 = candidates.iloc[0]
 
                     avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
@@ -6567,10 +6539,10 @@ def echo(update, context):
                 print("매도비율(%) : " + format(int(sell_rate), ',d'))
 
                 if int(sell_rate) <= 100 and int(sell_rate) > 0:
-                    # 주식당일분봉조회
-                    minute_info = inquire_time_itemchartprice(access_token, app_key, app_secret, code, base_dtm)
+                    candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
                     minute_list = []
-                    for item in minute_info:
+                    for item in candle_list:
                         minute_list.append({
                             '체결시간': item['stck_cntg_hour'],
                             '종가': item['stck_prpr'],
@@ -6599,16 +6571,6 @@ def echo(update, context):
                     # 기준봉: 가장 거래량 많은 봉
                     idx = df['volume'].idxmax()
                     기준봉 = df.loc[idx]
-
-                    while True:
-                        이후_봉들 = df[df['timestamp'] > 기준봉['timestamp']]
-                        candidates = 이후_봉들[
-                            (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                            (이후_봉들['low'] < 기준봉['low'])
-                        ]
-                        if candidates.empty:
-                            break
-                        기준봉 = candidates.iloc[0]
 
                     avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
 
