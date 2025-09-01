@@ -432,38 +432,6 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output1
 
-# 주식당일분봉조회
-# def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
-
-#     headers = {"Content-Type": "application/json",
-#                "authorization": f"Bearer {access_token}",
-#                "appKey": app_key,
-#                "appSecret": app_secret,
-#                "tr_id": "FHKST03010200",
-#                "custtype": "P"}
-#     params = {
-#                 'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
-#                 'FID_INPUT_ISCD': code,
-#                 'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
-#                 'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
-#                 'FID_ETC_CLS_CODE': ""
-#     }
-#     PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-#     URL = f"{URL_BASE}/{PATH}"
-#     res = requests.get(URL, headers=headers, params=params, verify=False)
-#     ar = resp.APIResp(res)
-
-#     return ar.getBody().output2
-
-def get_candle_start_time(dt: datetime) -> datetime:
-    """base_dtm이 속한 10분봉 시작 시간 반환"""
-    minute = dt.minute
-    if minute <= 7:
-        candle_minute = (minute // 10) * 10
-    else:  # 8~9분이면 다음 10분봉 기준
-        candle_minute = ((minute // 10) + 1) * 10
-    return dt.replace(minute=candle_minute, second=0, microsecond=0)
-
 def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
     """
     base_dtm을 포함하는 10분봉 이상 데이터를 반환.
@@ -492,7 +460,7 @@ def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
         return ar.getBody().output2
 
     # 현재 시간 기준 최대 30개
-    now_str = datetime.now().strftime("%H%M%S")
+    now_str = "600"
     candle_list = inquire_time_itemchartprice(now_str)
 
     return candle_list
