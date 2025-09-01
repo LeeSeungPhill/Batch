@@ -438,7 +438,7 @@ if result_one == None:
                 ON tap.acct_no = CAST(sb.acct_no AS varchar)
                 AND tap.code = sb.code
                 WHERE tap.base_day = %s
-                AND sb.trading_plan NOT IN ('i', 'h')
+                AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
                 AND tap.proc_yn = 'Y'
                 AND sb.proc_yn = 'Y'
                 AND tap.acct_no = %s
