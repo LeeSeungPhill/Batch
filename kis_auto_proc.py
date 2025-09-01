@@ -199,15 +199,6 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     #ar.printAll()
     return ar.getBody().output
 
-def get_candle_start_time(dt: datetime) -> datetime:
-    """base_dtm이 속한 10분봉 시작 시간 반환"""
-    minute = dt.minute
-    if minute <= 7:
-        candle_minute = (minute // 10) * 10
-    else:  # 8~9분이면 다음 10분봉 기준
-        candle_minute = ((minute // 10) + 1) * 10
-    return dt.replace(minute=candle_minute, second=0, microsecond=0)
-
 def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     """
     1분봉을 조회한 뒤 10분봉으로 리샘플링하여 base_dtm 포함 여부 확인.
@@ -296,61 +287,6 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
-# def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
-#     """
-#     base_dtm을 포함하는 10분봉 이상 데이터를 반환.
-#     최대 30개 제한으로 base_dtm이 포함되지 않을 경우 과거 시간 기준 2차 조회
-#     """
-#     def inquire_time_itemchartprice(start_minute_str):
-#         headers = {
-#             "Content-Type": "application/json",
-#             "authorization": f"Bearer {access_token}",
-#             "appKey": app_key,
-#             "appSecret": app_secret,
-#             "tr_id": "FHKST03010200",
-#             "custtype": "P"
-#         }
-#         params = {
-#             'FID_COND_MRKT_DIV_CODE': "J",
-#             'FID_INPUT_ISCD': code,
-#             'FID_INPUT_HOUR_1': start_minute_str,
-#             'FID_PW_DATA_INCU_YN': 'N',
-#             'FID_ETC_CLS_CODE': ""
-#         }
-#         PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-#         URL = f"{URL_BASE}/{PATH}"
-#         res = requests.get(URL, headers=headers, params=params, verify=False)
-#         ar = resp.APIResp(res)
-#         return ar.getBody().output2
-
-#     # 1차 조회: 현재 시간 10분 기준 최대 30개
-#     now_str = "600"
-#     candle_list = inquire_time_itemchartprice(now_str)
-
-#     # base_dtm이 포함되어 있는지 확인
-#     base_candle_start = get_candle_start_time(base_dtm)
-#     included = any(item['stck_cntg_hour'] == base_candle_start.strftime("%H%M%S") for item in candle_list)
-
-#     # 포함되지 않으면 2차 조회: 30건 조회된 데이터 이전 시간부터 재조회
-#     if not included and candle_list:
-#         # 1차 조회 결과 중 가장 오래된(첫 번째) 캔들의 시간
-#         oldest_time = candle_list[-1]['stck_cntg_hour']  
-#         oldest_dt = datetime.strptime(oldest_time, "%H%M%S")
-
-#         # 가장 오래된 봉이 속한 10분봉 시작시간 구하기
-#         oldest_candle_start = oldest_dt.replace(minute=(oldest_dt.minute // 10) * 10, second=0)
-
-#         # 직전 10분봉 시작시간 구하기
-#         prev_candle_start = oldest_candle_start - timedelta(minutes=10)
-
-#         # 문자열 변환
-#         prev_minute_str = prev_candle_start.strftime("%H%M%S")
-
-#         # 2차 조회
-#         candle_list = inquire_time_itemchartprice(access_token, app_key, app_secret, code, prev_minute_str)
-
-#     return candle_list
-
 async def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
@@ -434,14 +370,25 @@ if result_one == None:
                 df['body'] = (df['close'] - df['open']).abs()
 
                 # base_dtm 10분봉 시작 시간
-                base_candle_start = get_candle_start_time(base_dtm)
+                base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
+
+                # 1분봉 df → 10분봉 리샘플링
+                df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                }).reset_index()
+                # 10분봉 몸통(body) 계산
+                df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
 
                 # base_dtm 10분봉 거래량
-                base_candle_df = df[df['timestamp'] == base_candle_start]
+                base_candle_df = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  == base_candle_start.strftime("%H%M%S")]
                 base_volume = base_candle_df.iloc[0]['volume'] if not base_candle_df.empty else 0
 
                 # base_dtm 10분봉 이후 최대 거래량 봉
-                df_after_base = df[df['timestamp'] >= base_candle_start]
+                df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
                 if df_after_base.empty:
                     continue
                 기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
@@ -449,7 +396,7 @@ if result_one == None:
                 # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우 매매자동처리 생성 및 기존 매매자동처리 변경(proc_yn = 'N')
                 if 기준봉['volume'] > base_volume:
                     print("종목명 : " + i[1] + " 거래량 돌파 : " + format(int(기준봉['close']), ',d') + "원")
-                    avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                    avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                     # 몸통 유형 구분
                     body_value = 기준봉['body']
