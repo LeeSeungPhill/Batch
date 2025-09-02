@@ -432,36 +432,91 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output1
 
-def fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm):
+def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     """
-    base_dtm을 포함하는 10분봉 이상 데이터를 반환.
-    최대 30개 제한으로 base_dtm이 포함되지 않을 경우 과거 시간 기준 2차 조회
+    1분봉을 조회한 뒤 10분봉으로 리샘플링하여 base_dtm 포함 여부 확인.
+    필요하면 과거 데이터를 추가 조회.
+    최종 반환값은 원본 API 결과(dict 리스트).
     """
-    def inquire_time_itemchartprice(start_minute_str):
-        headers = {
-            "Content-Type": "application/json",
-            "authorization": f"Bearer {access_token}",
-            "appKey": app_key,
-            "appSecret": app_secret,
-            "tr_id": "FHKST03010200",
-            "custtype": "P"
-        }
+
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST03010200",
+        "custtype": "P"
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+    URL = f"{URL_BASE}/{PATH}"
+
+    def request_candles(start_time):
+        """API 호출 → 원본 dict 리스트 반환"""
         params = {
             'FID_COND_MRKT_DIV_CODE': "J",
             'FID_INPUT_ISCD': code,
-            'FID_INPUT_HOUR_1': start_minute_str,
+            'FID_INPUT_HOUR_1': start_time,  # 기준 시각
             'FID_PW_DATA_INCU_YN': 'N',
             'FID_ETC_CLS_CODE': ""
         }
-        PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-        URL = f"{URL_BASE}/{PATH}"
         res = requests.get(URL, headers=headers, params=params, verify=False)
         ar = resp.APIResp(res)
-        return ar.getBody().output2
+        return ar.getBody().output2  # 원본 dict 리스트
 
-    # 현재 시간 기준 최대 30개
-    now_str = "600"
-    candle_list = inquire_time_itemchartprice(now_str)
+    def convert_to_df(candle_list):
+        """dict 리스트 → DataFrame(1분봉)"""
+        minute_list = []
+        for item in candle_list:
+            minute_list.append({
+                'timestamp': pd.to_datetime(item['stck_cntg_hour'], format='%H%M%S'),
+                'open': float(item['stck_oprc']),
+                'high': float(item['stck_hgpr']),
+                'low': float(item['stck_lwpr']),
+                'close': float(item['stck_prpr']),
+                'volume': float(item['cntg_vol'])
+            })
+        return pd.DataFrame(minute_list).sort_values('timestamp').reset_index(drop=True)
+
+    def resample_to_10min(df):
+        """1분봉 → 10분봉 변환"""
+        df = df.set_index('timestamp')
+        df_10 = df.resample('10T').agg({
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }).dropna().reset_index()
+        return df_10
+
+    # 1차 조회
+    cur_time = datetime.now().strftime("%H%M%S")
+    candle_list = request_candles(cur_time)
+    df_1m = convert_to_df(candle_list)
+    df_10m = resample_to_10min(df_1m)
+
+    # base_dtm이 속한 봉 시작시간
+    base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0)
+
+    included = any(df_10m['timestamp'] == base_candle_start)
+
+    # 포함 안 되면 과거 조회 반복
+    while not included:
+        oldest_time = df_1m['timestamp'].min() - timedelta(minutes=1)
+        start_time_str = oldest_time.strftime("%H%M%S")
+
+        extra_candles = request_candles(start_time_str)
+        if not extra_candles:  # 더 이상 데이터 없음
+            break
+
+        extra_df = convert_to_df(extra_candles)
+        df_1m = pd.concat([extra_df, df_1m]).drop_duplicates().sort_values('timestamp').reset_index(drop=True)
+        df_10m = resample_to_10min(df_1m)
+
+        # 원본도 합쳐줌
+        candle_list = extra_candles + candle_list
+
+        included = any(df_10m['timestamp'] == base_candle_start)
 
     return candle_list
 
@@ -2413,14 +2468,14 @@ def callback_get(update, context) :
             elif data_selected.find("자수") != -1:
                 menuNum = "41"
 
-                context.bot.edit_message_text(text="매수기준의 종목코드(종목명), 시분초(00)-6자리, 매수금액을 입력하세요.",
+                context.bot.edit_message_text(text="매수기준의 종목코드(종목명), 매수금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
             elif data_selected.find("자도") != -1:
                 menuNum = "42"
 
-                context.bot.edit_message_text(text="매도기준의 종목코드(종목명), 시분초(00)-6자리, 매도비율(%)을 입력하세요.",
+                context.bot.edit_message_text(text="매도기준의 종목코드(종목명), 매도비율(%)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)    
    
@@ -3009,10 +3064,13 @@ def callback_get(update, context) :
 
                             sell_qty = b['ord_psbl_qty']
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 100
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3028,7 +3086,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3041,11 +3098,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3066,7 +3138,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3075,16 +3147,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"100% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3096,50 +3165,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", sell_qty, sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[100% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3190,10 +3220,13 @@ def callback_get(update, context) :
 
                             sell_qty = round(int(b['ord_psbl_qty']) * 0.6667)
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 66
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3209,7 +3242,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3222,11 +3254,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3247,7 +3294,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3256,16 +3303,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"66% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3277,50 +3321,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[66% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[66% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3371,10 +3376,13 @@ def callback_get(update, context) :
 
                             sell_qty = round(int(b['ord_psbl_qty']) / 2)
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 50
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3390,7 +3398,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3403,11 +3410,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3428,7 +3450,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3437,16 +3459,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"50% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3458,50 +3477,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[50% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[50% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3552,10 +3532,13 @@ def callback_get(update, context) :
 
                             sell_qty = round(int(b['ord_psbl_qty']) * 0.3333)
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 33
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3571,7 +3554,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3584,11 +3566,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3609,7 +3606,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3618,16 +3615,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"33% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3639,50 +3633,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[33% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[33% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3733,10 +3688,13 @@ def callback_get(update, context) :
 
                             sell_qty = round(int(b['ord_psbl_qty']) * 0.25)
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 25
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3752,7 +3710,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3765,11 +3722,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3790,7 +3762,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3799,16 +3771,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"25% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3820,50 +3789,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[25% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[25% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -3914,10 +3844,13 @@ def callback_get(update, context) :
 
                             sell_qty = round(int(b['ord_psbl_qty']) * 0.2)
                             sell_price = b['now_pric']
-                            base_dtm = datetime.now().strftime("%H%M%S")
                             sell_rate = 20
 
-                            candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                            # base_dtm datetime 변환
+                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            
+                            # 주식당일분봉조회
+                            candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                             minute_list = []
                             for item in candle_list:
@@ -3933,7 +3866,6 @@ def callback_get(update, context) :
                             df = pd.DataFrame(minute_list)
                             df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                             df = df.sort_values('체결시간').reset_index(drop=True)
-                        
                             df.rename(columns={
                                 '종가': 'close',
                                 '시가': 'open',
@@ -3946,11 +3878,26 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # 기준봉: 가장 거래량 많은 봉
-                            idx = df['volume'].idxmax()
-                            기준봉 = df.loc[idx]
+                            # base_dtm 10분봉 시작 시간
+                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
 
-                            avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                            # 1분봉 df → 10분봉 리샘플링
+                            df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                                'open': 'first',
+                                'high': 'max',
+                                'low': 'min',
+                                'close': 'last',
+                                'volume': 'sum'
+                            }).reset_index()
+                            # 10분봉 몸통(body) 계산
+                            df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+
+                            # base_dtm 10분봉 이후 최대 거래량 봉
+                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
+                            if df_after_base.empty:
+                                continue
+                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
                             body_value = 기준봉['body']
@@ -3971,7 +3918,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_FUND_SELL', datetime.now(), 'AUTO_FUND_SELL', datetime.now()
+                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3980,16 +3927,13 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"20% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
-                                result_msgs.append(msg)
-
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_FUND_UP_SELL'
+                                        , chgr_id = 'AUTO_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -4001,50 +3945,11 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
                                 cur501.close()
-
-                            # try:
-                            #     # 매도
-                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(sell_qty), sell_price)
-                        
-                            #     if c['ODNO'] != "":
-
-                            #         # 일별주문체결 조회
-                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                            #         tdf = pd.DataFrame(output1)
-                            #         tdf.set_index('odno')
-                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                            #         for i, name in enumerate(d.index):
-                            #             d_order_no = int(d['odno'][i])
-                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                            #             d_order_dt = d['ord_dt'][i]
-                            #             d_order_tmd = d['ord_tmd'][i]
-                            #             d_name = d['prdt_name'][i]
-                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                            #             d_order_amount = d['ord_qty'][i]
-                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                            #             d_remain_qty = d['rmn_qty'][i]
-                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                            #             print("매도주문 완료")
-                            #             msg = f"[20% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                            #             result_msgs.append(msg)
-
-                            #     else:
-                            #         print("매도주문 실패")
-                            #         msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 매도주문 실패"
-                            #         result_msgs.append(msg)
-
-
-                            # except Exception as e:
-                            #     print('매도주문 오류.', e)
-                            #     msg = f"[20% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {sell_qty:,}주 [매도주문 오류] - {str(e)}"
-                            #     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
 
@@ -6370,25 +6275,25 @@ def echo(update, context):
             chartReq = "0"
             if len(user_text.split(",")) > 0:
                
-                commandBot = user_text.split(sep=',', maxsplit=3)
-                print("commandBot[1] : ", commandBot[1])    # 시분초(00)-6자리
-                print("commandBot[2] : ", commandBot[2])    # 매수금액
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 매수금액
 
-            # 시분초(00)-6자리, 매수금액 존재시
-            if commandBot[1].isdecimal() & len(commandBot[1]) == 6 & commandBot[2].isdecimal():
+            # 매수금액 존재시
+            if commandBot[1].isdecimal():
 
-                # 시분초(00)-6자리
-                base_dtm = commandBot[1]
-                print("시분초(00)-6자리 : " + base_dtm)
                 # 매수금액
-                buy_amount = commandBot[2]
+                buy_amount = commandBot[1]
                 print("매수금액 : " + format(int(buy_amount), ',d'))
 
                 # 매수 가능(현금) 조회
                 b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                 print("매수 가능(현금) : " + format(int(b), ',d'));
                 if int(b) > int(buy_amount):  # 매수가능(현금)이 매수금액이 더 큰 경우
-                    candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+                    # base_dtm datetime 변환
+                    base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                    
+                    # 주식당일분봉조회
+                    candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                     minute_list = []
                     for item in candle_list:
@@ -6404,7 +6309,6 @@ def echo(update, context):
                     df = pd.DataFrame(minute_list)
                     df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                     df = df.sort_values('체결시간').reset_index(drop=True)
-                
                     df.rename(columns={
                         '종가': 'close',
                         '시가': 'open',
@@ -6417,11 +6321,18 @@ def echo(update, context):
                     df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                     df['body'] = (df['close'] - df['open']).abs()
 
-                    # 기준봉: 가장 거래량 많은 봉
-                    idx = df['volume'].idxmax()
-                    기준봉 = df.loc[idx]
-
-                    avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                    # 1분봉 df → 10분봉 리샘플링
+                    df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum'
+                    }).reset_index()
+                    # 10분봉 몸통(body) 계산
+                    df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+                    기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
+                    avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                     # 몸통 유형 구분
                     body_value = 기준봉['body']
@@ -6485,29 +6396,30 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수 가능(현금) : " + format(int(b) - int(buy_amount), ',d') +"원 부족")
 
             else:
-                print("시분초(00)-6자리 또는 매수금액 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 시분초(00)-6자리 또는 매수금액 미존재")        
+                print("매수금액 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매수금액 미존재")        
        
         elif menuNum == '42':
             chartReq = "0"
             if len(user_text.split(",")) > 0:
                
-                commandBot = user_text.split(sep=',', maxsplit=3)
-                print("commandBot[1] : ", commandBot[1])    # 시분초(00)-6자리
-                print("commandBot[2] : ", commandBot[2])    # 매도비율(%)
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 매도비율(%)
 
-            # 시분초(00)-6자리, 매도비율(%) 존재시
-            if commandBot[1].isdecimal() & len(commandBot[1]) == 6 & is_positive_int(commandBot[2]):
+            # 매도비율(%) 존재시
+            if is_positive_int(commandBot[1]):
                
-                # 시분초(00)-6자리
-                base_dtm = commandBot[1]
-                print("시분초(00)-6자리 : " + base_dtm)
-                # 매도비율(%)
-                sell_rate = commandBot[2]
+               # 매도비율(%)
+                sell_rate = commandBot[1]
                 print("매도비율(%) : " + format(int(sell_rate), ',d'))
 
                 if int(sell_rate) <= 100 and int(sell_rate) > 0:
-                    candle_list = fetch_candles_for_base(access_token, app_key, app_secret, code, base_dtm)
+
+                    # base_dtm datetime 변환
+                    base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                    
+                    # 주식당일분봉조회
+                    candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
 
                     minute_list = []
                     for item in candle_list:
@@ -6523,7 +6435,6 @@ def echo(update, context):
                     df = pd.DataFrame(minute_list)
                     df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
                     df = df.sort_values('체결시간').reset_index(drop=True)
-                
                     df.rename(columns={
                         '종가': 'close',
                         '시가': 'open',
@@ -6536,11 +6447,18 @@ def echo(update, context):
                     df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                     df['body'] = (df['close'] - df['open']).abs()
 
-                    # 기준봉: 가장 거래량 많은 봉
-                    idx = df['volume'].idxmax()
-                    기준봉 = df.loc[idx]
-
-                    avg_body = df['body'].rolling(20).mean().iloc[-1] if len(df) >= 20 else df['body'].mean()
+                    # 1분봉 df → 10분봉 리샘플링
+                    df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum'
+                    }).reset_index()
+                    # 10분봉 몸통(body) 계산
+                    df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
+                    기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
+                    avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                     # 몸통 유형 구분
                     body_value = 기준봉['body']
@@ -6604,8 +6522,8 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도비율(%) : " + sell_rate +" 범위 미충족")        
                                              
             else:
-                print("시분초(00)-6자리 또는 매도비율(%) 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 시분초(00)-6자리 또는 매도비율(%) 미존재")
+                print("매도비율(%) 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 매도비율(%) 미존재")
        
         elif menuNum == '51':
             chartReq = "0"
