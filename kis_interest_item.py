@@ -1,5 +1,5 @@
 import psycopg2 as db
-from datetime import datetime
+from datetime import datetime, timedelta
 import kis_api_resp as resp
 import requests
 import json
@@ -946,61 +946,59 @@ if result_one == None:
                                                     break
                                                 기준봉 = candidates.iloc[0]
 
-                                            # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우 매매자동처리 생성 및 기존 매매자동처리 변경(proc_yn = 'N')
-                                            if 기준봉['volume'] > base_volume:
-                                                avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
+                                            avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
-                                                # 몸통 유형 구분
-                                                body_value = 기준봉['body']
-                                                if body_value > avg_body * 1.5:
-                                                    candle_body = "L"   # 장봉
-                                                elif body_value < avg_body * 0.5:
-                                                    candle_body = "S"   # 단봉
-                                                else:
-                                                    candle_body = "M"   # 보통
+                                            # 몸통 유형 구분
+                                            body_value = 기준봉['body']
+                                            if body_value > avg_body * 1.5:
+                                                candle_body = "L"   # 장봉
+                                            elif body_value < avg_body * 0.5:
+                                                candle_body = "S"   # 단봉
+                                            else:
+                                                candle_body = "M"   # 보통
 
-                                                # 매매자동처리 insert
-                                                cur500 = conn.cursor()
-                                                insert_query = """
-                                                    INSERT INTO trade_auto_proc (
-                                                        acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                                    )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                                    ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                                            # 매매자동처리 insert
+                                            cur500 = conn.cursor()
+                                            insert_query = """
+                                                INSERT INTO trade_auto_proc (
+                                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                                            """
+                                            # insert 인자값 설정
+                                            cur500.execute(insert_query, (
+                                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                            ))
+
+                                            was_inserted = cur500.rowcount == 1
+
+                                            conn.commit()
+                                            cur500.close()
+
+                                            if was_inserted:
+                                                # 매매자동처리 update
+                                                cur501 = conn.cursor()
+                                                update_query = """
+                                                    UPDATE trade_auto_proc
+                                                    SET
+                                                        proc_yn = 'N'
+                                                        , chgr_id = 'AUTO_UP_SELL'
+                                                        , chg_date = %s
+                                                    WHERE acct_no = %s
+                                                    AND code = %s
+                                                    AND base_day = %s
+                                                    AND base_dtm <> %s
+                                                    AND trade_tp = 'S'
+                                                    AND proc_yn = 'Y'
                                                 """
-                                                # insert 인자값 설정
-                                                cur500.execute(insert_query, (
-                                                    acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+
+                                                # update 인자값 설정
+                                                cur501.execute(update_query, (
+                                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                                 ))
 
-                                                was_inserted = cur500.rowcount == 1
-
                                                 conn.commit()
-                                                cur500.close()
-
-                                                if was_inserted:
-                                                    # 매매자동처리 update
-                                                    cur501 = conn.cursor()
-                                                    update_query = """
-                                                        UPDATE trade_auto_proc
-                                                        SET
-                                                            proc_yn = 'N'
-                                                            , chgr_id = 'AUTO_UP_SELL'
-                                                            , chg_date = %s
-                                                        WHERE acct_no = %s
-                                                        AND code = %s
-                                                        AND base_day = %s
-                                                        AND base_dtm <> %s
-                                                        AND trade_tp = 'S'
-                                                        AND proc_yn = 'Y'
-                                                    """
-
-                                                    # update 인자값 설정
-                                                    cur501.execute(update_query, (
-                                                        datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
-                                                    ))
-
-                                                    conn.commit()
-                                                    cur501.close()
+                                                cur501.close()
 
                         else:
                             # print("trail_signal_code2 : " + trail_signal_code)
@@ -1173,61 +1171,59 @@ if result_one == None:
                                             break
                                         기준봉 = candidates.iloc[0]
 
-                                    # 매매자동처리 정보의 거래량보다 기준봉 거래량이 큰 경우 매매자동처리 생성 및 기존 매매자동처리 변경(proc_yn = 'N')
-                                    if 기준봉['volume'] > base_volume:
-                                        avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
+                                    avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
-                                        # 몸통 유형 구분
-                                        body_value = 기준봉['body']
-                                        if body_value > avg_body * 1.5:
-                                            candle_body = "L"   # 장봉
-                                        elif body_value < avg_body * 0.5:
-                                            candle_body = "S"   # 단봉
-                                        else:
-                                            candle_body = "M"   # 보통
+                                    # 몸통 유형 구분
+                                    body_value = 기준봉['body']
+                                    if body_value > avg_body * 1.5:
+                                        candle_body = "L"   # 장봉
+                                    elif body_value < avg_body * 0.5:
+                                        candle_body = "S"   # 단봉
+                                    else:
+                                        candle_body = "M"   # 보통
 
-                                        # 매매자동처리 insert
-                                        cur500 = conn.cursor()
-                                        insert_query = """
-                                            INSERT INTO trade_auto_proc (
-                                                acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                            )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                            ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                                    # 매매자동처리 insert
+                                    cur500 = conn.cursor()
+                                    insert_query = """
+                                        INSERT INTO trade_auto_proc (
+                                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
+                                        )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                                    """
+                                    # insert 인자값 설정
+                                    cur500.execute(insert_query, (
+                                        acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                    ))
+
+                                    was_inserted = cur500.rowcount == 1
+
+                                    conn.commit()
+                                    cur500.close()
+
+                                    if was_inserted:
+                                        # 매매자동처리 update
+                                        cur501 = conn.cursor()
+                                        update_query = """
+                                            UPDATE trade_auto_proc
+                                            SET
+                                                proc_yn = 'N'
+                                                , chgr_id = 'AUTO_UP_SELL'
+                                                , chg_date = %s
+                                            WHERE acct_no = %s
+                                            AND code = %s
+                                            AND base_day = %s
+                                            AND base_dtm <> %s
+                                            AND trade_tp = 'S'
+                                            AND proc_yn = 'Y'
                                         """
-                                        # insert 인자값 설정
-                                        cur500.execute(insert_query, (
-                                            acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+
+                                        # update 인자값 설정
+                                        cur501.execute(update_query, (
+                                            datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                         ))
 
-                                        was_inserted = cur500.rowcount == 1
-
                                         conn.commit()
-                                        cur500.close()
-
-                                        if was_inserted:
-                                            # 매매자동처리 update
-                                            cur501 = conn.cursor()
-                                            update_query = """
-                                                UPDATE trade_auto_proc
-                                                SET
-                                                    proc_yn = 'N'
-                                                    , chgr_id = 'AUTO_UP_SELL'
-                                                    , chg_date = %s
-                                                WHERE acct_no = %s
-                                                AND code = %s
-                                                AND base_day = %s
-                                                AND base_dtm <> %s
-                                                AND trade_tp = 'S'
-                                                AND proc_yn = 'Y'
-                                            """
-
-                                            # update 인자값 설정
-                                            cur501.execute(update_query, (
-                                                datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
-                                            ))
-
-                                            conn.commit()
-                                            cur501.close()
+                                        cur501.close()
 
                     except Exception as ex:
                         print(f"현재가 시세 에러 : [{i[2]}] {ex}")
