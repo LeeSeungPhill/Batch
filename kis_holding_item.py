@@ -986,42 +986,11 @@ if result_one == None:
                                         # 10분봉 몸통(body) 계산
                                         df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
 
-                                        # base_dtm 10분봉 거래량
-                                        base_candle_df = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  == base_candle_start.strftime("%H%M%S")]
-                                        base_volume = base_candle_df.iloc[0]['volume'] if not base_candle_df.empty else 0
-
                                         # base_dtm 10분봉 이후 최대 거래량 봉
                                         df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
                                         if df_after_base.empty:
                                             continue
                                         기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
-
-                                        # 저항가 돌파, 최종목표가 돌파시 
-                                        if trail_signal_code == '07' or trail_signal_code == '09':
-
-                                            while True:
-                                                이후_봉들 = df_10m[df_10m['timestamp'] > 기준봉['timestamp']]
-                                                candidates = 이후_봉들[
-                                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                                    (이후_봉들['high'] > 기준봉['high'])
-                                                ]
-                                                if candidates.empty:
-                                                    break
-                                                기준봉 = candidates.iloc[0]
-                                        
-                                        # 지지가 이탈, 최종이탈가 이탈시 
-                                        if trail_signal_code == '08' or trail_signal_code == '10':
-
-                                            while True:
-                                                이후_봉들 = df_10m[df_10m['timestamp'] > 기준봉['timestamp']]
-                                                candidates = 이후_봉들[
-                                                    (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                                    (이후_봉들['low'] < 기준봉['low'])
-                                                ]
-                                                if candidates.empty:
-                                                    break
-                                                기준봉 = candidates.iloc[0]
-
                                         avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                                         # 몸통 유형 구분
@@ -1157,42 +1126,11 @@ if result_one == None:
                                 # 10분봉 몸통(body) 계산
                                 df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
 
-                                # base_dtm 10분봉 거래량
-                                base_candle_df = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  == base_candle_start.strftime("%H%M%S")]
-                                base_volume = base_candle_df.iloc[0]['volume'] if not base_candle_df.empty else 0
-
                                 # base_dtm 10분봉 이후 최대 거래량 봉
                                 df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
                                 if df_after_base.empty:
                                     continue
                                 기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
-
-                                # 저항가 돌파, 최종목표가 돌파시 
-                                if trail_signal_code == '07' or trail_signal_code == '09':
-
-                                    while True:
-                                        이후_봉들 = df_10m[df_10m['timestamp'] > 기준봉['timestamp']]
-                                        candidates = 이후_봉들[
-                                            (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                            (이후_봉들['high'] > 기준봉['high'])
-                                        ]
-                                        if candidates.empty:
-                                            break
-                                        기준봉 = candidates.iloc[0]
-                                
-                                # 지지가 이탈, 최종이탈가 이탈시 
-                                if trail_signal_code == '08' or trail_signal_code == '10':
-
-                                    while True:
-                                        이후_봉들 = df_10m[df_10m['timestamp'] > 기준봉['timestamp']]
-                                        candidates = 이후_봉들[
-                                            (이후_봉들['volume'] >= 기준봉['volume'] * 0.9) &
-                                            (이후_봉들['low'] < 기준봉['low'])
-                                        ]
-                                        if candidates.empty:
-                                            break
-                                        기준봉 = candidates.iloc[0]
-
                                 avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                                 # 몸통 유형 구분
