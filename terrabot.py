@@ -3098,9 +3098,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3111,12 +3108,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
@@ -3254,9 +3246,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3267,12 +3256,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
@@ -3410,9 +3394,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3423,12 +3404,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
@@ -3566,9 +3542,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3579,12 +3552,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
@@ -3722,9 +3690,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3735,12 +3700,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분
@@ -3878,9 +3838,6 @@ def callback_get(update, context) :
                             df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                             df['body'] = (df['close'] - df['open']).abs()
 
-                            # base_dtm 10분봉 시작 시간
-                            base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                             # 1분봉 df → 10분봉 리샘플링
                             df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                 'open': 'first',
@@ -3891,12 +3848,7 @@ def callback_get(update, context) :
                             }).reset_index()
                             # 10분봉 몸통(body) 계산
                             df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                            # base_dtm 10분봉 이후 최대 거래량 봉
-                            df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                            if df_after_base.empty:
-                                continue
-                            기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                            기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                             avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                             # 몸통 유형 구분

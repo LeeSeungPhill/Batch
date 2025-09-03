@@ -204,29 +204,6 @@ def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt,
         print("기간별손익일별합산조회 중 오류 발생:", e)
         return []
 
-# 주식당일분봉조회
-# def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
-
-#     headers = {"Content-Type": "application/json",
-#                "authorization": f"Bearer {access_token}",
-#                "appKey": app_key,
-#                "appSecret": app_secret,
-#                "tr_id": "FHKST03010200",
-#                "custtype": "P"}
-#     params = {
-#                 'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
-#                 'FID_INPUT_ISCD': code,
-#                 'FID_INPUT_HOUR_1': "600",          # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
-#                 'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
-#                 'FID_ETC_CLS_CODE': ""
-#     }
-#     PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-#     URL = f"{URL_BASE}/{PATH}"
-#     res = requests.get(URL, headers=headers, params=params, verify=False)
-#     ar = resp.APIResp(res)
-
-#     return ar.getBody().output2
-
 def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     """
     1분봉을 조회한 뒤 10분봉으로 리샘플링하여 base_dtm 포함 여부 확인.
@@ -972,9 +949,6 @@ if result_one == None:
                                         df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                                         df['body'] = (df['close'] - df['open']).abs()
 
-                                        # base_dtm 10분봉 시작 시간
-                                        base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                                         # 1분봉 df → 10분봉 리샘플링
                                         df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                             'open': 'first',
@@ -985,12 +959,7 @@ if result_one == None:
                                         }).reset_index()
                                         # 10분봉 몸통(body) 계산
                                         df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                                        # base_dtm 10분봉 이후 최대 거래량 봉
-                                        df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                                        if df_after_base.empty:
-                                            continue
-                                        기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                                        기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                                         avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                                         # 몸통 유형 구분
@@ -1112,9 +1081,6 @@ if result_one == None:
                                 df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
                                 df['body'] = (df['close'] - df['open']).abs()
 
-                                # base_dtm 10분봉 시작 시간
-                                base_candle_start = base_dtm.replace(minute=(base_dtm.minute // 10) * 10, second=0, microsecond=0)
-
                                 # 1분봉 df → 10분봉 리샘플링
                                 df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({
                                     'open': 'first',
@@ -1125,12 +1091,7 @@ if result_one == None:
                                 }).reset_index()
                                 # 10분봉 몸통(body) 계산
                                 df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-
-                                # base_dtm 10분봉 이후 최대 거래량 봉
-                                df_after_base = df_10m[df_10m['timestamp'].dt.strftime("%H%M%S")  >= base_candle_start.strftime("%H%M%S")]
-                                if df_after_base.empty:
-                                    continue
-                                기준봉 = df_after_base.loc[df_after_base['volume'].idxmax()]
+                                기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
                                 avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
 
                                 # 몸통 유형 구분

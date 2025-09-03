@@ -141,29 +141,6 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
 
     return pd.DataFrame(output)
 
-# 주식당일분봉조회
-# def inquire_time_itemchartprice(access_token, app_key, app_secret, code, req_minute):
-
-#     headers = {"Content-Type": "application/json",
-#                "authorization": f"Bearer {access_token}",
-#                "appKey": app_key,
-#                "appSecret": app_secret,
-#                "tr_id": "FHKST03010200",
-#                "custtype": "P"}
-#     params = {
-#                 'FID_COND_MRKT_DIV_CODE': "J",      # J:KRX, NX:NXT, UN:통합
-#                 'FID_INPUT_ISCD': code,
-#                 'FID_INPUT_HOUR_1': req_minute,     # 입력시간 현재시간이전(123000):12시30분 이전부터 1분 간격 최대 30건, 현재시간이후(123000):현재시간(120000)으로 조회, 60:현재시간부터 1분 간격, 600:현재시간부터 10분 간격, 3600:현재시간부터 1시간 간격
-#                 'FID_PW_DATA_INCU_YN': 'N',         # 과거 데이터 포함 여부 N:당일데이터만 조회, Y:과거데이터 포함 조회
-#                 'FID_ETC_CLS_CODE': ""
-#     }
-#     PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-#     URL = f"{URL_BASE}/{PATH}"
-#     res = requests.get(URL, headers=headers, params=params, verify=False)
-#     ar = resp.APIResp(res)
-
-#     return ar.getBody().output2
-
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
 
@@ -340,7 +317,6 @@ if result_one == None:
                 # base_dtm datetime 변환
                 base_dtm = datetime.strptime(today + i[3], '%Y%m%d%H%M%S')
                 # 10분봉 조회 (필요시 과거 조회 포함)
-                # candle_list = fetch_candles_for_base(access_token, app_key, app_secret, i[2], base_dtm)
                 candle_list = fetch_candles_with_base(access_token, app_key, app_secret, i[2], base_dtm)
 
                 minute_list = []
@@ -522,7 +498,7 @@ if result_one == None:
                     )
 
                 # 현재 시간이 봉 완성 이후인지 확인
-                if current_time >= candle_complete_time:
+                if current_time > candle_complete_time:
                     # 10분봉 완성 후 실행
                     high_price = i[7]
                     low_price = i[8]
