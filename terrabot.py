@@ -3132,7 +3132,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3141,13 +3141,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"100% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3159,7 +3162,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
@@ -3282,7 +3285,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3291,13 +3294,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"66% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3309,7 +3315,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
@@ -3432,7 +3438,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3441,13 +3447,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"50% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3459,7 +3468,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
@@ -3582,7 +3591,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3591,13 +3600,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"33% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3609,7 +3621,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
@@ -3732,7 +3744,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3741,13 +3753,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"25% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3759,7 +3774,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
@@ -3882,7 +3897,7 @@ def callback_get(update, context) :
                             """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, code, company_name, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -3891,13 +3906,16 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
+                                msg = f"20% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                result_msgs.append(msg)
+
                                 # 매매자동처리 update
                                 cur501 = conn.cursor()
                                 update_query = """
                                     UPDATE trade_auto_proc
                                     SET
                                         proc_yn = 'N'
-                                        , chgr_id = 'AUTO_UP_SELL'
+                                        , chgr_id = 'AUTO_FUND_UP_SELL'
                                         , chg_date = %s
                                     WHERE acct_no = %s
                                     AND code = %s
@@ -3909,7 +3927,7 @@ def callback_get(update, context) :
 
                                 # update 인자값 설정
                                 cur501.execute(update_query, (
-                                    datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                                    datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                 ))
 
                                 conn.commit()
