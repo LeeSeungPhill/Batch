@@ -3067,7 +3067,9 @@ def callback_get(update, context) :
                             sell_rate = 100
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -3215,7 +3217,9 @@ def callback_get(update, context) :
                             sell_rate = 66
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -3363,7 +3367,9 @@ def callback_get(update, context) :
                             sell_rate = 50
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -3511,7 +3517,9 @@ def callback_get(update, context) :
                             sell_rate = 33
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -3659,7 +3667,9 @@ def callback_get(update, context) :
                             sell_rate = 25
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -3807,7 +3817,9 @@ def callback_get(update, context) :
                             sell_rate = 20
 
                             # base_dtm datetime 변환
-                            base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                            today = datetime.now().strftime("%Y%m%d")
+                            second = datetime.now().strftime("%H%M%S")
+                            base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                             
                             # 주식당일분봉조회
                             candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -6242,7 +6254,9 @@ def echo(update, context):
                 print("매수 가능(현금) : " + format(int(b), ',d'));
                 if int(b) > int(buy_amount):  # 매수가능(현금)이 매수금액이 더 큰 경우
                     # base_dtm datetime 변환
-                    base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                    today = datetime.now().strftime("%Y%m%d")
+                    second = datetime.now().strftime("%H%M%S")
+                    base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                     
                     # 주식당일분봉조회
                     candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
@@ -6368,7 +6382,9 @@ def echo(update, context):
                 if int(sell_rate) <= 100 and int(sell_rate) > 0:
 
                     # base_dtm datetime 변환
-                    base_dtm = datetime.now().strftime("%Y%m%d%H%M%S")
+                    today = datetime.now().strftime("%Y%m%d")
+                    second = datetime.now().strftime("%H%M%S")
+                    base_dtm = datetime.strptime(today + second, '%Y%m%d%H%M%S')
                     
                     # 주식당일분봉조회
                     candle_list = fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm)
