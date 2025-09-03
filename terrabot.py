@@ -6337,7 +6337,7 @@ def echo(update, context):
                     """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
-                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
+                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_UP_BUY', datetime.now(), 'AUTO_UP_BUY', datetime.now()
                     ))
 
                     was_inserted = cur500.rowcount == 1
@@ -6465,7 +6465,7 @@ def echo(update, context):
                     """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
-                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_UP_SELL', datetime.now(), 'AUTO_UP_SELL', datetime.now()
                     ))
 
                     was_inserted = cur500.rowcount == 1
