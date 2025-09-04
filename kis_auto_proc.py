@@ -414,13 +414,13 @@ if result_one == None:
                             AND code = %s
                             AND base_day = %s
                             AND base_dtm <> %s
-                            AND trade_tp = 'S'
+                            AND trade_tp = %s
                             AND proc_yn = 'Y'
                         """
 
                         # update 인자값 설정
                         cur501.execute(update_query, (
-                            datetime.now(), str(acct_no), i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
+                            datetime.now(), str(acct_no), i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), i[4]
                         ))
 
                         conn.commit()
@@ -596,7 +596,7 @@ if result_one == None:
 
                                             # try:
                                             #     # 매도 : 스탑지정가 주문
-                                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "22", sell_qty, sell_price)
+                                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "22", sell_qty, sell_price, )
                                         
                                             #     if c['ODNO'] != "":
 

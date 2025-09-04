@@ -921,7 +921,7 @@ if result_one == None:
                                             """
                                             # insert 인자값 설정
                                             cur500.execute(insert_query, (
-                                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
                                             ))
 
                                             was_inserted = cur500.rowcount == 1
@@ -936,13 +936,13 @@ if result_one == None:
                                                     UPDATE trade_auto_proc
                                                     SET
                                                         proc_yn = 'N'
-                                                        , chgr_id = 'AUTO_UP_SELL'
+                                                        , chgr_id = 'AUTO_UP_BUY'
                                                         , chg_date = %s
                                                     WHERE acct_no = %s
                                                     AND code = %s
                                                     AND base_day = %s
                                                     AND base_dtm <> %s
-                                                    AND trade_tp = 'S'
+                                                    AND trade_tp = 'B'
                                                     AND proc_yn = 'Y'
                                                 """
 
@@ -1123,7 +1123,7 @@ if result_one == None:
                                     """
                                     # insert 인자값 설정
                                     cur500.execute(insert_query, (
-                                        acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
+                                        acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
                                     ))
 
                                     was_inserted = cur500.rowcount == 1
@@ -1138,13 +1138,13 @@ if result_one == None:
                                             UPDATE trade_auto_proc
                                             SET
                                                 proc_yn = 'N'
-                                                , chgr_id = 'AUTO_UP_SELL'
+                                                , chgr_id = 'AUTO_UP_BUY'
                                                 , chg_date = %s
                                             WHERE acct_no = %s
                                             AND code = %s
                                             AND base_day = %s
                                             AND base_dtm <> %s
-                                            AND trade_tp = 'S'
+                                            AND trade_tp = 'B'
                                             AND proc_yn = 'Y'
                                         """
 
