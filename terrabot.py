@@ -4644,7 +4644,7 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
-                commandBot = user_text.split(sep=',', maxsplit=2)
+                commandBot = user_text.split(sep=',', maxsplit=7)
                 print("commandBot[1] : ", commandBot[1])    # 돌파가
                 print("commandBot[2] : ", commandBot[2])    # 이탈가
                 print("commandBot[3] : ", commandBot[3])    # 저항가
