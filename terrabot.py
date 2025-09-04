@@ -1040,10 +1040,11 @@ def handle_interest_buy(update, context):
     stock_code = command_parts[1]
     current_price = int(command_parts[2])
    
-    button_list = build_button(["신호매수", "취소"]) # make button list
+    button_list = build_button(["신호손절", "신호매수", "취소"]) # make button list
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list))) # make markup
    
     button_list = [
+        InlineKeyboardButton(f"신호손절 ({stock_code}])", callback_data=f"신호손절_{stock_code}_{current_price}"),
         InlineKeyboardButton(f"신호매수 ({stock_code}])", callback_data=f"신호매수_{stock_code}_{current_price}"),
         InlineKeyboardButton("취소", callback_data="취소")
     ]
@@ -2305,6 +2306,21 @@ def callback_get(update, context) :
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)                            
 
+    elif data_selected.find("신호손절") != -1:        
+       
+        parts = data_selected.split("_")
+        if len(parts) < 3:
+            update.callback_query.message.reply_text("잘못된 매수 명령어 형식입니다.")
+            return
+        buy_code = parts[1]  # 종목코드
+        current_price = format(int(parts[2]), ',d')  # 현재가
+
+        menuNum = "21"
+
+        context.bot.edit_message_text(text='[<code>'+ buy_code + '</code>] 현재가('+ current_price +')원 종목손절금액 기준 매수의 종목코드(종목명), 매수가, 이탈가, 손절금액을 입력하세요.', parse_mode='HTML',
+                                    chat_id=update.callback_query.message.chat_id,
+                                    message_id=update.callback_query.message.message_id)
+        
     elif data_selected.find("신호매수") != -1:        
        
         parts = data_selected.split("_")
@@ -2316,9 +2332,9 @@ def callback_get(update, context) :
 
         menuNum = "22"
 
-        context.bot.edit_message_text(text='[<code>'+ buy_code + '</code>] 현재가('+ current_price +')원 매수의 종목코드(종목명), 매수가, 매수금액을 입력하세요.', parse_mode='HTML',
+        context.bot.edit_message_text(text='[<code>'+ buy_code + '</code>] 현재가('+ current_price +')원 매수금액 기준 매수의 종목코드(종목명), 매수가, 매수금액을 입력하세요.', parse_mode='HTML',
                                     chat_id=update.callback_query.message.chat_id,
-                                    message_id=update.callback_query.message.message_id)
+                                    message_id=update.callback_query.message.message_id)    
 
     elif data_selected.find("시수") != -1:
         menuNum = "23"
@@ -2449,7 +2465,7 @@ def callback_get(update, context) :
 
     elif data_selected.find("자동") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["자수", "자도", "취소"], data_selected)
+            button_list = build_button(["자수", "자도", "추적제거", "취소"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="매매기준 종류를 선택해 주세요.",
@@ -2478,6 +2494,13 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="매도기준의 종목코드(종목명), 매도비율(%)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)    
+                
+            elif data_selected.find("추적제거") != -1:
+                menuNum = "43"
+
+                context.bot.edit_message_text(text="추적제거 대상의 종목코드(종목명), 구분(전체:0,돌파:1,이탈:2)을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
    
     elif data_selected.find("역매") != -1:
         if len(data_selected.split(",")) == 1:
@@ -2563,14 +2586,11 @@ def callback_get(update, context) :
 
             elif data_selected.find("관종수정") != -1:
 
-                if len(data_selected.split(",")) == 2:
-                    button_list = build_button(["돌파가수정", "이탈가수정", "저항가수정", "지지가수정", "추세상단가수정", "추세하단가수정", "취소"], data_selected)
-                    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 3))
+                menuNum = "13"
 
-                    context.bot.edit_message_text(text="수정할 메뉴를 선택해 주세요.",
-                                                chat_id=update.callback_query.message.chat_id,
-                                                message_id=update.callback_query.message.message_id,
-                                                reply_markup=show_markup)
+                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 돌파가, 이탈가, 저항가, 지지가, 추세상단가, 추세하단가를 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
                    
             elif data_selected.find("피보나치") != -1:
                 menuNum = "171"
@@ -2625,48 +2645,6 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(text="관심종목 조회할 종목코드(종목명)를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
-
-            elif data_selected.find("돌파가수정") != -1:
-                menuNum = "131"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 돌파가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)            
-               
-            elif data_selected.find("이탈가수정") != -1:
-                menuNum = "132"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 이탈가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)                            
-
-            elif data_selected.find("저항가수정") != -1:
-                menuNum = "133"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 저항가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)            
-
-            elif data_selected.find("지지가수정") != -1:
-                menuNum = "134"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 지지가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)            
-
-            elif data_selected.find("추세상단가수정") != -1:
-                menuNum = "135"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 추세상단가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)            
-
-            elif data_selected.find("추세하단가수정") != -1:
-                menuNum = "136"
-
-                context.bot.edit_message_text(text="관심종목 수정할 종목코드(종목명), 추세하단가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)            
 
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
@@ -2796,7 +2774,7 @@ def callback_get(update, context) :
             elif data_selected.find("보유종목수정") != -1:
 
                 if len(data_selected.split(",")) == 2:
-                    button_list = build_button(["1차목표가", "1차이탈가", "최종목표가", "최종이탈가", "매매계획", "손실금액", "취소"], data_selected)
+                    button_list = build_button(["신호변경", "매매계획", "손실금액", "취소"], data_selected)
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 3))
 
                     context.bot.edit_message_text(text="수정할 메뉴를 선택해 주세요.",
@@ -2914,43 +2892,22 @@ def callback_get(update, context) :
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
                
-            elif data_selected.find("1차목표가") != -1:
+            elif data_selected.find("신호변경") != -1:
                 menuNum = "161"
 
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 1차목표가를 입력하세요.",
+                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 목표가, 이탈가, 최종목표가, 최종이탈가를 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
 
-            elif data_selected.find("1차이탈가") != -1:
-                menuNum = "162"
-
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 1차이탈가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)
-               
-            elif data_selected.find("최종목표가") != -1:
-                menuNum = "163"
-
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 최종목표가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)
-
-            elif data_selected.find("최종이탈가") != -1:
-                menuNum = "164"
-
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 최종이탈가를 입력하세요.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)                                
-                
             elif data_selected.find("매매계획") != -1:
-                menuNum = "165"
+                menuNum = "162"
 
                 context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                    
 
             elif data_selected.find("손실금액") != -1:
-                menuNum = "166"
+                menuNum = "163"
 
                 context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 손실금액을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
@@ -4683,15 +4640,21 @@ def echo(update, context):
                 print("관심종목 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
 
-        elif menuNum == '131':
+        elif menuNum == '13':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
                 commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 돌파가
+                print("commandBot[2] : ", commandBot[2])    # 이탈가
+                print("commandBot[3] : ", commandBot[3])    # 저항가
+                print("commandBot[4] : ", commandBot[4])    # 지지가
+                print("commandBot[5] : ", commandBot[5])    # 추세상단가
+                print("commandBot[6] : ", commandBot[6])    # 추세하단가
 
-            # 돌파가 존재시
-            if commandBot[1].isdecimal():
+            # 돌파가, 이탈가, 저항가, 지지가, 추세상단가, 추세하단가 존재시
+            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & commandBot[3].isdecimal() & commandBot[4].isdecimal() & commandBot[5].isdecimal() & commandBot[6].isdecimal():
+
                 # 관심종목정보 조회
                 cur12 = conn.cursor()
                 cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
@@ -4702,208 +4665,23 @@ def echo(update, context):
 
                     # 관심종목정보 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set through_price = %s where code = %s"
+                    delete_query0 = "update \"interestItem_interest_item\" set through_price = %s, leave_price = %s, resist_price = %s, support_price = %s, trend_high_price = %s, trend_low_price = %s where code = %s"
                     # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
+                    record_to_update0 = ([commandBot[1], commandBot[2], commandBot[3], commandBot[4], commandBot[5], commandBot[6], code])
                     # DB 연결된 커서의 쿼리 수행
                     cur121.execute(delete_query0, record_to_update0)
                     conn.commit()
                     cur121.close()
 
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 돌파가 " + format(int(commandBot[1]), ',d') + "원 수정")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 돌파가 " + format(int(commandBot[1]), ',d') + "원, 이탈가 " + format(int(commandBot[2]), ',d') + "원, 저항가 " + format(int(commandBot[3]), ',d') + "원, 지지가 " + format(int(commandBot[4]), ',d') + "원, 추세상단가 " + format(int(commandBot[5]), ',d') + "원, 추세하단가 " + format(int(commandBot[6]), ',d') + "원 수정")
 
                 else:
                     print("관심종목 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
 
             else:
-                print("돌파가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 돌파가 미존재")        
-
-        elif menuNum == '132':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 이탈가
-
-            # 이탈가 존재시
-            if commandBot[1].isdecimal():
-                # 관심종목정보 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 관심종목정보 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set leave_price = %s where code = %s"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 이탈가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("관심종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
-
-            else:
-                print("이탈가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 이탈가 미존재")      
-
-        elif menuNum == '133':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 저항가
-
-            # 저항가 존재시
-            if commandBot[1].isdecimal():
-                # 관심종목정보 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 관심종목정보 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set resist_price = %s where code = %s"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 저항가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("관심종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
-
-            else:
-                print("저항가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 저항가 미존재")
-
-        elif menuNum == '134':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 지지가
-
-            # 지지가 존재시
-            if commandBot[1].isdecimal():
-                # 관심종목정보 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 관심종목정보 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set support_price = %s where code = %s"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 지지가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("관심종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
-
-            else:
-                print("지지가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 지지가 미존재")
-
-        elif menuNum == '135':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 추세상단가
-
-            # 추세상단가 존재시
-            if commandBot[1].isdecimal():
-                # 관심종목정보 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 관심종목정보 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set trend_high_price = %s where code = %s"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 추세상단가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("관심종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
-
-            else:
-                print("추세상단가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 추세상단가 미존재")
-
-        elif menuNum == '136':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 저항가
-
-            # 추세하단가 존재시
-            if commandBot[1].isdecimal():
-                # 관심종목정보 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"interestItem_interest_item\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 관심종목정보 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"interestItem_interest_item\" set trend_low_price = %s where code = %s"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 추세하단가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("관심종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 관심종목 미존재")
-
-            else:
-                print("추세하단가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 추세하단가 미존재")
+                print("돌파가 또는 이탈가 또는 저항가 또는 지지가 또는 추세상단가 또는 추세하단가 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 돌파가 또는 이탈가 또는 저항가 또는 지지가 또는 추세상단가 또는 추세하단가 미존재")        
 
         elif menuNum == '141':
             initMenuNum()
@@ -5216,11 +4994,14 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 1차목표가
+                commandBot = user_text.split(sep=',', maxsplit=5)
+                print("commandBot[1] : ", commandBot[1])    # 돌파가
+                print("commandBot[2] : ", commandBot[2])    # 이탈가
+                print("commandBot[3] : ", commandBot[3])    # 최종목표가
+                print("commandBot[4] : ", commandBot[4])    # 최종이탈가
 
-            # 1차목표가 존재시
-            if commandBot[1].isdecimal():
+            # 돌파가, 이탈가, 최종목표가, 최종이탈가 존재시
+            if commandBot[1].isdecimal() & commandBot[2].isdecimal() & commandBot[3].isdecimal() & commandBot[4].isdecimal():
                 # 보유종목 조회
                 cur12 = conn.cursor()
                 cur12.execute("select 1 from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "' and proc_yn = 'Y'")
@@ -5231,136 +5012,25 @@ def echo(update, context):
 
                     # 보유종목 수정
                     cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_resist_price = %s where code = %s and proc_yn = 'Y'"
+                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_resist_price = %s, sign_support_price = %s, end_target_price = %s, end_loss_price = %s where code = %s and proc_yn = 'Y'"
                     # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
+                    record_to_update0 = ([commandBot[1], commandBot[2], commandBot[3], commandBot[4], code])
                     # DB 연결된 커서의 쿼리 수행
                     cur121.execute(delete_query0, record_to_update0)
                     conn.commit()
                     cur121.close()
 
-                    context.bot.send_message(chat_id=user_id, text=company + " : 1차목표가 " + format(int(commandBot[1]), ',d') + "원 수정")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 목표가 " + format(int(commandBot[1]), ',d') + "원, 이탈가 " + format(int(commandBot[2]), ',d') + "원, 최종목표가 " + format(int(commandBot[3]), ',d') + "원, 최종이탈가 " + format(int(commandBot[4]), ',d') + "원 수정")
 
                 else:
                     print("보유종목 미존재")
                     context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 미존재")
 
             else:
-                print("1차목표가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 1차목표가 미존재")
+                print("돌파가 또는 이탈가 또는 최종목표가 또는 최종이탈가 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 돌파가 또는 이탈가 또는 최종목표가 또는 최종이탈가 미존재")
 
         elif menuNum == '162':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 1차이탈가
-
-            # 1차이탈가 존재시
-            if commandBot[1].isdecimal():
-                # 보유종목 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "' and proc_yn = 'Y'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 보유종목 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set sign_support_price = %s where code = %s and proc_yn = 'Y'"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 1차이탈가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("보유종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 미존재")
-
-            else:
-                print("1차이탈가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 1차이탈가 미존재")
-
-        elif menuNum == '163':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 최종목표가
-
-            # 최종목표가 존재시
-            if commandBot[1].isdecimal():
-                # 보유종목 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "' and proc_yn = 'Y'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 보유종목 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set end_target_price = %s where code = %s and proc_yn = 'Y'"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 최종목표가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("보유종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 미존재")
-
-            else:
-                print("최종목표가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 최종목표가 미존재")
-
-        elif menuNum == '164':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 최종이탈가
-
-            # 최종이탈가 존재시
-            if commandBot[1].isdecimal():
-                # 보유종목 조회
-                cur12 = conn.cursor()
-                cur12.execute("select 1 from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and code = '" + code + "' and proc_yn = 'Y'")
-                result_three = cur12.fetchone()
-                cur12.close()
-
-                if result_three != None:
-
-                    # 보유종목 수정
-                    cur121 = conn.cursor()
-                    delete_query0 = "update \"stockBalance_stock_balance\" set end_loss_price = %s where code = %s and proc_yn = 'Y'"
-                    # update 인자값 설정
-                    record_to_update0 = ([commandBot[1], code])
-                    # DB 연결된 커서의 쿼리 수행
-                    cur121.execute(delete_query0, record_to_update0)
-                    conn.commit()
-                    cur121.close()
-
-                    context.bot.send_message(chat_id=user_id, text=company + " : 최종이탈가 " + format(int(commandBot[1]), ',d') + "원 수정")
-
-                else:
-                    print("보유종목 미존재")
-                    context.bot.send_message(chat_id=user_id, text=company + " : 보유종목 미존재")
-
-            else:
-                print("최종이탈가 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 최종이탈가 미존재")
-
-        elif menuNum == '165':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
@@ -5394,7 +5064,7 @@ def echo(update, context):
                 print("매매계획 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 매매계획 미존재")
 
-        elif menuNum == '166':
+        elif menuNum == '163':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
@@ -6393,7 +6063,7 @@ def echo(update, context):
             # 매도비율(%) 존재시
             if is_positive_int(commandBot[1]):
                
-               # 매도비율(%)
+                # 매도비율(%)
                 sell_rate = commandBot[1]
                 print("매도비율(%) : " + format(int(sell_rate), ',d'))
 
@@ -6511,6 +6181,75 @@ def echo(update, context):
                 print("매도비율(%) 미존재")
                 context.bot.send_message(chat_id=user_id, text=company + " : 매도비율(%) 미존재")
        
+        elif menuNum == '43':
+            chartReq = "0"
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 구분(전체:0,돌파:1,이탈:2)
+
+            # 구분 존재시
+            if is_positive_int(commandBot[1]):
+               
+                # 매도비율(%)
+                sell_rate = commandBot[1]
+                print("구분 : " + format(int(sell_rate), ',d'))
+        
+                # 신호코드구분(전체:0,돌파:1,이탈:2)
+                signal_code_list = ['0', '1', '2']
+
+                if commandBot[1] in signal_code_list:
+
+                    if commandBot[1] == '0':
+
+                        # 추적신호정보 삭제
+                        cur121 = conn.cursor()
+                        update_query0 = "delete from trail_signal where trail_day = %s and code = %s"
+                        # update 인자값 설정
+                        record_to_update0 = ([datetime.now().strftime("%Y%m%d"), code])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur121.execute(update_query0, record_to_update0)
+                        conn.commit()
+                        cur121.close()
+
+                        context.bot.send_message(chat_id=user_id, text=company + " : 전체 추적신호정보 삭제")
+
+                    elif commandBot[1] == '1':
+
+                        # 추적신호정보 삭제
+                        cur121 = conn.cursor()
+                        update_query0 = "delete from trail_signal where trail_day = %s and trail_signal_code in ('01', '03', '05') and code = %s"
+                        # update 인자값 설정
+                        record_to_update0 = ([datetime.now().strftime("%Y%m%d"), code])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur121.execute(update_query0, record_to_update0)
+                        conn.commit()
+                        cur121.close()
+
+                        context.bot.send_message(chat_id=user_id, text=company + " : 돌파 추적신호정보 삭제")    
+
+                    elif commandBot[1] == '2':
+
+                        # 추적신호정보 삭제
+                        cur121 = conn.cursor()
+                        update_query0 = "delete from trail_signal where trail_day = %s and trail_signal_code in ('02', '04', '06') and code = %s"
+                        # update 인자값 설정
+                        record_to_update0 = ([datetime.now().strftime("%Y%m%d"), code])
+                        # DB 연결된 커서의 쿼리 수행
+                        cur121.execute(update_query0, record_to_update0)
+                        conn.commit()
+                        cur121.close()
+
+                        context.bot.send_message(chat_id=user_id, text=company + " : 이탈 추적신호정보 삭제")        
+
+                else:
+                    print("구분 유효값 미존재")
+                    context.bot.send_message(chat_id=user_id, text=company + " : 구분 유효값 미존재")    
+            
+            else:
+                print("구분 미존재")
+                context.bot.send_message(chat_id=user_id, text=company + " : 구분 미존재")
+
         elif menuNum == '51':
             chartReq = "0"
             if len(user_text.split(",")) > 0:
