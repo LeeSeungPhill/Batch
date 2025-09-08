@@ -402,7 +402,7 @@ def short_trading_mng(update, context) :
 
                 # 단기매매관리정보 조회
                 cur300 = conn.cursor()
-                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and sh_trading_num = %s", (acct_no, sh_trading_num))
+                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and sh_trading_num = %s", (str(acct_no), sh_trading_num))
                 result_one01 = cur300.fetchall()
                 cur300.close()
                 
