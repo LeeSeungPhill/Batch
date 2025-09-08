@@ -411,7 +411,7 @@ def short_trading_mng(update, context) :
 
                     # 단기매매관리정보 생성
                     cur201 = conn.cursor()
-                    insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                     # update 인자값 설정
                     record_to_insert201 = ([sh_trading_num, str(acct_no), risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, arguments[1], datetime.now(), arguments[1], datetime.now()])
                     # DB 연결된 커서의 쿼리 수행
