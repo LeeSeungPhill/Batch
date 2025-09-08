@@ -433,10 +433,10 @@ def short_trading_mng(update, context) :
                     
                 final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
 
-                context.bot.reply_text(
+                update.message.reply_text(
                     text=final_message,
                     parse_mode='HTML'
-                )     
+                )          
 
         # 한 번 처리 후 플래그 초기화
         context.user_data['awaiting_short_input'] = False
