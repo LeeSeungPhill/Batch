@@ -341,7 +341,7 @@ def get_command_info(update, context) :
         return
     
 def get_command_short_mng(update, context) :
-    update.message.reply_text(f"단기 매매기준의 종목수, 리스크금액을 입력하세요.")
+    update.message.reply_text(f"단기 매매기준의 종목수, 종목리스크 금액을 입력하세요.")
     context.user_data['awaiting_short_input'] = True
     
 
@@ -423,12 +423,12 @@ def short_trading_mng(update, context) :
                     trade_start_fmt = datetime.strptime(trade_start_dt, "%Y%m%d").strftime("%Y-%m-%d")
                     trade_end_fmt = datetime.strptime(trade_end_dt, "%Y%m%d").strftime("%Y-%m-%d")
 
-                    msg = f"[{arguments[1]}:단기 매매관리정보] 단기 매매관리번호 : {sh_trading_num}, 매매시작일 : {trade_start_fmt}원, 매매종료알 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 리스크금액 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 : <code>{sh_trading_num}</code>, 매매시작 : {trade_start_fmt}, 매매종료 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 종목리스크 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
                     result_msgs.append(msg)
 
                 else:
 
-                    msg = f"[{arguments[1]}:단기 매매관리정보] 단기 매매관리번호 기존재"
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 기존재"
                     result_msgs.append(msg)
                     
                 final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
