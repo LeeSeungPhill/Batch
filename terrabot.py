@@ -372,7 +372,7 @@ def short_trading_mng(update, context) :
                 start_date = datetime.strptime(trade_start_dt, "%Y%m%d")
 
                 cur01 = conn.cursor()
-                cur01.execute("SELECT holiday_dt FROM stock_holiday")
+                cur01.execute("SELECT holiday FROM stock_holiday")
                 holidays = {row[0] for row in cur01.fetchall()}
                 cur01.close()
 
