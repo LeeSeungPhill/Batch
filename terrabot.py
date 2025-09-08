@@ -378,7 +378,7 @@ def short_trading_mng(update, context) :
 
                 biz_days = 0
                 current = start_date
-                while biz_days < 3:
+                while biz_days < 2:
                     current += timedelta(days=1)
                     date_str = current.strftime("%Y%m%d")
 
@@ -402,7 +402,7 @@ def short_trading_mng(update, context) :
 
                 # 단기매매관리정보 조회
                 cur300 = conn.cursor()
-                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and sh_trading_num = %s", (str(acct_no), sh_trading_num))
+                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), trade_end_dt, trade_start_dt))
                 result_one01 = cur300.fetchall()
                 cur300.close()
                 
@@ -428,7 +428,7 @@ def short_trading_mng(update, context) :
 
                 else:
 
-                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 기존재"
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매시작일과 매매종료일 사이 매매관리정보 기존재"
                     result_msgs.append(msg)
                     
                 final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
