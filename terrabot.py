@@ -449,6 +449,7 @@ def short_trading_mng(update, context) :
     )    
 
     context.user_data['awaiting_short_input'] = False
+    context.user_data['last_short_time'] = time.time()  # echo 충돌 방지용
     print("[short_trading_mng] awaiting_short_input = False → 메시지 처리 종료")
     return
 
@@ -4565,9 +4566,10 @@ def initMenuNum():
 def echo(update, context):
     print("[echo] 호출됨")
     print(f"[echo] awaiting_short_input: {context.user_data.get('awaiting_short_input')}")
-    # 단기 매매 입력 대기 중이면 echo 실행 안 함
-    if context.user_data.get('awaiting_short_input'):
-        print("[echo] 단기 입력 대기 중 → echo 처리 안 함")
+    last_short_time = context.user_data.get('last_short_time', 0)
+    now = time.time()
+    if now - last_short_time < 1:
+        print("[echo] 단기 입력 직후 메시지 → echo 처리 안 함")
         return
     print(f"[echo] 메시지 처리: {update.message.text}")
     user_id = update.effective_chat.id
