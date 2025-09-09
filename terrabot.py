@@ -347,11 +347,11 @@ def get_command_short_mng(update, context) :
     context.user_data['awaiting_short_input'] = True
     
 def short_trading_mng(update, context) :
-    result_msgs = []
     if context.user_data.get('awaiting_short_input'):
     
         user_text = update.message.text
 
+        result_msgs = []
         if len(user_text.split(",")) > 0:
                 
             commandBot = user_text.split(sep=',', maxsplit=1)
@@ -435,18 +435,17 @@ def short_trading_mng(update, context) :
             else:
                 msg = f"[{arguments[1]}:단기 매매관리정보] 종목수 또는 리스크금액 미존재"
                 result_msgs.append(msg)
+
+        final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
+
+        update.message.reply_text(
+            text=final_message,
+            parse_mode='HTML'
+        )    
     
-        context.user_data['awaiting_short_input'] = False                 
+        context.user_data['awaiting_short_input'] = False
 
-    else:
-        return
-
-    final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
-
-    update.message.reply_text(
-        text=final_message,
-        parse_mode='HTML'
-    )
+        return -1   # stop_propagation 효과   
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -4559,10 +4558,6 @@ def initMenuNum():
     chartReq = "0"
 
 def echo(update, context):
-    # 단기 매매 입력 대기 상태일 때는 echo 실행 안 함
-    if context.user_data.get('awaiting_short_input'):
-        return
-    
     user_id = update.effective_chat.id
     user_text = update.message.text
     global g_buy_amount
