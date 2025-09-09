@@ -445,7 +445,7 @@ def short_trading_mng(update, context) :
     
         context.user_data['awaiting_short_input'] = False
 
-        return -1   # stop_propagation 효과   
+        return
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -4558,6 +4558,10 @@ def initMenuNum():
     chartReq = "0"
 
 def echo(update, context):
+    # 단기 매매 입력 대기 중이면 echo 실행 안 함
+    if context.user_data.get('awaiting_short_input'):
+        return
+    
     user_id = update.effective_chat.id
     user_text = update.message.text
     global g_buy_amount
