@@ -347,14 +347,10 @@ def get_command_short_mng(update, context) :
     context.user_data['awaiting_short_input'] = True
     
 def short_trading_mng(update, context) :
-    print("[short_trading_mng] 호출됨")
-    print(f"[short_trading_mng] awaiting_short_input: {context.user_data.get('awaiting_short_input')}")
     if not context.user_data.get('awaiting_short_input'):
-        print("[short_trading_mng] 단기 입력 대기 상태 아님 → 종료")
         return
     
     user_text = update.message.text
-    print(f"[short_trading_mng] user_text: {user_text}")
 
     result_msgs = []
     if len(user_text.split(",")) > 0:
@@ -450,7 +446,7 @@ def short_trading_mng(update, context) :
 
     context.user_data['awaiting_short_input'] = False
     context.user_data['last_short_time'] = time.time()  # echo 충돌 방지용
-    print("[short_trading_mng] awaiting_short_input = False → 메시지 처리 종료")
+    
     return
 
 # 인증처리
@@ -1750,11 +1746,6 @@ def callback_get(update, context) :
             
                 if c['ODNO'] != "":
 
-                    # 단기 매매내역 생성
-                    # g_buy_price
-                    # g_loss_price
-                    # g_risk_sum
-                    
                     # 일별주문체결 조회
                     output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, g_buy_code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
@@ -1763,6 +1754,7 @@ def callback_get(update, context) :
 
                     for i, name in enumerate(d.index):
                         d_order_no = int(d['odno'][i])
+                        d_orgn_order_no = int(d['orgn_odno'][i])
                         d_order_type = d['sll_buy_dvsn_cd_name'][i]
                         d_order_dt = d['ord_dt'][i]
                         d_order_tmd = d['ord_tmd'][i]
@@ -1774,6 +1766,31 @@ def callback_get(update, context) :
                         d_total_complete_amt = d['tot_ccld_amt'][i]
 
                         print("매수주문 완료")
+                        # 매수일 기준 단기매매관리정보 조회
+                        cur300 = conn.cursor()
+                        cur300.execute("select sh_trading_num, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), d_order_dt, d_order_dt))
+                        result_one01 = cur300.fetchall()
+                        cur300.close()
+
+                        sh_trading_num = ""
+                        loss_price = 0
+                        risk_sum = 0
+                        tr_amt = 0
+
+                        for item in result_one01:
+
+                            sh_trading_num = item[0]
+                            risk_sum = int(g_risk_sum) if int(g_risk_sum) > 0 else item[2]
+                            tr_amt = int(int(d_order_price)*int(d_order_amount))
+                            loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int((tr_amt-risk_sum)/int(d_order_amount))
+
+                            # 단기 매매내역 생성
+                            cur400 = conn.cursor()
+                            insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_tmd, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, org_order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d['sll_buy_dvsn_cd'][i], sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), str(d_orgn_order_no), arguments[1], datetime.now(), arguments[1], datetime.now()])
+                            cur400.execute(insert_query400, record_to_insert400)
+                            conn.commit()
+                            cur400.close()
 
                         context.bot.edit_message_text(text="[" + d_name + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) +"</code>", parse_mode='HTML',
                                                     chat_id=update.callback_query.message.chat_id,
@@ -4564,14 +4581,11 @@ def initMenuNum():
     chartReq = "0"
 
 def echo(update, context):
-    print("[echo] 호출됨")
-    print(f"[echo] awaiting_short_input: {context.user_data.get('awaiting_short_input')}")
     last_short_time = context.user_data.get('last_short_time', 0)
     now = time.time()
     if now - last_short_time < 1:
-        print("[echo] 단기 입력 직후 메시지 → echo 처리 안 함")
         return
-    print(f"[echo] 메시지 처리: {update.message.text}")
+    
     user_id = update.effective_chat.id
     user_text = update.message.text
     global g_buy_amount
