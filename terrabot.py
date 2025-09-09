@@ -347,102 +347,98 @@ def get_command_short_mng(update, context) :
     context.user_data['awaiting_short_input'] = True
     
 def short_trading_mng(update, context) :
-    if not context.user_data.get('awaiting_short_input'):
-        return
+    if context.user_data.get('awaiting_short_input'):
     
-    user_text = update.message.text
+        user_text = update.message.text
 
-    if len(user_text.split(",")) > 0:
-            
-        commandBot = user_text.split(sep=',', maxsplit=1)
-        print("commandBot[0] : ", commandBot[0])    # 종목수
-        print("commandBot[1] : ", commandBot[1])    # 리스크금액
-
-        # 종목수, 리스크금액 존재시
-        if commandBot[0].isdecimal() and commandBot[1].isdecimal():
-
-            # 설정액
-            trade_basic_fund = 20000000
-            # 종목수
-            item_number = int(commandBot[0])
-            # 리스크 금액
-            risk_sum = int(commandBot[1])
-            # 리스크율
-            risk_rate = round(((item_number * risk_sum) / trade_basic_fund) * 100, 2)
-            
-            # 매매시작일
-            trade_start_dt = datetime.now().strftime("%Y%m%d")                
-            start_date = datetime.strptime(trade_start_dt, "%Y%m%d")
-
-            cur01 = conn.cursor()
-            cur01.execute("SELECT holiday FROM stock_holiday")
-            holidays = {row[0] for row in cur01.fetchall()}
-            cur01.close()
-
-            biz_days = 0
-            current = start_date
-            while biz_days < 2:
-                current += timedelta(days=1)
-                date_str = current.strftime("%Y%m%d")
-
-                # 주말 또는 휴일이면 skip
-                if current.weekday() >= 5:   # 5=토, 6=일
-                    continue
-                if date_str in holidays:
-                    continue
-
-                # 영업일 카운트
-                biz_days += 1
-
-            # 매매종료일
-            trade_end_dt = current.strftime("%Y%m%d")
-            # 단기매매관리번호
-            sh_trading_num = trade_start_dt + current.strftime("%m%d")
-
-            ac = account()
-            # 계좌번호
-            acct_no = ac['acct_no']
-
-            # 단기매매관리정보 조회
-            cur300 = conn.cursor()
-            cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), trade_end_dt, trade_start_dt))
-            result_one01 = cur300.fetchall()
-            cur300.close()
-            
-            result_msgs = []
-            if len(result_one01) < 1:
-
-                # 단기매매관리정보 생성
-                cur201 = conn.cursor()
-                insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # update 인자값 설정
-                record_to_insert201 = ([sh_trading_num, str(acct_no), risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, arguments[1], datetime.now(), arguments[1], datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur201.execute(insert_query201, record_to_insert201)
-
-                conn.commit()
-                cur201.close()
-
-                trade_start_fmt = datetime.strptime(trade_start_dt, "%Y%m%d").strftime("%Y-%m-%d")
-                trade_end_fmt = datetime.strptime(trade_end_dt, "%Y%m%d").strftime("%Y-%m-%d")
-
-                msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 : <code>{sh_trading_num}</code>, 매매시작 : {trade_start_fmt}, 매매종료 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 종목리스크 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
-                result_msgs.append(msg)
-
-            else:
-
-                msg = f"[{arguments[1]}:단기 매매관리정보] 매매시작일과 매매종료일 사이 매매관리정보 기존재"
-                result_msgs.append(msg)
+        if len(user_text.split(",")) > 0:
                 
-            final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
+            commandBot = user_text.split(sep=',', maxsplit=1)
+            print("commandBot[0] : ", commandBot[0])    # 종목수
+            print("commandBot[1] : ", commandBot[1])    # 리스크금액
 
-            update.message.reply_text(
-                text=final_message,
-                parse_mode='HTML'
-            )          
+            # 종목수, 리스크금액 존재시
+            if commandBot[0].isdecimal() and commandBot[1].isdecimal():
 
-    # 한 번 처리 후 플래그 초기화
-    context.user_data['awaiting_short_input'] = False
+                # 설정액
+                trade_basic_fund = 20000000
+                # 종목수
+                item_number = int(commandBot[0])
+                # 리스크 금액
+                risk_sum = int(commandBot[1])
+                # 리스크율
+                risk_rate = round(((item_number * risk_sum) / trade_basic_fund) * 100, 2)
+                
+                # 매매시작일
+                trade_start_dt = datetime.now().strftime("%Y%m%d")                
+                start_date = datetime.strptime(trade_start_dt, "%Y%m%d")
+
+                cur01 = conn.cursor()
+                cur01.execute("SELECT holiday FROM stock_holiday")
+                holidays = {row[0] for row in cur01.fetchall()}
+                cur01.close()
+
+                biz_days = 0
+                current = start_date
+                while biz_days < 2:
+                    current += timedelta(days=1)
+                    date_str = current.strftime("%Y%m%d")
+
+                    # 주말 또는 휴일이면 skip
+                    if current.weekday() >= 5:   # 5=토, 6=일
+                        continue
+                    if date_str in holidays:
+                        continue
+
+                    # 영업일 카운트
+                    biz_days += 1
+
+                # 매매종료일
+                trade_end_dt = current.strftime("%Y%m%d")
+                # 단기매매관리번호
+                sh_trading_num = trade_start_dt + current.strftime("%m%d")
+
+                ac = account()
+                # 계좌번호
+                acct_no = ac['acct_no']
+
+                # 단기매매관리정보 조회
+                cur300 = conn.cursor()
+                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), trade_end_dt, trade_start_dt))
+                result_one01 = cur300.fetchall()
+                cur300.close()
+                
+                result_msgs = []
+                if len(result_one01) < 1:
+
+                    # 단기매매관리정보 생성
+                    cur201 = conn.cursor()
+                    insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    # update 인자값 설정
+                    record_to_insert201 = ([sh_trading_num, str(acct_no), risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, arguments[1], datetime.now(), arguments[1], datetime.now()])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur201.execute(insert_query201, record_to_insert201)
+
+                    conn.commit()
+                    cur201.close()
+
+                    trade_start_fmt = datetime.strptime(trade_start_dt, "%Y%m%d").strftime("%Y-%m-%d")
+                    trade_end_fmt = datetime.strptime(trade_end_dt, "%Y%m%d").strftime("%Y-%m-%d")
+
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 : <code>{sh_trading_num}</code>, 매매시작 : {trade_start_fmt}, 매매종료 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 종목리스크 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
+                    result_msgs.append(msg)
+
+                else:
+
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매시작일과 매매종료일 사이 매매관리정보 기존재"
+                    result_msgs.append(msg)
+                    
+                final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
+
+                update.message.reply_text(
+                    text=final_message,
+                    parse_mode='HTML'
+                )          
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -4462,9 +4458,6 @@ updater.dispatcher.add_handler(get_handler)
 get_handler_info = CommandHandler('info', get_command_info)
 updater.dispatcher.add_handler(get_handler_info)
 
-get_handler_short_mng = CommandHandler('short', get_command_short_mng)
-updater.dispatcher.add_handler(get_handler_short_mng)
-
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
 def is_positive_int(val: str) -> bool:
@@ -4558,6 +4551,10 @@ def initMenuNum():
     chartReq = "0"
 
 def echo(update, context):
+    # 단기 매매 입력 대기 상태일 때는 echo 실행 안 함
+    if context.user_data.get('awaiting_short_input'):
+        return
+    
     user_id = update.effective_chat.id
     user_text = update.message.text
     global g_buy_amount
@@ -6704,8 +6701,9 @@ def echo(update, context):
 dispatcher.add_handler(MessageHandler(Filters.regex(r"^/HoldingSell_\w+_\d+"), handle_holding_sell))
 dispatcher.add_handler(MessageHandler(Filters.regex(r"^/InterestBuy_\w+_\d+"), handle_interest_buy))
 
-updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_trading_mng), group=0)
-updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo), group=1)
+dispatcher.add_handler(CommandHandler("short", get_command_short_mng))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_trading_mng))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
 
 # 텔레그램봇 polling
 updater.start_polling()
