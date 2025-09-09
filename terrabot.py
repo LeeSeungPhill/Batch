@@ -347,10 +347,14 @@ def get_command_short_mng(update, context) :
     context.user_data['awaiting_short_input'] = True
     
 def short_trading_mng(update, context) :
+    print("[short_trading_mng] 호출됨")
+    print(f"[short_trading_mng] awaiting_short_input: {context.user_data.get('awaiting_short_input')}")
     if not context.user_data.get('awaiting_short_input'):
+        print("[short_trading_mng] 단기 입력 대기 상태 아님 → 종료")
         return
     
     user_text = update.message.text
+    print(f"[short_trading_mng] user_text: {user_text}")
 
     result_msgs = []
     if len(user_text.split(",")) > 0:
@@ -445,7 +449,7 @@ def short_trading_mng(update, context) :
     )    
 
     context.user_data['awaiting_short_input'] = False
-
+    print("[short_trading_mng] awaiting_short_input = False → 메시지 처리 종료")
     return
 
 # 인증처리
@@ -4559,10 +4563,13 @@ def initMenuNum():
     chartReq = "0"
 
 def echo(update, context):
+    print("[echo] 호출됨")
+    print(f"[echo] awaiting_short_input: {context.user_data.get('awaiting_short_input')}")
     # 단기 매매 입력 대기 중이면 echo 실행 안 함
     if context.user_data.get('awaiting_short_input'):
+        print("[echo] 단기 입력 대기 중 → echo 처리 안 함")
         return
-    
+    print(f"[echo] 메시지 처리: {update.message.text}")
     user_id = update.effective_chat.id
     user_text = update.message.text
     global g_buy_amount
