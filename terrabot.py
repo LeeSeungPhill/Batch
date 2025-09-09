@@ -439,8 +439,7 @@ def short_trading_mng(update, context) :
         context.user_data['awaiting_short_input'] = False                 
 
     else:
-        msg = f"[{arguments[1]}:단기 매매관리정보] 입력 대기상태가 아닙니다."
-        result_msgs.append(msg)
+        return
 
     final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
 
@@ -6711,8 +6710,8 @@ dispatcher.add_handler(MessageHandler(Filters.regex(r"^/HoldingSell_\w+_\d+"), h
 dispatcher.add_handler(MessageHandler(Filters.regex(r"^/InterestBuy_\w+_\d+"), handle_interest_buy))
 
 dispatcher.add_handler(CommandHandler("short", get_command_short_mng))
-dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_trading_mng))
-dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_trading_mng), group=0)
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo), group=1)
 
 # 텔레그램봇 polling
 updater.start_polling()
