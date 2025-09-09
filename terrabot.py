@@ -346,7 +346,6 @@ def get_command_short_mng(update, context) :
     update.message.reply_text(f"단기 매매기준의 종목수, 종목리스크 금액을 입력하세요.")
     context.user_data['awaiting_short_input'] = True
     
-
 def short_trading_mng(update, context) :
     if not context.user_data.get('awaiting_short_input'):
         return
@@ -4468,25 +4467,6 @@ updater.dispatcher.add_handler(get_handler_short_mng)
 
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
-# 커스텀 필터 함수
-def awaiting_short_input_filter(message):
-    # context 접근이 안되므로 lambda로 context까지 받게 처리
-    return False  # 기본값 (dispatcher 등록에서 context 포함해서 처리할 것)
-
-# handler 등록
-short_handler = MessageHandler(
-    Filters.text & ~Filters.command,
-    lambda update, context: short_trading_mng(update, context)
-)
-echo_handler = MessageHandler(
-    Filters.text & ~Filters.command,
-    lambda update, context: echo(update, context)
-)
-
-# group 우선순위 지정 (숫자가 작을수록 먼저 실행됨)
-updater.dispatcher.add_handler(short_handler, group=0)
-updater.dispatcher.add_handler(echo_handler, group=1)
-
 def is_positive_int(val: str) -> bool:
     """양수 정수만 허용 (1~100 범위)"""
     if val.isdigit():
@@ -6723,6 +6703,9 @@ def echo(update, context):
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.regex(r"^/HoldingSell_\w+_\d+"), handle_holding_sell))
 dispatcher.add_handler(MessageHandler(Filters.regex(r"^/InterestBuy_\w+_\d+"), handle_interest_buy))
+
+updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_trading_mng), group=0)
+updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo), group=1)
 
 # 텔레그램봇 polling
 updater.start_polling()
