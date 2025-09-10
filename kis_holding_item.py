@@ -465,7 +465,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                     for comp_info in result_one32:
                         # 기존 수수료, 수익손실률, 수익손실금, 세금값 존재시
-                        if int(comp_info[0]) > 0:
+                        if comp_info[0] != None:
                             # 수수료, 수익손실률, 수익손실금, 세금값 설정
                             last_paid_fee += int(comp_info[0])
                             last_pfls_amt += int(comp_info[1])
