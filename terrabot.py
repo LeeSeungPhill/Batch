@@ -1754,7 +1754,7 @@ def callback_get(update, context) :
 
                     for i, name in enumerate(d.index):
                         d_order_no = int(d['odno'][i])
-                        d_orgn_order_no = int(d['orgn_odno'][i])
+                        d_orgn_order_no = int(d['orgn_odno'][i]) if d['orgn_odno'][i] != None else ''
                         d_order_type = d['sll_buy_dvsn_cd_name'][i]
                         d_order_dt = d['ord_dt'][i]
                         d_order_tmd = d['ord_tmd'][i]
