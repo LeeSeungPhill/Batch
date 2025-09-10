@@ -90,6 +90,7 @@ g_revise_price = 0
 g_remain_qty = 0
 g_loss_price = 0
 g_risk_sum = 0
+g_low_price = 0
 
 def format_number(value):
     try:
@@ -1781,7 +1782,7 @@ def callback_get(update, context) :
                             sh_trading_num = item[0]
                             risk_sum = int(g_risk_sum) if int(g_risk_sum) > 0 else item[2]
                             tr_amt = int(int(d_order_price)*int(d_order_amount))
-                            loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int((tr_amt-risk_sum)/int(d_order_amount))
+                            loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int(g_low_price)
 
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
@@ -4608,6 +4609,7 @@ def echo(update, context):
     global g_remain_qty
     global g_loss_price
     global g_risk_sum
+    global g_low_price
 
     code = ""
     company = ""
@@ -4693,6 +4695,7 @@ def echo(update, context):
         hts_avls = a['hts_avls']                        # 시가총액
         pbr = a['pbr']
         bps = a['bps']
+        g_low_price = stck_lwpr
 
         print("menuNum : ", menuNum)
 
