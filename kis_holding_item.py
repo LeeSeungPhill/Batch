@@ -464,12 +464,15 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     last_paid_tax = 0
 
                     for comp_info in result_one32:
-                        # 기존 수수료, 수익손실률, 수익손실금, 세금값 존재시
+                        # 기존 수수료 존재시
                         if comp_info[0] != None:
-                            # 수수료, 수익손실률, 수익손실금, 세금값 설정
-                            last_paid_fee += int(comp_info[0])
-                            last_pfls_amt += int(comp_info[1])
-                            last_paid_tax += int(comp_info[2])
+                            last_paid_fee += int(comp_info[0])  # 수수료 설정
+                        # 기존 수익손실금 존재시
+                        if comp_info[1] != None:                            
+                            last_pfls_amt += int(comp_info[1])  # 수익손실금 설정
+                        # 기존 세금 존재시
+                        if comp_info[2] != None:    
+                            last_paid_tax += int(comp_info[2])  # 세금 설정
 
                     # 기간별손익일별합산조회
                     period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
