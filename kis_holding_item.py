@@ -598,11 +598,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 단기매매내역정보 조회
                 cur402 = conn.cursor()
-                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
+                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
                 result_one01 = cur402.fetchall()
                 cur402.close()
 
-                for detail in result_one01:
+                if result_one01 is not None:
 
                     # UPDATE
                     cur403 = conn.cursor()
@@ -637,6 +637,54 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     ))
                     
                     cur403.close()  
+
+                else:
+
+                    # 주문정정대상 단기매매내역정보 조회
+                    cur4021 = conn.cursor()
+                    cur4021.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['원주문번호']))))
+                    result_one02 = cur4021.fetchall()
+                    cur4021.close()
+
+                    if result_one02 is not None:
+                    
+                        # UPDATE
+                        cur403 = conn.cursor()
+
+                        cur403.execute("""
+                            UPDATE short_trading_detail
+                            SET
+                                total_complete_qty = %s,
+                                remain_qty = %s,
+                                hold_price = %s,
+                                hold_vol = %s,
+                                profit_loss_rate = %s,
+                                profit_loss_amt = %s,
+                                order_no = %s,
+                                org_order_no = %s,                                  
+                                chgr_id = %s,
+                                chg_date = %s
+                            WHERE acct_no = %s 
+                            AND tr_day = %s
+                            AND order_no = %s 
+                        """
+                        , (
+                            new_complete_qty, 
+                            new_remain_qty,
+                            item['보유단가'], 
+                            item['보유수량'],
+                            Decimal(item['pfls_rate']),
+                            int(item['pfls_amt']),
+                            str(int(item['주문번호'])),
+                            str(int(item['원주문번호'])),
+                            'holding_item',
+                            datetime.now(),
+                            str(acct_no), 
+                            item['주문일자'], 
+                            str(int(item['원주문번호']))
+                        ))
+                        
+                        cur403.close() 
 
             else:
                 # 주문(주문정정) 생성 후, 주문체결정보 현행화(1분단위)되기전에 전량 체결되어 잔고정보의 보유단가와 보유수량이 0 인 경우, 
@@ -706,11 +754,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                     # 총체결수량이 존재하는 단기매매내역정보 조회
                     cur402 = conn.cursor()
-                    cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
+                    cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
                     result_one01 = cur402.fetchall()
                     cur402.close()
 
-                    for detail in result_one01:
+                    if result_one01 is not None:
 
                         # UPDATE
                         cur403 = conn.cursor()
@@ -745,6 +793,53 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         ))
                         
                         cur403.close()  
+
+                    else:
+                        # 주문정정대상 단기매매내역정보 조회
+                        cur4021 = conn.cursor()
+                        cur4021.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['원주문번호']))))
+                        result_one02 = cur4021.fetchall()
+                        cur4021.close()
+
+                        if result_one02 is not None:
+                        
+                            # UPDATE
+                            cur403 = conn.cursor()
+
+                            cur403.execute("""
+                                UPDATE short_trading_detail
+                                SET
+                                    total_complete_qty = %s,
+                                    remain_qty = %s,
+                                    hold_price = %s,
+                                    hold_vol = %s,
+                                    profit_loss_rate = %s,
+                                    profit_loss_amt = %s,
+                                    order_no = %s,
+                                    org_order_no = %s,                                  
+                                    chgr_id = %s,
+                                    chg_date = %s
+                                WHERE acct_no = %s 
+                                AND tr_day = %s
+                                AND order_no = %s 
+                            """
+                            , (
+                                new_complete_qty, 
+                                new_remain_qty,
+                                hold_price,
+                                new_complete_qty,
+                                Decimal(item['pfls_rate']),
+                                int(item['pfls_amt']),
+                                str(int(item['주문번호'])),
+                                str(int(item['원주문번호'])),
+                                'holding_item',
+                                datetime.now(),
+                                str(acct_no), 
+                                item['주문일자'], 
+                                str(int(item['원주문번호']))
+                            ))
+                            
+                            cur403.close()     
 
         else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
             old_complete_qty, old_remain_qty = order_commplete_map[key2]
@@ -822,11 +917,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 총체결수량이 다른 단기매매내역정보 조회
                 cur402 = conn.cursor()
-                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
+                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
                 result_one01 = cur402.fetchall()
                 cur402.close()
 
-                for detail in result_one01:
+                if result_one01 is not None:
 
                     # UPDATE
                     cur403 = conn.cursor()
