@@ -1785,7 +1785,7 @@ def callback_get(update, context) :
 
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
-                            insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_tmd, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
                             record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), arguments[1], datetime.now(), arguments[1], datetime.now()])
                             cur400.execute(insert_query400, record_to_insert400)
                             conn.commit()
