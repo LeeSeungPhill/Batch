@@ -594,9 +594,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     int(item['paid_fee'])
                 ))
 
+                conn.commit()
+
                 # 단기매매내역정보 조회
                 cur402 = conn.cursor()
-                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))), new_complete_qty)
+                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
                 result_one01 = cur402.fetchall()
                 cur402.close()
 
@@ -700,9 +702,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         int(item['paid_fee'])
                     ))
 
+                    conn.commit()
+
                     # 총체결수량이 존재하는 단기매매내역정보 조회
                     cur402 = conn.cursor()
-                    cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))), new_complete_qty)
+                    cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
                     result_one01 = cur402.fetchall()
                     cur402.close()
 
@@ -742,7 +746,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         
                         cur403.close()  
 
-            conn.commit()
         else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
             old_complete_qty, old_remain_qty = order_commplete_map[key2]
             #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
@@ -819,7 +822,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 총체결수량이 다른 단기매매내역정보 조회
                 cur402 = conn.cursor()
-                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))), new_complete_qty)
+                cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s and total_complete_qty <> %s", (str(acct_no), item['주문일자'], str(int(item['주문번호'])), new_complete_qty))
                 result_one01 = cur402.fetchall()
                 cur402.close()
 
