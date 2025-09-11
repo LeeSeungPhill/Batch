@@ -43,10 +43,31 @@ stock_code = pd.read_html('http://kind.krx.co.kr/corpgeneral/corpList.do?method=
 stock_code = stock_code[['회사명', '종목코드']]
 # 한글 컬럼명을 영어로 변경
 stock_code = stock_code.rename(columns={'회사명': 'company', '종목코드': 'code'})
-# 숫자로만 이루어진 코드만 필터링
-stock_code = stock_code[stock_code['code'].astype(str).str.match(r'^\d+$')]
-# 종목코드를 문자열 6자리로 포맷팅
-stock_code['code'] = stock_code['code'].astype(str).str.zfill(6)
+
+# 맨 앞 문자만 제거 후 필터링 함수
+def filter_code(code):
+    code = str(code).strip()
+    # 맨 앞이 문자이면 제거
+    if code and code[0].isalpha():
+        code = code[1:]
+    # 제거 후 길이가 1 이상이면 통과
+    return len(code) > 0
+
+stock_code = stock_code[stock_code['code'].apply(filter_code)]
+
+# 종목코드 6자리로 포맷
+def normalize_code(code):
+    code = str(code).strip()
+    if code and code[0].isalpha():
+        code = code[1:]
+    # 길이 맞춤
+    if len(code) < 6:
+        code = code.zfill(6)
+    elif len(code) > 6:
+        code = code[-6:]
+    return code
+
+stock_code['code'] = stock_code['code'].apply(normalize_code)
 
 # 텔레그램봇 사용할 token
 if arguments[1] == 'chichipa':
