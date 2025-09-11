@@ -9,11 +9,9 @@ import pandas as pd
 from decimal import Decimal
 import time
 
-#URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
 # PostgreSQL 연결 설정
-#conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 # DB 연결
 conn = db.connect(conn_string)
@@ -1402,7 +1400,9 @@ if result_one == None:
                                     cur501.close()
                                 
                 except Exception as ex:
-                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")                                    
+                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")    
+
+            time.sleep(3)                                        
 
         except Exception as e:
             print(f"[{nick}] Error holding item : {e}")               

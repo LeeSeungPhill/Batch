@@ -9,11 +9,9 @@ import math
 import pandas as pd
 import time
 
-#URL_BASE = "https://openapivts.koreainvestment.com:29443"   # 모의투자서비스
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
 # PostgreSQL 연결 설정
-#conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 # DB 연결
 conn = db.connect(conn_string)
@@ -1370,6 +1368,8 @@ if result_one == None:
 
                             # 코스피, 코스닥 추적신호정보 기준 자산관리정보 현금비중, 승률, 매수예정자금, 매도예정자금 변경 처리 호출
                             fundTrail_proc()
+
+            time.sleep(3)
 
         except Exception as e:
             print(f"[{nick}] Error interest item : {e}")      
