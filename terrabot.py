@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from datetime import datetime, timedelta
 import urllib3
-import FinanceDataReader as fdr
+from pykrx import stock
 from mplfinance.original_flavor import candlestick2_ohlc
 import matplotlib.ticker as mticker
 import psycopg2 as db
@@ -6774,10 +6774,19 @@ def echo(update, context):
         title = company + '[' + code + ']'
         pre_day = datetime.today() - timedelta(500)
         start = pre_day.strftime("%Y-%m-%d")
-        df = fdr.DataReader(code, start)
-        df.head()
-        df.rename(columns={'Date': '날짜', 'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'},
-                  inplace=True)
+        end = datetime.today().strftime("%Y-%m-%d")
+        # pykrx를 이용한 OHLCV 조회
+        df = stock.get_market_ohlcv_by_date(start, end, code)
+
+        # 컬럼명 한글화 및 순서 조정
+        df.rename(columns={
+            '시가': '시가',
+            '고가': '고가',
+            '저가': '저가',
+            '종가': '종가',
+            '거래량': '거래량'
+        }, inplace=True)
+
         df = df[['시가', '고가', '저가', '종가', '거래량']]
 
         fig = plt.figure(figsize=(10, 7))
