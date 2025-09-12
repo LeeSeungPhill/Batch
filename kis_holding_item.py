@@ -525,6 +525,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
     """
     , (str(acct_no), today_str))
     result_400 = cur400.fetchall()
+    cur400.close()
 
     # 읿별주문체결정보 맵 설정 : 계좌번호, 주문일자, 주문번호, 원주문번호의 체결량, 잔여량 
     order_commplete_map = {
@@ -547,11 +548,13 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         new_complete_qty = int(item['체결수량'])
         new_remain_qty = int(item['잔여수량'])
         
+        cur600 = conn.cursor()
+        
         # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 미존재하는 경우
         if key2 not in order_commplete_map:
             # 미존재시 INSERT 처리
             if float(item['보유단가']) > 0 and int(item['보유수량']) > 0:
-                cur400.execute("""
+                cur600.execute("""
                     INSERT INTO \"stockOrderComplete_stock_order_complete\" (
                         acct_no, 
                         order_dt,
@@ -594,8 +597,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     int(item['paid_tax']),
                     int(item['paid_fee'])
                 ))
-
-                conn.commit()
 
                 # 단기매매내역정보 조회
                 cur402 = conn.cursor()
@@ -687,6 +688,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         
                         cur403.close() 
 
+                conn.commit()                        
+
             else:
                 # 주문(주문정정) 생성 후, 주문체결정보 현행화(1분단위)되기전에 전량 체결되어 잔고정보의 보유단가와 보유수량이 0 인 경우, 
                 # 보유단가 = 체결금액 - 수익금액(세금 및 수수료 포함) / 체결수량
@@ -707,7 +710,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     else:    
                         hold_price = round((int(item['체결금액']) - int(item['pfls_amt']) - int(item['paid_tax']) - int(item['paid_fee'])) / new_complete_qty)
 
-                    cur400.execute("""
+                    cur600.execute("""
                         INSERT INTO \"stockOrderComplete_stock_order_complete\" (
                             acct_no, 
                             order_dt,
@@ -750,8 +753,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         int(item['paid_tax']),
                         int(item['paid_fee'])
                     ))
-
-                    conn.commit()
 
                     # 총체결수량이 존재하는 단기매매내역정보 조회
                     cur402 = conn.cursor()
@@ -842,6 +843,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             
                             cur403.close()     
 
+                    conn.commit()                            
+
         else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
             old_complete_qty, old_remain_qty = order_commplete_map[key2]
             #  읿별주문체결정보의 체결수량, 잔여수량과 일별 주문 체결 조회의 체결수량, 잔여수량이 다른 경우 UPDATE 처리
@@ -849,7 +852,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 if float(item['보유단가']) > 0 and int(item['보유수량']) > 0:
                     # UPDATE
-                    cur400.execute("""
+                    cur600.execute("""
                         UPDATE \"stockOrderComplete_stock_order_complete\"
                         SET
                             order_price = %s,       
@@ -884,7 +887,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     ))
                 else:
                     # UPDATE
-                    cur400.execute("""
+                    cur600.execute("""
                         UPDATE \"stockOrderComplete_stock_order_complete\"
                         SET
                             order_price = %s,       
@@ -913,8 +916,6 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         item['주문일자'], 
                         str(int(item['주문번호']))
                     ))    
-
-                conn.commit()
 
                 # 총체결수량이 다른 단기매매내역정보 조회
                 cur402 = conn.cursor()
@@ -982,11 +983,12 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             item['주문일자'], 
                             str(int(item['주문번호']))
                         ))
-
-                    conn.commit()
+                    
                     cur403.close()    
+                    
+                conn.commit()    
     
-    cur400.close()
+        cur600.close()
 
 async def main(telegram_text):
     chat_id = "2147256258"
