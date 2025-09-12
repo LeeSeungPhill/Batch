@@ -30,6 +30,7 @@ arguments = sys.argv
 
 # PostgreSQL 연결 설정
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
 # DB 연결
 conn = db.connect(conn_string)
 
@@ -38,7 +39,12 @@ matplotlib.use('SVG')
 plt.rcParams["font.family"] = "NanumGothic"
 # 해당 링크는 한국거래소에서 상장법인목록을 엑셀로 다운로드하는 링크입니다.
 # 다운로드와 동시에 Pandas에 excel 파일이 load가 되는 구조입니다.
-stock_code = pd.read_html('http://kind.krx.co.kr/corpgeneral/corpList.do?method=download', header=0)[0]
+krx_url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download'
+# requests로 먼저 가져오기, 인코딩 지정
+krx_res = requests.get(krx_url)
+krx_res.encoding = 'EUC-KR'  # KRX는 EUC-KR로 인코딩됨
+# pandas로 읽기
+stock_code = pd.read_html(krx_res.text, header=0)[0]
 # 필요한 것은 "회사명"과 "종목코드" 이므로 필요없는 column들은 제외
 stock_code = stock_code[['회사명', '종목코드']]
 # 한글 컬럼명을 영어로 변경
@@ -1754,6 +1760,7 @@ def callback_get(update, context) :
     elif data_selected.find("매수진행") != -1:
 
         if menuNum != "0":
+            result_msgs = []
             ac = account()
             acct_no = ac['acct_no']
             access_token = ac['access_token']
@@ -1810,7 +1817,7 @@ def callback_get(update, context) :
                                 # 단기 매매내역 생성
                                 cur400 = conn.cursor()
                                 insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'js수진', datetime.now(), 'js수진', datetime.now()])
+                                record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), ac['nick_name'], datetime.now(), ac['nick_name'], datetime.now()])
                                 cur400.execute(insert_query400, record_to_insert400)
                                 conn.commit()
                                 cur400.close() 
@@ -1820,22 +1827,31 @@ def callback_get(update, context) :
                                 msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[3]:,}개 초과"
                                 result_msgs.append(msg)
 
-                        context.bot.edit_message_text(text="[" + d_name + "] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) +"</code>", parse_mode='HTML',
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+                        msg = f"[{d_name}] 매수가 : {int(d_order_price):,}원, 매수량 : {int(d_order_amount):,}주 매수주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        result_msgs.append(msg)
+
                 else:
                     print("매수주문 실패")
-                    context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 매수주문 실패",
-                                                chat_id=update.callback_query.message.chat_id,
-                                                message_id=update.callback_query.message.message_id)
-                menuNum = "0"
+                    msg = f"[{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 매수주문 실패"
+                    result_msgs.append(msg)
 
+                menuNum = "0"
+                    
             except Exception as e:
                 print('매수주문 오류.', e)
+                msg = f"[{g_buy_code}] 매수가 : {int(g_buy_price):,}원, 매수량 : {int(g_buy_amount):,}주 [매수주문 오류] - {str(e)}"
+                result_msgs.append(msg)
                 menuNum = "0"
-                context.bot.edit_message_text(text="[" + g_buy_code + "] 매수가 : " + format(int(g_buy_price), ',d') + "원, 매수량 : " + format(int(g_buy_amount), ',d') + "주 [매수주문 오류] - "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+
+            menuNum = "0"
+            final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )    
            
         else:
             context.bot.edit_message_text(text="처음 메뉴부터 매수 진행하세요.",
@@ -1909,7 +1925,7 @@ def callback_get(update, context) :
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'js수진', datetime.now(), 'js수진', datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), '7mjs2c수진', datetime.now(), '7mjs2c수진', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
@@ -2022,7 +2038,7 @@ def callback_get(update, context) :
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'js수진', datetime.now(), 'js수진', datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), '7m수진', datetime.now(), '7m수진', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
@@ -2184,6 +2200,7 @@ def callback_get(update, context) :
     elif data_selected.find("매도진행") != -1:
 
         if menuNum != "0":
+            result_msgs = []
             ac = account()
             acct_no = ac['acct_no']
             access_token = ac['access_token']
@@ -2217,25 +2234,67 @@ def callback_get(update, context) :
                         d_total_complete_amt = d['tot_ccld_amt'][i]
 
                         print("매도주문 완료")
+                        # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                        cur300 = conn.cursor()
+                        cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code))
+                        result_one01 = cur300.fetchall()
+                        cur300.close()
 
-                        context.bot.edit_message_text(text="[" + d_name + "] 매도가 : " + format(int(d_order_price), ',d') + "원, 매도량 : " + format(int(d_order_amount), ',d') + "주 매도주문 완료, 주문번호 : <code>" + str(d_order_no) +"</code>", parse_mode='HTML',
-                                                    chat_id=update.callback_query.message.chat_id,
-                                                    message_id=update.callback_query.message.message_id)
+                        sh_trading_num = ""
+                        tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                        if result_one01 is not None:
+                            # 단기 매매내역 생성
+                            cur400 = conn.cursor()
+                            insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), ac['nick_name'], datetime.now(), ac['nick_name'], datetime.now()])
+                            cur400.execute(insert_query400, record_to_insert400)
+                            conn.commit()
+                            cur400.close() 
+
+                        for item in result_one01:
+
+                            sh_trading_num = item[0]
+                            # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
+                            tr_proc = "SM" if int(item[5]) < int(d_order_price) else "LC"
+
+                            # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
+                            cur401 = conn.cursor()
+                            update_query401 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND code = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                            record_to_update401 = ([tr_proc, ac['nick_name'], datetime.now(), str(acct_no), g_sell_code, sh_trading_num])
+                            cur400.execute(update_query401, record_to_update401)
+                            conn.commit()
+                            cur401.close() 
+
+                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매수가 : {int(item[5]):,}, 매도가 : {int(g_sell_price):,}원, 매도처리 : {tr_proc}"
+                            result_msgs.append(msg)
+
+                        msg = f"[{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        result_msgs.append(msg)
 
                 else:
                     print("매도주문 실패")
-                    context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 매도주문 실패",
-                                                chat_id=update.callback_query.message.chat_id,
-                                                message_id=update.callback_query.message.message_id)
+                    msg = f"[{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 매도주문 실패"
+                    result_msgs.append(msg)
+
                 menuNum = "0"
 
             except Exception as e:
                 print('매도주문 오류.', e)
+                msg = f"[{g_sell_code}] 매도가 : {int(g_sell_price):,}원, 매도량 : {int(g_sell_amount):,}주 [매도주문 오류] - {str(e)}"
+                result_msgs.append(msg)
                 menuNum = "0"
-                context.bot.edit_message_text(text="[" + g_sell_code + "] 매도가 : " + format(int(g_sell_price), ',d') + "원, 매도량 : " + format(int(g_sell_amount), ',d') + "주 [매도주문 오류] - " +str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
-           
+
+            menuNum = "0"
+            final_message = "\n".join(result_msgs) if result_msgs else "주문 조건을 충족하지 못했습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )    
+
         else:
             context.bot.edit_message_text(text="처음 메뉴부터 매도 진행하세요.",
                                           chat_id=update.callback_query.message.chat_id,
@@ -5638,7 +5697,7 @@ def echo(update, context):
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), arguments[1], datetime.now(), arguments[1], datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), arguments[1], datetime.now(), arguments[1], datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close()
@@ -6830,6 +6889,7 @@ def echo(update, context):
         ax_bottom.grid()
 
         plt.savefig('/home/terra/Public/Batch/save1.png')
+        # plt.savefig('C:/Project/save1.png')
 
     # 바 차트 생성 및 저장
     def plot_financials_bar_chart(data, company_name):
@@ -6863,6 +6923,7 @@ def echo(update, context):
 
         plt.tight_layout()
         filename = f"/home/terra/Public/Batch/financials/{company_name}.png"
+        # filename = f"C:\Project\{company_name}.png"
         plt.savefig(filename)
         plt.close()
         return filename
@@ -6880,6 +6941,7 @@ def echo(update, context):
 
             get_chart(code)
             context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save1.png', 'rb'))
+            # context.bot.send_photo(chat_id=user_id, photo=open('C:\Project\save1.png', 'rb'))
 
             summary_text = f"[{company} - 주요 지표]\n"
             summary_text += f"• 현재가:{format(int(stck_prpr), ',d')}원, 고가:{format(int(stck_hgpr), ',d')}원, 저가:{format(int(stck_lwpr), ',d')}원, 등락률:{prdy_ctrt}%, 전일비:{prdy_vrss_vol_rate}%, 거래량:{format(int(acml_vol), ',d')}주\n"
