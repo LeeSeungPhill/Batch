@@ -2237,13 +2237,13 @@ def callback_get(update, context) :
                         # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                         cur300 = conn.cursor()
                         cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code))
-                        result_one01 = cur300.fetchall()
+                        result_one300 = cur300.fetchone()
                         cur300.close()
 
-                        sh_trading_num = ""
                         tr_amt = int(int(d_order_price)*int(d_order_amount))
 
-                        if result_one01 is not None:
+                        if result_one300 is not None:
+                            sh_trading_num = result_one300[0]
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
                             insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -2252,21 +2252,7 @@ def callback_get(update, context) :
                             conn.commit()
                             cur400.close() 
 
-                        for item in result_one01:
-
-                            sh_trading_num = item[0]
-                            # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
-                            tr_proc = "SM" if int(item[5]) < int(d_order_price) else "LC"
-
-                            # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                            cur401 = conn.cursor()
-                            update_query401 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND code = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                            record_to_update401 = ([tr_proc, ac['nick_name'], datetime.now(), str(acct_no), g_sell_code, sh_trading_num])
-                            cur400.execute(update_query401, record_to_update401)
-                            conn.commit()
-                            cur401.close() 
-
-                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매수가 : {int(item[5]):,}, 매도가 : {int(g_sell_price):,}원, 매도처리 : {tr_proc}"
+                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code> 매도처리"
                             result_msgs.append(msg)
 
                         msg = f"[{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
