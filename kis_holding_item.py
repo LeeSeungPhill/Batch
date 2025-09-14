@@ -688,7 +688,9 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         
                         cur403.close() 
 
-                if new_complete_qty > 0:
+                order_type = item.get('주문유형', '')
+
+                if new_complete_qty > 0 and '매도' in order_type:
                 
                     # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                     cur404 = conn.cursor()
@@ -866,27 +868,32 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             
                             cur403.close()     
 
-                    # 매매처리 미처리된 매수체결 단기매매내역정보 조회
-                    cur404 = conn.cursor()
-                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
-                    result_one404 = cur404.fetchall()
-                    cur404.close()
+                    order_type = item.get('주문유형', '')
 
-                    cur405 = conn.cursor()
-                    for item404 in result_one404:
-                        sh_trading_num = item404[0]
-                        # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
-                        if int(item['체결단가']) > 0:
-                            tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
-                        else:
-                            tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
-
-                        # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
-                        cur405.execute(update_query404, record_to_update404)
+                    if '매도' in order_type:
                     
-                    cur405.close()
+                        # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                        cur404 = conn.cursor()
+                        cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
+                        result_one404 = cur404.fetchall()
+                        cur404.close()
+
+                        cur405 = conn.cursor()
+                        for item404 in result_one404:
+                            sh_trading_num = item404[0]
+                            # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
+                            if int(item['체결단가']) > 0:
+                                tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
+                            else:
+                                tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
+
+                            # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
+                            update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                            record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
+                            cur405.execute(update_query404, record_to_update404)
+                        
+                        cur405.close()
+
                     conn.commit()                            
 
         else:   # 읿별주문체결정보의 계좌번호, 주문일자, 주문번호, 원주문번호와 일별 주문 체결 조회의 계좌번호, 주문일자, 주문번호, 원주문번호가 존재하는 경우
@@ -1030,27 +1037,32 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     
                     cur403.close()    
                     
-                # 매매처리 미처리된 매수체결 단기매매내역정보 조회
-                cur404 = conn.cursor()
-                cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
-                result_one404 = cur404.fetchall()
-                cur404.close()
+                order_type = item.get('주문유형', '')
 
-                cur405 = conn.cursor()
-                for item404 in result_one404:
-                    sh_trading_num = item404[0]
-                    # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
-                    if int(item['체결단가']) > 0:
-                        tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
-                    else:
-                        tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
-
-                    # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                    update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                    record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
-                    cur405.execute(update_query404, record_to_update404)
+                if '매도' in order_type:
                 
-                cur405.close()
+                    # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                    cur404 = conn.cursor()
+                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
+                    result_one404 = cur404.fetchall()
+                    cur404.close()
+
+                    cur405 = conn.cursor()
+                    for item404 in result_one404:
+                        sh_trading_num = item404[0]
+                        # 매수가보다 매도가 더 큰 경우 : SM(안전마진), 매수가보다 매도가 낮은 경우 : LC(손절매도)
+                        if int(item['체결단가']) > 0:
+                            tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
+                        else:
+                            tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
+
+                        # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
+                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
+                        cur405.execute(update_query404, record_to_update404)
+                    
+                    cur405.close()
+                    
                 conn.commit()    
     
         cur600.close()
