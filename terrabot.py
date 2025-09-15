@@ -2242,7 +2242,7 @@ def callback_get(update, context) :
 
                         tr_amt = int(int(d_order_price)*int(d_order_amount))
 
-                        if result_one300 is not None:
+                        if result_one300:
                             sh_trading_num = result_one300[0]
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
