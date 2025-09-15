@@ -604,7 +604,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                 result_one01 = cur402.fetchone()
                 cur402.close()
 
-                if result_one01 is not None:
+                if result_one01:
 
                     # UPDATE
                     cur403 = conn.cursor()
@@ -648,7 +648,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     result_one02 = cur4021.fetchone()
                     cur4021.close()
 
-                    if result_one02 is not None:
+                    if result_one02:
                     
                         # UPDATE
                         cur403 = conn.cursor()
@@ -694,7 +694,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                 
                     # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                     cur404 = conn.cursor()
-                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
+                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name'], '%매수%'))
                     result_one404 = cur404.fetchall()
                     cur404.close()
 
@@ -708,8 +708,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
 
                         # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
+                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], '%매수%', sh_trading_num])
                         cur405.execute(update_query404, record_to_update404)
                         
                     cur405.close()
@@ -785,7 +785,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     result_one01 = cur402.fetchone()
                     cur402.close()
 
-                    if result_one01 is not None:
+                    if result_one01:
 
                         # UPDATE
                         cur403 = conn.cursor()
@@ -828,7 +828,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         result_one02 = cur4021.fetchone()
                         cur4021.close()
 
-                        if result_one02 is not None:
+                        if result_one02:
                         
                             # UPDATE
                             cur403 = conn.cursor()
@@ -874,7 +874,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     
                         # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                         cur404 = conn.cursor()
-                        cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
+                        cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name'], '%매수%'))
                         result_one404 = cur404.fetchall()
                         cur404.close()
 
@@ -888,8 +888,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                                 tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
 
                             # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                            update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                            record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
+                            update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                            record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], '%매수%', sh_trading_num])
                             cur405.execute(update_query404, record_to_update404)
                         
                         cur405.close()
@@ -974,7 +974,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                 result_one01 = cur402.fetchone()
                 cur402.close()
 
-                if result_one01 is not None:
+                if result_one01:
 
                     # UPDATE
                     cur403 = conn.cursor()
@@ -1043,7 +1043,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                 
                     # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                     cur404 = conn.cursor()
-                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name']))
+                    cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['prdt_name'], '%매수%'))
                     result_one404 = cur404.fetchall()
                     cur404.close()
 
@@ -1057,8 +1057,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
 
                         # 단기매매내역의 매수체결 대상 변경(매매처리 : tr_proc)
-                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE '%매수%' AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], sh_trading_num])
+                        update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
+                        record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['prdt_name'], '%매수%', sh_trading_num])
                         cur405.execute(update_query404, record_to_update404)
                     
                     cur405.close()

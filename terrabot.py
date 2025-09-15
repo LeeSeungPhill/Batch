@@ -2236,7 +2236,7 @@ def callback_get(update, context) :
                         print("매도주문 완료")
                         # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                         cur300 = conn.cursor()
-                        cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like '%매수%' and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code))
+                        cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
                         result_one300 = cur300.fetchone()
                         cur300.close()
 
