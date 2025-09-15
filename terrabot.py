@@ -200,6 +200,7 @@ def get_command6(update, context) :
     app_secret = ac['app_secret']
 
     ord_dvsn = "01"
+    result_msgs = []
 
     try:
 
@@ -248,23 +249,60 @@ def get_command6(update, context) :
                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
                     print("매수주문 완료")
-                    message = f"[{g_market_buy_company}] 매수가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /rebuy"
-                    update.message.reply_text(message, parse_mode='HTML')
+                    # 매수일 기준 단기매매관리정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, (select count(*) from public.short_trading_detail B where B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null) from short_trading_mng A where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s", (str(acct_no), d_order_dt, d_order_dt))
+                    result_one01 = cur300.fetchall()
+                    cur300.close()
+
+                    sh_trading_num = ""
+                    loss_price = 0
+                    risk_sum = 0
+                    tr_amt = 0
+
+                    for item in result_one01:
+
+                        sh_trading_num = item[0]
+                        risk_sum = item[2]
+                        tr_amt = int(int(d_order_price)*int(d_order_amount))
+                        loss_price = int(g_low_price)
+
+                        # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
+                        if item[3] - item[6] > 0:
+                            # 단기 매매내역 생성
+                            cur400 = conn.cursor()
+                            insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                            record_to_insert400 = ([str(acct_no), d_name, g_market_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                            cur400.execute(insert_query400, record_to_insert400)
+                            conn.commit()
+                            cur400.close()
+                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {str(item[6])}개 생성"
+                            result_msgs.append(msg)
+                        else:
+                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {str(item[3])}개 초과"
+                            result_msgs.append(msg)
+
+                    msg = f"[{d_name}] 매수가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /rebuy"
+                    result_msgs.append(msg)
+                    update.message.reply_text(result_msgs, parse_mode='HTML')
 
             else:
                 print("매수주문 실패")
-                message = f"[{g_market_buy_company}] 매수량 : {format_number(int(n_buy_amount))}주 매수주문 실패"
-                update.message.reply_text(message)
+                msg = f"[{g_market_buy_company}] 매수량 : {format_number(int(n_buy_amount))}주 매수주문 실패"
+                result_msgs.append(msg)
+                update.message.reply_text(result_msgs)
 
         else:
             print("매수 가능(현금) 부족")
-            message = f"[{g_market_buy_company}] 매수 가능(현금) : {format_number(int(b) - int(buy_expect_sum))}원 부족"
-            update.message.reply_text(message)
+            msg = f"[{g_market_buy_company}] 매수 가능(현금) : {format_number(int(b) - int(buy_expect_sum))}원 부족"
+            result_msgs.append(msg)
+            update.message.reply_text(result_msgs)
 
     except Exception as e:
         print('매수주문 오류.', e)
-        message = f"[{g_market_buy_company}] 매수량 : {format_number(int(n_buy_amount))}주 [매수주문 오류] - {str(e)}"
-        update.message.reply_text(message)
+        msg = f"[{g_market_buy_company}] 매수량 : {format_number(int(n_buy_amount))}주 [매수주문 오류] - {str(e)}"
+        result_msgs.append(msg)
+        update.message.reply_text(result_msgs)
 
 # 시장가 재매도
 def get_command7(update, context) :
@@ -289,6 +327,8 @@ def get_command7(update, context) :
         n_sell_sum = min(g_market_sell_amount, ord_psbl_qty)
 
         ord_dvsn = "01"
+        result_msgs = []
+
         try:
 
             # 입력 종목코드 현재가 호가/예상체결
@@ -327,18 +367,41 @@ def get_command7(update, context) :
                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
                     print("매도주문 완료")
-                    message = f"[{g_market_sell_company}] 매도가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /resell"
-                    update.message.reply_text(message, parse_mode='HTML')
+                    # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                    cur300 = conn.cursor()
+                    cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_market_sell_code, '%매수%'))
+                    result_one300 = cur300.fetchone()
+                    cur300.close()
+
+                    tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                    if result_one300:
+                        sh_trading_num = result_one300[0]
+                        # 단기 매매내역 생성
+                        cur400 = conn.cursor()
+                        insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        record_to_insert400 = ([str(acct_no), d_name, g_market_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                        cur400.execute(insert_query400, record_to_insert400)
+                        conn.commit()
+                        cur400.close() 
+                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code> 매도처리"
+                        result_msgs.append(msg)
+
+                    msg = f"[{g_market_sell_company}] 매도가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /resell"
+                    result_msgs.append(msg)
+                    update.message.reply_text(result_msgs, parse_mode='HTML')
                 
             else:
                 print("매도주문 실패")
-                message = f"[{g_market_sell_company}] 매도량 : {format_number(int(order_amount))}주 매도주문 실패"
-                update.message.reply_text(message)
+                msg = f"[{g_market_sell_company}] 매도량 : {format_number(int(order_amount))}주 매도주문 실패"
+                result_msgs.append(msg)
+                update.message.reply_text(result_msgs)
 
         except Exception as e:
             print('매도주문 오류.', e)
-            message = f"[{g_market_sell_company}] 매도량 : {format_number(int(n_sell_sum))}주 [매도주문 오류] - {str(e)}"
-            update.message.reply_text(message)
+            msg = f"[{g_market_sell_company}] 매도량 : {format_number(int(n_sell_sum))}주 [매도주문 오류] - {str(e)}"
+            result_msgs.append(msg)
+            update.message.reply_text(result_msgs)
 
     else:
         print("주문가능수량 부족")
@@ -1817,7 +1880,7 @@ def callback_get(update, context) :
                                 # 단기 매매내역 생성
                                 cur400 = conn.cursor()
                                 insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), ac['nick_name'], datetime.now(), ac['nick_name'], datetime.now()])
+                                record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                                 cur400.execute(insert_query400, record_to_insert400)
                                 conn.commit()
                                 cur400.close() 
@@ -1925,7 +1988,7 @@ def callback_get(update, context) :
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), '7mjs2c수진', datetime.now(), '7mjs2c수진', datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
@@ -2038,7 +2101,7 @@ def callback_get(update, context) :
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), '7m수진', datetime.now(), '7m수진', datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
@@ -2151,7 +2214,7 @@ def callback_get(update, context) :
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'js수진', datetime.now(), 'js수진', datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, g_buy_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
@@ -2247,7 +2310,7 @@ def callback_get(update, context) :
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
                             insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                            record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), ac['nick_name'], datetime.now(), ac['nick_name'], datetime.now()])
+                            record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                             cur400.execute(insert_query400, record_to_insert400)
                             conn.commit()
                             cur400.close() 
@@ -2342,6 +2405,27 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+                                            # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                                            cur300 = conn.cursor()
+                                            cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
+                                            result_one300 = cur300.fetchone()
+                                            cur300.close()
+
+                                            tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                                            if result_one300:
+                                                sh_trading_num = result_one300[0]
+                                                # 단기 매매내역 생성
+                                                cur400 = conn.cursor()
+                                                insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                                                cur400.execute(insert_query400, record_to_insert400)
+                                                conn.commit()
+                                                cur400.close() 
+
+                                                msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code> 매도처리"
+                                                result_msgs.append(msg)
+
                                             msg = f"[{nick}:{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                             result_msgs.append(msg)
 
@@ -2441,6 +2525,27 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+                                            # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                                            cur300 = conn.cursor()
+                                            cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
+                                            result_one300 = cur300.fetchone()
+                                            cur300.close()
+
+                                            tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                                            if result_one300:
+                                                sh_trading_num = result_one300[0]
+                                                # 단기 매매내역 생성
+                                                cur400 = conn.cursor()
+                                                insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                                                cur400.execute(insert_query400, record_to_insert400)
+                                                conn.commit()
+                                                cur400.close() 
+
+                                                msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code> 매도처리"
+                                                result_msgs.append(msg)
+
                                             msg = f"[{nick}:{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                             result_msgs.append(msg)
                                         
@@ -2540,6 +2645,27 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+                                            # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                                            cur300 = conn.cursor()
+                                            cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
+                                            result_one300 = cur300.fetchone()
+                                            cur300.close()
+
+                                            tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                                            if result_one300:
+                                                sh_trading_num = result_one300[0]
+                                                # 단기 매매내역 생성
+                                                cur400 = conn.cursor()
+                                                insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                                record_to_insert400 = ([str(acct_no), d_name, g_sell_code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                                                cur400.execute(insert_query400, record_to_insert400)
+                                                conn.commit()
+                                                cur400.close() 
+
+                                                msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code> 매도처리"
+                                                result_msgs.append(msg)
+
                                             msg = f"[{nick}:{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                             result_msgs.append(msg)
                                         
@@ -5683,7 +5809,7 @@ def echo(update, context):
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                        record_to_insert400 = ([str(acct_no), d_name, code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), arguments[1], datetime.now(), arguments[1], datetime.now()])
+                                        record_to_insert400 = ([str(acct_no), d_name, code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), loss_price, risk_sum, int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close()
@@ -5935,6 +6061,25 @@ def echo(update, context):
                                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                     print("매도주문 완료")
+                                    # 매매처리 미처리된 매수체결 단기매매내역정보 조회
+                                    cur300 = conn.cursor()
+                                    cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), code, '%매수%'))
+                                    result_one300 = cur300.fetchone()
+                                    cur300.close()
+
+                                    tr_amt = int(int(d_order_price)*int(d_order_amount))
+
+                                    if result_one300:
+                                        sh_trading_num = result_one300[0]
+                                        # 단기 매매내역 생성
+                                        cur400 = conn.cursor()
+                                        insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                        record_to_insert400 = ([str(acct_no), d_name, code, d_order_dt, d_order_tmd, d_order_type, sh_trading_num, int(d_order_price), int(d_order_amount), tr_amt, int(d_total_complete_qty), int(d_remain_qty), str(d_order_no), 'sh_trading', datetime.now(), 'sh_trading', datetime.now()])
+                                        cur400.execute(insert_query400, record_to_insert400)
+                                        conn.commit()
+                                        cur400.close() 
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매관리번호 : <code>" + sh_trading_num + "</code> 매도처리", parse_mode='HTML')
+
                                     g_market_sell_amount = n_sell_amount
                                     g_market_sell_code = code
                                     g_market_sell_company = company
