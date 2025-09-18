@@ -140,7 +140,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no):
             'ORD_GNO_BRNO': "",                                 # 주문채번지점번호 ""공란입력 시, 전체
             'ODNO': "",                                         # 주문번호 ""공란입력 시, 전체
             'CCLD_DVSN': "00",                                  # 체결구분 00 전체, 01 체결, 02 미체결
-            'INQR_DVSN': "00",                                  # 조회구분 00 역순, 01 정순
+            'INQR_DVSN': "01",                                  # 조회구분 00 역순, 01 정순
             'INQR_DVSN_1': "",                                  # 조회구분1 없음: 전체, 1: ELW, 2: 프리보드
             'INQR_DVSN_3': "00",                                # 조회구분3 00 전체, 01 현금, 02 신용, 03 담보, 04 대주, 05 대여, 06 자기융자신규/상환, 07 유통융자신규/상환
             'EXCG_ID_DVSN_CD': "KRX",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT
@@ -683,8 +683,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             item['보유수량'],
                             Decimal(item['pfls_rate']),
                             int(item['pfls_amt']),
-                            str(int(item['원주문번호'])),
                             str(int(item['주문번호'])),
+                            str(int(item['원주문번호'])),
                             'holding_item',
                             datetime.now(),
                             str(acct_no), 
@@ -869,8 +869,8 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                                 new_complete_qty,
                                 Decimal(item['pfls_rate']),
                                 int(item['pfls_amt']),
-                                str(int(item['원주문번호'])),
                                 str(int(item['주문번호'])),
+                                str(int(item['원주문번호'])),
                                 'holding_item',
                                 datetime.now(),
                                 str(acct_no), 
