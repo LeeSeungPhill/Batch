@@ -656,6 +656,9 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         cur403.execute("""
                             UPDATE short_trading_detail
                             SET
+                                order_price = %s,
+                                tr_qty = %s,
+                                tr_amt = %s,                                       
                                 total_complete_qty = %s,
                                 remain_qty = %s,
                                 hold_price = %s,
@@ -671,14 +674,17 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             AND order_no = %s 
                         """
                         , (
+                            int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
+                            int(item['주문수량']),
+                            int(item['체결금액']),
                             new_complete_qty, 
                             new_remain_qty,
                             item['보유단가'], 
                             item['보유수량'],
                             Decimal(item['pfls_rate']),
                             int(item['pfls_amt']),
-                            str(int(item['주문번호'])),
                             str(int(item['원주문번호'])),
+                            str(int(item['주문번호'])),
                             'holding_item',
                             datetime.now(),
                             str(acct_no), 
@@ -836,6 +842,9 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             cur403.execute("""
                                 UPDATE short_trading_detail
                                 SET
+                                    order_price = %s,
+                                    tr_qty = %s,
+                                    tr_amt = %s,                                       
                                     total_complete_qty = %s,
                                     remain_qty = %s,
                                     hold_price = %s,
@@ -851,14 +860,17 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                                 AND order_no = %s 
                             """
                             , (
+                                int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']), 
+                                int(item['주문수량']),
+                                int(item['체결금액']),
                                 new_complete_qty, 
                                 new_remain_qty,
                                 hold_price,
                                 new_complete_qty,
                                 Decimal(item['pfls_rate']),
                                 int(item['pfls_amt']),
-                                str(int(item['주문번호'])),
                                 str(int(item['원주문번호'])),
+                                str(int(item['주문번호'])),
                                 'holding_item',
                                 datetime.now(),
                                 str(acct_no), 
