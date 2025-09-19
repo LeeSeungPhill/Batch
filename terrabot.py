@@ -251,7 +251,7 @@ def get_command6(update, context) :
                     print("매수주문 완료")
                     # 매수일 기준 단기매매관리정보 조회
                     cur300 = conn.cursor()
-                    cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                    cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                     result_one01 = cur300.fetchall()
                     cur300.close()
 
@@ -268,7 +268,7 @@ def get_command6(update, context) :
                         loss_price = int(g_low_price)
 
                         # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                        if item[3] - item[7] > 0:
+                        if item[3] - item[6] > 0:
                             # 단기 매매내역 생성
                             cur400 = conn.cursor()
                             insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -276,7 +276,7 @@ def get_command6(update, context) :
                             cur400.execute(insert_query400, record_to_insert400)
                             conn.commit()
                             cur400.close()
-                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {str(item[7]+1)}개 생성"
+                            msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {str(item[6]+1)}개 생성"
                             result_msgs.append(msg)
                         else:
                             msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {str(item[3])}개 초과"
@@ -1859,7 +1859,7 @@ def callback_get(update, context) :
                         print("매수주문 완료")
                         # 매수일 기준 단기매매관리정보 조회
                         cur300 = conn.cursor()
-                        cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                        cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                         result_one01 = cur300.fetchall()
                         cur300.close()
 
@@ -1876,7 +1876,7 @@ def callback_get(update, context) :
                             loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int(g_low_price)
 
                             # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                            if item[3] - item[7] > 0:
+                            if item[3] - item[6] > 0:
                                 # 단기 매매내역 생성
                                 cur400 = conn.cursor()
                                 insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -1884,7 +1884,7 @@ def callback_get(update, context) :
                                 cur400.execute(insert_query400, record_to_insert400)
                                 conn.commit()
                                 cur400.close() 
-                                msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[7]+1:,}개 생성"
+                                msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[6]+1:,}개 생성"
                                 result_msgs.append(msg)
                             else:
                                 msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[3]:,}개 초과"
@@ -1967,7 +1967,7 @@ def callback_get(update, context) :
                                 print("매수주문 완료")
                                 # 매수일 기준 단기매매관리정보 조회
                                 cur300 = conn.cursor()
-                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                                 result_one01 = cur300.fetchall()
                                 cur300.close()
 
@@ -1984,7 +1984,7 @@ def callback_get(update, context) :
                                     loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int(g_low_price)
 
                                     # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                                    if item[3] - item[7] > 0:
+                                    if item[3] - item[6] > 0:
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -1992,7 +1992,7 @@ def callback_get(update, context) :
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
-                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[7]+1:,}개 생성"
+                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[6]+1:,}개 생성"
                                         result_msgs.append(msg)
                                     else:
                                         msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[3]:,}개 초과"
@@ -2080,7 +2080,7 @@ def callback_get(update, context) :
                                 print("매수주문 완료")
                                 # 매수일 기준 단기매매관리정보 조회
                                 cur300 = conn.cursor()
-                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                                 result_one01 = cur300.fetchall()
                                 cur300.close()
 
@@ -2097,7 +2097,7 @@ def callback_get(update, context) :
                                     loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int(g_low_price)
 
                                     # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                                    if item[3] - item[7] > 0:
+                                    if item[3] - item[6] > 0:
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -2105,7 +2105,7 @@ def callback_get(update, context) :
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
-                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[7]+1:,}개 생성"
+                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[6]+1:,}개 생성"
                                         result_msgs.append(msg)
                                     else:
                                         msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[3]:,}개 초과"
@@ -2193,7 +2193,7 @@ def callback_get(update, context) :
                                 print("매수주문 완료")
                                 # 매수일 기준 단기매매관리정보 조회
                                 cur300 = conn.cursor()
-                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                                 result_one01 = cur300.fetchall()
                                 cur300.close()
 
@@ -2210,7 +2210,7 @@ def callback_get(update, context) :
                                     loss_price = int(g_loss_price) if int(g_loss_price) > 0 else int(g_low_price)
 
                                     # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                                    if item[3] - item[7] > 0:
+                                    if item[3] - item[6] > 0:
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -2218,7 +2218,7 @@ def callback_get(update, context) :
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close() 
-                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[7]+1:,}개 생성"
+                                        msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[6]+1:,}개 생성"
                                         result_msgs.append(msg)
                                     else:
                                         msg = f"[{d_name}] 매매관리번호 : <code>{sh_trading_num}</code>, 매매내역 종목수 : {item[3]:,}개 초과"
@@ -5788,7 +5788,7 @@ def echo(update, context):
                                 print("매수주문 완료")
                                 # 매수일 기준 단기매매관리정보 조회
                                 cur300 = conn.cursor()
-                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code, count(*) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, B.code", (str(acct_no), d_order_dt, d_order_dt))
+                                cur300.execute("select A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt, count(distinct B.code) as detail_cnt from short_trading_mng A left join public.short_trading_detail B on B.acct_no = A.acct_no and B.sh_trading_num = A.sh_trading_num and B.total_complete_qty::int > 0 and B.tr_proc is null where A.acct_no = %s and A.tr_start_dt <= %s and A.tr_end_dt >= %s group by A.sh_trading_num, A.risk_rate, A.risk_sum, A.item_number, A.tr_start_dt, A.tr_end_dt", (str(acct_no), d_order_dt, d_order_dt))
                                 result_one01 = cur300.fetchall()
                                 cur300.close()
 
@@ -5805,7 +5805,7 @@ def echo(update, context):
                                     loss_price = int(g_low_price)
 
                                     # 단기매매관리정보의 종목수가 해당하는 단기매매내역 건수보다 큰 경우
-                                    if item[3] - item[7] > 0:
+                                    if item[3] - item[6] > 0:
                                         # 단기 매매내역 생성
                                         cur400 = conn.cursor()
                                         insert_query400 = "INSERT INTO short_trading_detail (acct_no, name, code, tr_day, tr_dtm, order_type, sh_trading_num, order_price, loss_price, risk_sum, tr_qty, tr_amt, total_complete_qty, remain_qty, order_no, regr_id, reg_date, chgr_id, chg_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -5813,7 +5813,7 @@ def echo(update, context):
                                         cur400.execute(insert_query400, record_to_insert400)
                                         conn.commit()
                                         cur400.close()
-                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매관리번호 : <code>" + sh_trading_num + "</code>, 매매내역 종목수 : " + str(item[7]+1) + "개 생성", parse_mode='HTML')
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매관리번호 : <code>" + sh_trading_num + "</code>, 매매내역 종목수 : " + str(item[6]+1) + "개 생성", parse_mode='HTML')
                                     else:
                                         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매관리번호 : <code>" + sh_trading_num + "</code>, 매매내역 종목수 : " + str(item[3]) + "개 초과", parse_mode='HTML')
 
