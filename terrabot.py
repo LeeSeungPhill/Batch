@@ -466,66 +466,90 @@ def short_trading_mng(update, context) :
             trade_start_dt = datetime.now().strftime("%Y%m%d")                
             start_date = datetime.strptime(trade_start_dt, "%Y%m%d")
 
-            cur01 = conn.cursor()
-            cur01.execute("SELECT holiday FROM stock_holiday")
-            holidays = {row[0] for row in cur01.fetchall()}
-            cur01.close()
-
-            biz_days = 0
-            current = start_date
-            while biz_days < 2:
-                current += timedelta(days=1)
-                date_str = current.strftime("%Y%m%d")
-
-                # 주말 또는 휴일이면 skip
-                if current.weekday() >= 5:   # 5=토, 6=일
-                    continue
-                if date_str in holidays:
-                    continue
-
-                # 영업일 카운트
-                biz_days += 1
-
-            # 매매종료일
-            trade_end_dt = current.strftime("%Y%m%d")
-            # 단기매매관리번호
-            sh_trading_num = trade_start_dt + current.strftime("%m%d")
-
             ac = account()
             # 계좌번호
             acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
 
-            # 단기매매관리정보 조회
-            cur300 = conn.cursor()
-            cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), trade_end_dt, trade_start_dt))
-            result_one01 = cur300.fetchall()
-            cur300.close()
-            
-            if len(result_one01) < 1:
+            # 계좌잔고 조회
+            b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
-                # 단기매매관리정보 생성
-                cur201 = conn.cursor()
-                insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                # update 인자값 설정
-                record_to_insert201 = ([sh_trading_num, str(acct_no), risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, arguments[1], datetime.now(), arguments[1], datetime.now()])
-                # DB 연결된 커서의 쿼리 수행
-                cur201.execute(insert_query201, record_to_insert201)
+            for i, name in enumerate(b.index):
+                u_tot_evlu_amt = int(b['tot_evlu_amt'][i])                  # 총평가금액
+                u_dnca_tot_amt = int(b['dnca_tot_amt'][i])                  # 예수금총금액
+                u_nass_amt = int(b['nass_amt'][i])                          # 순자산금액(세금비용 제외)
+                u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])      # 가수도 정산 금액
+                u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
+                u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
 
-                conn.commit()
-                cur201.close()
+            # 종목수별 투자금 : 1종목당 5,000,000원의 70%인 3,500,000원
+            item_number_trade_amt = item_number * 5000000 * 0.7
 
-                trade_start_fmt = datetime.strptime(trade_start_dt, "%Y%m%d").strftime("%Y-%m-%d")
-                trade_end_fmt = datetime.strptime(trade_end_dt, "%Y%m%d").strftime("%Y-%m-%d")
+            # 가수금이 종목수별 투자금보다 큰 경우
+            if u_prvs_rcdl_excc_amt >= item_number_trade_amt:
 
-                msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 : <code>{sh_trading_num}</code>, 매매시작 : {trade_start_fmt}, 매매종료 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 종목리스크 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
-                result_msgs.append(msg)
+                cur01 = conn.cursor()
+                cur01.execute("SELECT holiday FROM stock_holiday")
+                holidays = {row[0] for row in cur01.fetchall()}
+                cur01.close()
+
+                biz_days = 0
+                current = start_date
+                while biz_days < 2:
+                    current += timedelta(days=1)
+                    date_str = current.strftime("%Y%m%d")
+
+                    # 주말 또는 휴일이면 skip
+                    if current.weekday() >= 5:   # 5=토, 6=일
+                        continue
+                    if date_str in holidays:
+                        continue
+
+                    # 영업일 카운트
+                    biz_days += 1
+
+                # 매매종료일
+                trade_end_dt = current.strftime("%Y%m%d")
+                # 단기매매관리번호
+                sh_trading_num = trade_start_dt + current.strftime("%m%d")
+
+                # 단기매매관리정보 조회
+                cur300 = conn.cursor()
+                cur300.execute("select sh_trading_num from short_trading_mng where acct_no = %s and tr_start_dt <= %s and tr_end_dt >= %s", (str(acct_no), trade_end_dt, trade_start_dt))
+                result_one01 = cur300.fetchall()
+                cur300.close()
+                
+                if len(result_one01) < 1:
+
+                    # 단기매매관리정보 생성
+                    cur201 = conn.cursor()
+                    insert_query201 = "insert into short_trading_mng(sh_trading_num, acct_no, risk_rate, risk_sum, item_number, tr_start_dt, tr_end_dt, regr_id, reg_date, chgr_id, chg_date) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    # update 인자값 설정
+                    record_to_insert201 = ([sh_trading_num, str(acct_no), risk_rate, risk_sum, item_number, trade_start_dt, trade_end_dt, arguments[1], datetime.now(), arguments[1], datetime.now()])
+                    # DB 연결된 커서의 쿼리 수행
+                    cur201.execute(insert_query201, record_to_insert201)
+
+                    conn.commit()
+                    cur201.close()
+
+                    trade_start_fmt = datetime.strptime(trade_start_dt, "%Y%m%d").strftime("%Y-%m-%d")
+                    trade_end_fmt = datetime.strptime(trade_end_dt, "%Y%m%d").strftime("%Y-%m-%d")
+
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매관리번호 : <code>{sh_trading_num}</code>, 매매시작 : {trade_start_fmt}, 매매종료 : {trade_end_fmt}, 리스크율 : {str(risk_rate)}%, 종목리스크 : {int(risk_sum):,}원, 종목수 : {str(item_number)}개, 투자설정액 : {int(trade_basic_fund):,}원"
+                    result_msgs.append(msg)
+
+                else:
+                    msg = f"[{arguments[1]}:단기 매매관리정보] 매매시작일과 매매종료일 사이 매매관리정보 기존재"
+                    result_msgs.append(msg)
 
             else:
-                msg = f"[{arguments[1]}:단기 매매관리정보] 매매시작일과 매매종료일 사이 매매관리정보 기존재"
-                result_msgs.append(msg)
+                msg = f"[{arguments[1]}:단기 매매관리정보] 종목수 {item_number}개 대비 가수금 {int(item_number_trade_amt-u_prvs_rcdl_excc_amt):,}원 부족"
+                result_msgs.append(msg)    
 
         else:
-            msg = f"[{arguments[1]}:단기 매매관리정보] 종목수 또는 리스크금액 미존재"
+            msg = f"[{arguments[1]}:단기 매매관리정보] 종목매매시작일과 매매종료일 사이 매매관리정보 기존재"
             result_msgs.append(msg)
 
     final_message = "\n".join(result_msgs) if result_msgs else "단기 매매관리정보 생성 조건을 충족하지 못했습니다."
