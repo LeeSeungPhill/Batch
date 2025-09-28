@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 기본 DB 연결 정보
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
-remote_conn_string = "dbname='fund_risk_mng' host='192.168.50.248' port='5432' user='postgres' password='asdf1234'"
+remote_conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
