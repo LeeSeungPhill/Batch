@@ -819,7 +819,6 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
-    #res = requests.get(URL, headers=headers, params=params, verify=False)
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
     #ar.printAll()
@@ -848,7 +847,6 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
-    #res = requests.get(URL, headers=headers, params=params, verify=False)
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
     #ar.printAll()
@@ -910,7 +908,7 @@ def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-resv"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -938,7 +936,7 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
     }
     PATH = "uapi/domestic-stock/v1/trading/order-resv-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
