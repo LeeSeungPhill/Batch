@@ -3189,8 +3189,8 @@ def callback_get(update, context) :
 
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "전체예약", "예약주문", "예약정정", "예약취소"], data_selected)
-            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
+            button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "전체예약", "예약주문", "예약정정", "예약취소", "취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="체결 메뉴를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
@@ -3199,7 +3199,13 @@ def callback_get(update, context) :
 
         elif len(data_selected.split(",")) == 2:
 
-            if data_selected.find("전체예약") != -1:
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+            
+            elif data_selected.find("전체예약") != -1:
             
                 ac = account()
                 acct_no = ac['acct_no']
@@ -3245,7 +3251,7 @@ def callback_get(update, context) :
                             d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                             d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}가 : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} {"시장가" if d_ord_dvsn_cd == "01" else "지정가"} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                             result_msgs.append(msg1)
                             
                             if d_cncl_ord_dt != "":
