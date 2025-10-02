@@ -7290,9 +7290,11 @@ def echo(update, context):
             if commandBot[1].isdecimal():
 
                 ord_rsv_no = commandBot[1]              # 예약주문번호
+                reserce_strt_dt = datetime.now().strftime("%Y%m%d")
+                reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
 
                 # 전체예약 조회
-                output = order_reserve_complete(access_token, app_key, app_secret, "", "", str(acct_no), "")
+                output = order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, str(acct_no), "")
 
                 if len(output) > 0:
                     tdf = pd.DataFrame(output)
