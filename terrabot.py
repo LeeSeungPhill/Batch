@@ -3190,7 +3190,7 @@ def callback_get(update, context) :
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
             button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "전체예약", "예약주문", "예약정정", "예약취소", "취소"], data_selected)
-            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 5))
 
             context.bot.edit_message_text(text="체결 메뉴를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
