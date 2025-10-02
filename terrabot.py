@@ -23,6 +23,7 @@ import kis_stock_search_api as search
 import os
 from bs4 import BeautifulSoup
 import time
+from dateutil.relativedelta import relativedelta
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -886,6 +887,91 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output1
+
+# 주식예약주문 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
+def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord_price, trade_cd, ord_dvsn_cd, reserve_end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "CTSC0008U",                                # tr_id : CTSC0008U(국내예약매수입력/주문예약매도입력)
+    }  
+    params = {
+                "CANO": acct_no,
+                "ACNT_PRDT_CD": '01',
+                "PDNO": code,
+                "ORD_QTY": ord_qty,                                 # 주문주식수
+                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
+                "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
+                "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
+                "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
+                "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자 : 현재일자 이후 8자리(YYYYMMDD), 미입력시 다음날 주문 처리되고 예약주문 종료, 익영업일부터 최대 30일까지 입력 가능
+    }
+    PATH = "uapi/domestic-stock/v1/trading/order-resv"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
+
+# 주식예약주문정정취소 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
+def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, reserve_cd, code, ord_qty, ord_price, trade_cd, ord_dvsn_cd, reserve_end_dt, rsvn_ord_seq):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "CTSC0013U" if reserve_cd == "01" else "CTSC0009U", # tr_id : CTSC0013U 예약정정, CTSC0009U 예약최소
+    }  
+    params = {
+                "CANO": acct_no,
+                "ACNT_PRDT_CD": '01',
+                "PDNO": code,
+                "ORD_QTY": ord_qty,                                 # 주문주식수
+                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
+                "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
+                "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
+                "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
+                "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자 : 현재일자 이후 8자리(YYYYMMDD), 미입력시 다음날 주문 처리되고 예약주문 종료, 익영업일부터 최대 30일까지 입력 가능
+                "RSVN_ORD_SEQ": rsvn_ord_seq                        # 예약주문순번
+    }
+    PATH = "uapi/domestic-stock/v1/trading/order-resv-rvsecncl"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
+
+# 주식예약주문조회 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
+def order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, acct_no, code):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "CTSC0004R",                                # tr_id : CTSC0004R
+    }  
+    params = {
+                "RSVN_ORD_ORD_DT": reserce_strt_dt,                 # 예약주문시작일자
+                "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자
+                "RSVN_ORD_SEQ": "",                                 # 예약주문순번
+                "TMNL_MDIA_KIND_CD": "10",
+                "CANO": acct_no,
+                "ACNT_PRDT_CD": '01',
+                "PRCS_DVSN_CD": "0",                                # 처리구분코드 : 전체 0, 처리내역 1, 미처리내역 2
+                "CNCL_YN": "Y",                                     # 취소여부 : 'Y'
+                "PDNO": code if code != "" else "",                 # 종목코드 : 공백 입력 시 전체 조회
+                "SLL_BUY_DVSN_CD": "",                              # 매도매수구분코드 : 01 매도, 02 매수        
+                "CTX_AREA_FK200": "",                               
+                "CTX_AREA_NK200": "",                               
+    }
+    PATH = "uapi/domestic-stock/v1/trading/order-resv-ccnl"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
 
 # 계좌잔고 조회
 def get_acct_balance_sell(access_token, app_key, app_secret, acct_no):
@@ -3105,18 +3191,104 @@ def callback_get(update, context) :
 
     elif data_selected.find("체결") != -1:
         if len(data_selected.split(",")) == 1:
-            button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "취소"], data_selected)
-            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
+            button_list = build_button(["전체주문", "개별주문", "주문정정", "주문철회", "전체예약", "예약주문", "예약정정", "예약취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
 
-            context.bot.edit_message_text(text="일별체결 메뉴를 선택해 주세요.",
+            context.bot.edit_message_text(text="체결 메뉴를 선택해 주세요.",
                                           chat_id=update.callback_query.message.chat_id,
                                           message_id=update.callback_query.message.message_id,
                                           reply_markup=show_markup)
 
         elif len(data_selected.split(",")) == 2:
 
-            if data_selected.find("취소") != -1:
-                context.bot.edit_message_text(text="취소하였습니다.",
+            if data_selected.find("전체예약") != -1:
+                context.bot.edit_message_text(text="[전체예약 조회]",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+            
+                ac = account()
+                acct_no = ac['acct_no']
+                access_token = ac['access_token']
+                app_key = ac['app_key']
+                app_secret = ac['app_secret']
+
+                try:
+                    context.bot.edit_message_text(text="[전체예약 조회]",
+                                                  chat_id=update.callback_query.message.chat_id,
+                                                  message_id=update.callback_query.message.message_id)
+
+                    
+                    reserce_strt_dt = datetime.now().strftime("%Y%m%d")
+                    reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
+                    # 전체예약 조회
+                    output = order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, acct_no, "")
+
+                    if len(output) > 0:
+                        tdf = pd.DataFrame(output)
+                        tdf.set_index('rsvn_ord_seq')
+                        d = tdf[['rsvn_ord_seq', 'rsvn_ord_ord_dt', 'rsvn_ord_rcit_dt', 'pdno', 'ord_dvsn_cd', 'ord_rsvn_qty', 'tot_ccld_qty', 'cncl_ord_dt', 'ord_tmd', 'odno', 'rsvn_ord_rcit_tmd', 'kor_item_shtn_name', 'sll_buy_dvsn_cd', 'ord_rsvn_unpr', 'tot_ccld_amt', 'cncl_rcit_tmd', 'prcs_rslt', 'ord_dvsn_name', 'rsvn_end_dt']]
+                        result_msgs = []
+
+                        for i, name in enumerate(d.index):
+                            d_rsvn_ord_seq = int(d['rsvn_ord_seq'][i])          # 예약주문 순번
+                            d_rsvn_ord_ord_dt = d['rsvn_ord_ord_dt'][i]         # 예약주문주문일자
+                            d_rsvn_ord_rcit_dt = d['rsvn_ord_rcit_dt'][i]       # 예약주문접수일자
+                            d_code = d['pdno'][i]
+                            d_ord_dvsn_cd = d['ord_dvsn_cd'][i]                 # 주문구분코드
+                            d_ord_rsvn_qty = int(d['ord_rsvn_qty'][i])          # 주문예약수량
+                            d_tot_ccld_qty = int(d['tot_ccld_qty'][i])          # 총체결수량
+                            d_cncl_ord_dt = d['cncl_ord_dt'][i]                 # 취소주문일자
+                            d_ord_tmd = d['ord_tmd'][i]                         # 주문시각
+                            d_order_no = d['odno'][i]                           # 주문번호
+                            d_rsvn_ord_rcit_tmd = d['rsvn_ord_rcit_tmd'][i]     # 예약주문접수시각
+                            d_name = d['kor_item_shtn_name'][i]                 # 종목명
+                            d_sll_buy_dvsn_cd = d['sll_buy_dvsn_cd'][i]         # 매도매수구분코드
+                            d_ord_rsvn_unpr = int(d['ord_rsvn_unpr'][i])        # 주문예약단가
+                            d_tot_ccld_amt = int(d['tot_ccld_amt'][i])          # 총체결금액
+                            d_cncl_rcit_tmd = d['cncl_rcit_tmd'][i]             # 취소접수시각
+                            d_prcs_rslt = d['prcs_rslt'][i]                     # 처리결과
+                            d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
+                            d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
+
+                            msg = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약주문번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}가 : {format(d_ord_rsvn_unpr, ',d')}원, {format(d_ord_rsvn_qty, ',d')}주, 주문번호 : <code>{str(d_order_no)}</code>, 체결량 : {format(d_tot_ccld_qty, ',d')}주, 체결금 : {format(d_tot_ccld_amt, ',d')}원 {d_prcs_rslt}"
+                            result_msgs.append(msg)
+
+                        final_message = "\n".join(result_msgs) if result_msgs else "전체예약 조회 대상이 존재하지 않습니다."
+
+                        context.bot.edit_message_text(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=update.callback_query.message.chat_id,
+                            message_id=update.callback_query.message.message_id
+                        )
+
+                    else:
+                        context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
+                                                 chat_id=update.callback_query.message.chat_id,
+                                                 message_id=update.callback_query.message.message_id)
+
+                except Exception as e:
+                    print('전체예약 조회 오류.', e)
+                    context.bot.edit_message_text(text="[전체예약 조회] 오류 : "+str(e),
+                                                  chat_id=update.callback_query.message.chat_id,
+                                                  message_id=update.callback_query.message.message_id)
+
+            elif data_selected.find("예약주문") != -1:
+                menuNum = "61"
+
+                context.bot.edit_message_text(text="예약주문할 종목코드(종목명), 매매구분(매수:1 매도:2), 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+            
+            elif data_selected.find("예약정정") != -1:
+                context.bot.edit_message_text(text="[예약정정]",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+            
+            elif data_selected.find("예약취소") != -1:
+                context.bot.edit_message_text(text="[예약취소]",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)
                 return
@@ -6973,7 +7145,90 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text=company + " : 주문가능수량 부족")
             else:
                 print("저가 또는 고가 또는 매도비율(%) 미존재")
-                context.bot.send_message(chat_id=user_id, text=company + " : 저가 또는 고가 또는 매도비율(%) 미존재")  
+                context.bot.send_message(chat_id=user_id, text=company + " : 저가 또는 고가 또는 매도비율(%) 미존재") 
+
+        elif menuNum == '61':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=5)
+                print("commandBot[1] : ", commandBot[1])    # 매매구분(매수:1 매도:2)
+                print("commandBot[2] : ", commandBot[2])    # 단가(시장가:0)
+                print("commandBot[3] : ", commandBot[3])    # 수량
+                print("commandBot[4] : ", commandBot[4])    # 예약종료일-8자리(YYYYMMDD)
+
+            # 매매구분(매수:1 매도:2)
+            if commandBot[1] not in ["1", "2"]:
+                print("매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
+                context.bot.send_message(chat_id=user_id, text="매매구분 값은 1(매수), 2(매도)만 허용됩니다. [" + company + "]")
+            else:    
+                # 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD) 존재시
+                if commandBot[2].isdecimal() and commandBot[3].isdecimal() and len(commandBot[4]) == 8 and commandBot[4].isdigit():
+
+                    ord_rsv_price = int(commandBot[2])      # 예약단가
+                    ord_rsv_qty = int(commandBot[3])        # 예약수량
+                    ord_rsv_end_dt = commandBot[4]          # 예약죵료일
+
+                    # 현재가 시세기준 예약단가 상한가, 하한가 범위내 체크
+                    if ord_rsv_price > 0 and ord_rsv_price > upper_limit:     # 예약단가가 상한가보다 큰 경우
+                        context.bot.send_message(chat_id=user_id, text="예약단가("+format(ord_rsv_price, ',d')+") 상한가("+format(int(upper_limit), ',d')+") 초과 [" + company + "]")     
+                    elif ord_rsv_price > 0 and ord_rsv_price < lower_limit:   # 예약단가가 하한가보다 작은 경우
+                        context.bot.send_message(chat_id=user_id, text="예약단가("+format(ord_rsv_price, ',d')+") 하한가("+format(int(lower_limit), ',d')+") 이탈 [" + company + "]")     
+                    else:
+
+                        # 매매구분(전체:0 매수:1 매도:2)
+                        if commandBot[1] == '1':
+                            trade_dvsn = '02'
+                            trade_dvsn_nm = '매수'
+
+
+                        elif commandBot[1] == '2':
+                            trade_dvsn = '01'
+                            trade_dvsn_nm = '매도'
+                            # 계좌잔고 조회
+                            e = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                        
+                            ord_psbl_qty = 0
+                            for j, name in enumerate(e.index):
+                                e_code = e['pdno'][j]
+                                if e_code == code:
+                                    # 매입가 = 보유단가
+                                    hold_price = float(e['pchs_avg_pric'][j])
+                                    ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                            print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
+                            if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
+                                if ord_psbl_qty >= ord_rsv_qty:  # 주문가능수량이 예약수량보다 큰 경우
+
+                                    trade_cd = "01"
+                                    try:
+                                        # 주식예약주문
+                                        rsv_ord_result = order_reserve(access_token, app_key, app_secret, acct_no, code, ord_rsv_qty, ord_rsv_price, trade_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt)
+                                
+                                        if rsv_ord_result['rsvn_ord_seq'] != "":
+                                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 : <code>" + rsv_ord_result['rsvn_ord_seq'] + "</code> 예약주문처리", parse_mode='HTML')
+
+                                        else:
+                                            print("주식예약주문 실패")
+                                            context.bot.send_message(chat_id=user_id, text="[" + code + "] 주식예약주문 실패")
+
+                                    except Exception as e:
+                                        print('주식예약주문 오류.', e)
+                                        context.bot.send_message(chat_id=user_id, text="[" + code + "] [주식예약주문 오류] - "+str(e))
+
+                                else:
+                                    print("예약수량이 주문가능수량보다 커서 예약주문 불가")
+                                    context.bot.send_message(chat_id=user_id, text="예약수량이 주문가능수량보다 커서 예약주문 불가 [" + company + "]")     
+                            else:
+                                print("주문가능수량이 부족하여 예약주문 불가")
+                                context.bot.send_message(chat_id=user_id, text="주문가능수량이 부족하여 예약주문 불가 [" + company + "]")      
+
+                else:
+                    print("단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")
+                    context.bot.send_message(chat_id=user_id, text="단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합 [" + company + "]")     
+
+                
+
+                   
 
     else:
         print("종목코드 미존재")
