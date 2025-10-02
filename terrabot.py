@@ -7180,13 +7180,38 @@ def echo(update, context):
 
                     # 매매구분(전체:0 매수:1 매도:2)
                     if commandBot[1] == '1':
-                        trade_dvsn = '02'
-                        trade_dvsn_nm = '매수'
 
+                        # 매수예정금액
+                        buy_expect_sum = ord_rsv_price * ord_rsv_qty
+                        print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
+                        # 매수 가능(현금) 조회
+                        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                        print("매수 가능(현금) : " + format(int(b), ',d'));
+                    
+                        if int(b) > int(buy_expect_sum):  # 매수가능(현금)이 매수예정금액보다 큰 경우
+
+                            trade_cd = "02"
+                            try:
+                                # 주식예약주문
+                                rsv_ord_result = order_reserve(access_token, app_key, app_secret, str(acct_no), code, str(ord_rsv_qty), str(ord_rsv_price), trade_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt)
+                        
+                                if rsv_ord_result['RSVN_ORD_SEQ'] != "":
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 : <code>" + rsv_ord_result['RSVN_ORD_SEQ'] + "</code> 예약매수주문", parse_mode='HTML')
+
+                                else:
+                                    print("예약매수주문 실패")
+                                    context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약매수주문 실패")
+
+                            except Exception as e:
+                                print('예약매수주문 오류.', e)
+                                context.bot.send_message(chat_id=user_id, text="[" + code + "] [예약매수주문 오류] - "+str(e))
+                            
+                        else:
+                            print("매수 가능(현금) 부족")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') +"원 부족")
 
                     elif commandBot[1] == '2':
-                        trade_dvsn = '01'
-                        trade_dvsn_nm = '매도'
+
                         # 계좌잔고 조회
                         e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                     
@@ -7205,20 +7230,20 @@ def echo(update, context):
                                     rsv_ord_result = order_reserve(access_token, app_key, app_secret, str(acct_no), code, str(ord_rsv_qty), str(ord_rsv_price), trade_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt)
                             
                                     if rsv_ord_result['RSVN_ORD_SEQ'] != "":
-                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 : <code>" + rsv_ord_result['RSVN_ORD_SEQ'] + "</code> 예약주문처리", parse_mode='HTML')
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 : <code>" + rsv_ord_result['RSVN_ORD_SEQ'] + "</code> 예약매도주문", parse_mode='HTML')
 
                                     else:
-                                        print("주식예약주문 실패")
-                                        context.bot.send_message(chat_id=user_id, text="[" + code + "] 주식예약주문 실패")
+                                        print("예약주문 실패")
+                                        context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약매도주문 실패")
 
                                 except Exception as e:
-                                    print('주식예약주문 오류.', e)
-                                    context.bot.send_message(chat_id=user_id, text="[" + code + "] [주식예약주문 오류] - "+str(e))
+                                    print('예약주문 오류.', e)
+                                    context.bot.send_message(chat_id=user_id, text="[" + code + "] [예약매도주문 오류] - "+str(e))
 
                             else:
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약수량("+format(ord_rsv_qty, ',d')+"주)이 주문가능수량("+format(ord_psbl_qty, ',d')+"주)보다 커서 예약주문 불가")     
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약수량("+format(ord_rsv_qty, ',d')+"주)이 주문가능수량("+format(ord_psbl_qty, ',d')+"주)보다 커서 예약매도주문 불가")     
                         else:
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문가능수량이 없어 예약주문 불가")      
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문가능수량이 없어 예약매도주문 불가")      
 
                 else:
                     print("단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")
@@ -7266,7 +7291,7 @@ def echo(update, context):
                             rsv_ord_result = order_reserve_cancel_revice(access_token, app_key, app_secret, str(acct_no), "01", code, str(d_ord_rsvn_qty), ord_rsv_price, d_sll_buy_dvsn_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt, ord_rsv_no)
                     
                             if rsv_ord_result['NRML_PRCS_YN'] == "Y":
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정 처리완료")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정")
 
                             else:
                                 context.bot.send_message(chat_id=user_id, text="[" + code + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정 실패")
@@ -7277,7 +7302,11 @@ def echo(update, context):
                     else:
                         context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문예약수량("+format(d_ord_rsvn_qty, ',d')+"주)이 없어 예약주문정정 불가")     
                 else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약정보 미존재")      
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약정보 미존재")     
+
+            else:
+                print("예약주문번호, 정장가, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호, 정장가, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")         
 
         elif menuNum == '63':
             initMenuNum()
@@ -7323,7 +7352,7 @@ def echo(update, context):
                             rsv_ord_result = order_reserve_cancel_revice(access_token, app_key, app_secret, str(acct_no), "02", code, str(d_ord_rsvn_qty), d_ord_rsvn_unpr, d_sll_buy_dvsn_cd, "01" if d_ord_rsvn_unpr == 0 else "00", d_rsvn_end_dt, ord_rsv_no)
                     
                             if rsv_ord_result['NRML_PRCS_YN'] == "Y":
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문취소 처리완료")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문취소")
 
                             else:
                                 context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약주문취소 실패")
@@ -7335,7 +7364,10 @@ def echo(update, context):
                         context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문예약수량("+format(d_ord_rsvn_qty, ',d')+"주)이 없어 예약주문취소 불가")     
                 else:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약정보 미존재")      
-                   
+
+            else:
+                print("예약주문번호 미존재")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 미존재")        
 
     else:
         print("종목코드 미존재")
