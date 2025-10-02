@@ -3235,7 +3235,7 @@ def callback_get(update, context) :
                             d_rsvn_ord_ord_dt = d['rsvn_ord_ord_dt'][i]         # 예약주문주문일자
                             d_rsvn_ord_rcit_dt = d['rsvn_ord_rcit_dt'][i]       # 예약주문접수일자
                             d_code = d['pdno'][i]
-                            d_ord_dvsn_cd = d['ord_dvsn_cd'][i]                 # 주문구분코드
+                            d_ord_dvsn_cd = "시장가" if d['ord_dvsn_cd'][i] == "01" else "지정가"   
                             d_ord_rsvn_qty = int(d['ord_rsvn_qty'][i])          # 주문예약수량
                             d_tot_ccld_qty = int(d['tot_ccld_qty'][i])          # 총체결수량
                             d_cncl_ord_dt = d['cncl_ord_dt'][i]                 # 취소주문일자
@@ -3251,7 +3251,7 @@ def callback_get(update, context) :
                             d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                             d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} {"시장가" if d_ord_dvsn_cd == "01" else "지정가"} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}{d_ord_dvsn_cd} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                             result_msgs.append(msg1)
                             
                             if d_cncl_ord_dt != "":
