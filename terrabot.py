@@ -898,11 +898,11 @@ def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord
                "tr_id": "CTSC0008U",                                # tr_id : CTSC0008U(국내예약매수입력/주문예약매도입력)
     }  
     params = {
-                "CANO": acct_no,
+                "CANO": str(acct_no),
                 "ACNT_PRDT_CD": '01',
                 "PDNO": code,
-                "ORD_QTY": ord_qty,                                 # 주문주식수
-                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
+                "ORD_QTY": str(ord_qty),                                 # 주문주식수
+                "ORD_UNPR": str(ord_price),                              # 주문단가 : 시장가인 경우 0
                 "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
                 "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
                 "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
@@ -925,11 +925,11 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
                "tr_id": "CTSC0013U" if reserve_cd == "01" else "CTSC0009U", # tr_id : CTSC0013U 예약정정, CTSC0009U 예약최소
     }  
     params = {
-                "CANO": acct_no,
+                "CANO": str(acct_no),
                 "ACNT_PRDT_CD": '01',
                 "PDNO": code,
-                "ORD_QTY": ord_qty,                                 # 주문주식수
-                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
+                "ORD_QTY": str(ord_qty),                                 # 주문주식수
+                "ORD_UNPR": str(ord_price),                              # 주문단가 : 시장가인 경우 0
                 "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
                 "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
                 "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
@@ -957,7 +957,7 @@ def order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, r
                 "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자
                 "RSVN_ORD_SEQ": "",                                 # 예약주문순번
                 "TMNL_MDIA_KIND_CD": "10",
-                "CANO": acct_no,
+                "CANO": str(acct_no),
                 "ACNT_PRDT_CD": '01',
                 "PRCS_DVSN_CD": "0",                                # 처리구분코드 : 전체 0, 처리내역 1, 미처리내역 2
                 "CNCL_YN": "Y",                                     # 취소여부 : 'Y'
@@ -7160,7 +7160,7 @@ def echo(update, context):
             # 매매구분(매수:1 매도:2)
             if commandBot[1] not in ["1", "2"]:
                 print("매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
-                context.bot.send_message(chat_id=user_id, text="매매구분 값은 1(매수), 2(매도)만 허용됩니다. [" + company + "]")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
             else:    
                 # 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD) 존재시
                 if commandBot[2].isdecimal() and commandBot[3].isdecimal() and len(commandBot[4]) == 8 and commandBot[4].isdigit():
@@ -7171,9 +7171,9 @@ def echo(update, context):
 
                     # 현재가 시세기준 예약단가 상한가, 하한가 범위내 체크
                     if ord_rsv_price > 0 and ord_rsv_price > upper_limit:     # 예약단가가 상한가보다 큰 경우
-                        context.bot.send_message(chat_id=user_id, text="예약단가("+format(ord_rsv_price, ',d')+") 상한가("+format(int(upper_limit), ',d')+") 초과 [" + company + "]")     
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약단가("+format(ord_rsv_price, ',d')+"원) 상한가("+format(int(upper_limit), ',d')+"원) 초과")     
                     elif ord_rsv_price > 0 and ord_rsv_price < lower_limit:   # 예약단가가 하한가보다 작은 경우
-                        context.bot.send_message(chat_id=user_id, text="예약단가("+format(ord_rsv_price, ',d')+") 하한가("+format(int(lower_limit), ',d')+") 이탈 [" + company + "]")     
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약단가("+format(ord_rsv_price, ',d')+"원) 하한가("+format(int(lower_limit), ',d')+"원) 이탈")     
                     else:
 
                         # 매매구분(전체:0 매수:1 매도:2)
@@ -7216,15 +7216,13 @@ def echo(update, context):
                                         context.bot.send_message(chat_id=user_id, text="[" + code + "] [주식예약주문 오류] - "+str(e))
 
                                 else:
-                                    print("예약수량이 주문가능수량보다 커서 예약주문 불가")
-                                    context.bot.send_message(chat_id=user_id, text="예약수량이 주문가능수량보다 커서 예약주문 불가 [" + company + "]")     
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약수량("+format(ord_rsv_qty, ',d')+"주)이 주문가능수량("+format(ord_psbl_qty, ',d')+"주)보다 커서 예약주문 불가")     
                             else:
-                                print("주문가능수량이 부족하여 예약주문 불가")
-                                context.bot.send_message(chat_id=user_id, text="주문가능수량이 부족하여 예약주문 불가 [" + company + "]")      
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 주문가능수량이 없어 예약주문 불가")      
 
                 else:
                     print("단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")
-                    context.bot.send_message(chat_id=user_id, text="단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합 [" + company + "]")     
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 단가, 수량, 예약종료일-8자리(YYYYMMDD) 미존재 또는 부적합")     
 
                 
 
