@@ -898,11 +898,11 @@ def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord
                "tr_id": "CTSC0008U",                                # tr_id : CTSC0008U(국내예약매수입력/주문예약매도입력)
     }  
     params = {
-                "CANO": str(acct_no),
+                "CANO": acct_no,
                 "ACNT_PRDT_CD": '01',
                 "PDNO": code,
-                "ORD_QTY": str(ord_qty),                                 # 주문주식수
-                "ORD_UNPR": str(ord_price),                              # 주문단가 : 시장가인 경우 0
+                "ORD_QTY": ord_qty,                                 # 주문주식수
+                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
                 "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
                 "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
                 "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
@@ -925,11 +925,11 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
                "tr_id": "CTSC0013U" if reserve_cd == "01" else "CTSC0009U", # tr_id : CTSC0013U 예약정정, CTSC0009U 예약최소
     }  
     params = {
-                "CANO": str(acct_no),
+                "CANO": acct_no,
                 "ACNT_PRDT_CD": '01',
                 "PDNO": code,
-                "ORD_QTY": str(ord_qty),                                 # 주문주식수
-                "ORD_UNPR": str(ord_price),                              # 주문단가 : 시장가인 경우 0
+                "ORD_QTY": ord_qty,                                 # 주문주식수
+                "ORD_UNPR": ord_price,                              # 주문단가 : 시장가인 경우 0
                 "SLL_BUY_DVSN_CD": trade_cd,                        # 매도매수구분코드 : 01 매도, 02 매수
                 "ORD_DVSN_CD": ord_dvsn_cd,                         # 주문구분코드 : 00 지정가, 01 시장가, 02 조건부지정가, 05 장전 시간외
                 "ORD_OBJT_CBLC_DVSN_CD":"10",                       # 주문대상잔고구분코드 : 10 현금
@@ -957,7 +957,7 @@ def order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, r
                 "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자
                 "RSVN_ORD_SEQ": "",                                 # 예약주문순번
                 "TMNL_MDIA_KIND_CD": "10",
-                "CANO": str(acct_no),
+                "CANO": acct_no,
                 "ACNT_PRDT_CD": '01',
                 "PRCS_DVSN_CD": "0",                                # 처리구분코드 : 전체 0, 처리내역 1, 미처리내역 2
                 "CNCL_YN": "Y",                                     # 취소여부 : 'Y'
@@ -7202,7 +7202,7 @@ def echo(update, context):
                                     trade_cd = "01"
                                     try:
                                         # 주식예약주문
-                                        rsv_ord_result = order_reserve(access_token, app_key, app_secret, acct_no, code, ord_rsv_qty, ord_rsv_price, trade_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt)
+                                        rsv_ord_result = order_reserve(access_token, app_key, app_secret, str(acct_no), code, str(ord_rsv_qty), str(ord_rsv_price), trade_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt)
                                 
                                         if rsv_ord_result['rsvn_ord_seq'] != "":
                                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 : <code>" + rsv_ord_result['rsvn_ord_seq'] + "</code> 예약주문처리", parse_mode='HTML')
