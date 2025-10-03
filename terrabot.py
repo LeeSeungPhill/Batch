@@ -3251,7 +3251,7 @@ def callback_get(update, context) :
                             d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                             d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                            msg1 = f"[{d_name} {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                             result_msgs.append(msg1)
                             
                             if d_cncl_ord_dt != "":
