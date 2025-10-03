@@ -3251,7 +3251,7 @@ def callback_get(update, context) :
                             d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                             d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]} ~ {d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                            msg1 = f"[{d_name} - {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                             result_msgs.append(msg1)
                             
                             if d_cncl_ord_dt != "":
@@ -7200,7 +7200,7 @@ def echo(update, context):
 
                                 else:
                                     print("예약매수주문 실패")
-                                    context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약매수주문 실패")
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약매수주문 실패")
 
                             except Exception as e:
                                 print('예약매수주문 오류.', e)
@@ -7234,7 +7234,7 @@ def echo(update, context):
 
                                     else:
                                         print("예약주문 실패")
-                                        context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약매도주문 실패")
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약매도주문 실패")
 
                                 except Exception as e:
                                     print('예약주문 오류.', e)
@@ -7276,6 +7276,7 @@ def echo(update, context):
 
                     d_ord_rsvn_qty = 0
                     d_sll_buy_dvsn_cd = ""
+                    d_ord_dvsn_name = ""
                     for i, name in enumerate(d.index):
                         d_rsvn_ord_seq = int(d['rsvn_ord_seq'][i])          # 예약주문 순번
                         d_code = d['pdno'][i]
@@ -7283,6 +7284,7 @@ def echo(update, context):
                         if d_code == code and str(d_rsvn_ord_seq) == ord_rsv_no:
                             d_ord_rsvn_qty = int(d['ord_rsvn_qty'][i])          # 주문예약수량
                             d_sll_buy_dvsn_cd = d['sll_buy_dvsn_cd'][i]         # 매도매수구분코드
+                            d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
 
                     if d_ord_rsvn_qty >= 0:  # 주문예약수량이 존재하는 경우
 
@@ -7291,10 +7293,10 @@ def echo(update, context):
                             rsv_ord_result = order_reserve_cancel_revice(access_token, app_key, app_secret, str(acct_no), "01", code, str(d_ord_rsvn_qty), ord_rsv_price, d_sll_buy_dvsn_cd, "01" if ord_rsv_price == 0 else "00", ord_rsv_end_dt, ord_rsv_no)
                     
                             if rsv_ord_result['NRML_PRCS_YN'] == "Y":
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "-" + d_ord_dvsn_name + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정")
 
                             else:
-                                context.bot.send_message(chat_id=user_id, text="[" + code + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정 실패")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "-" + d_ord_dvsn_name + "] 정정가 : "+format(ord_rsv_price, ',d')+"원 예약주문정정 실패")
 
                         except Exception as e:
                             context.bot.send_message(chat_id=user_id, text="[" + code + "] [예약주문정정 오류] - "+str(e))
@@ -7335,6 +7337,7 @@ def echo(update, context):
                     d_ord_rsvn_unpr = 0
                     d_sll_buy_dvsn_cd = ""
                     d_rsvn_end_dt = ""
+                    d_ord_dvsn_name = ""
                     for i, name in enumerate(d.index):
                         d_rsvn_ord_seq = int(d['rsvn_ord_seq'][i])          # 예약주문 순번
                         d_code = d['pdno'][i]
@@ -7344,6 +7347,7 @@ def echo(update, context):
                             d_ord_rsvn_unpr = int(d['ord_rsvn_unpr'][i])        # 주문예약단가
                             d_sll_buy_dvsn_cd = d['sll_buy_dvsn_cd'][i]         # 매도매수구분코드
                             d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
+                            d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
 
                     if d_ord_rsvn_qty >= 0:  # 주문예약수량이 존재하는 경우
 
@@ -7352,10 +7356,10 @@ def echo(update, context):
                             rsv_ord_result = order_reserve_cancel_revice(access_token, app_key, app_secret, str(acct_no), "02", code, str(d_ord_rsvn_qty), d_ord_rsvn_unpr, d_sll_buy_dvsn_cd, "01" if d_ord_rsvn_unpr == 0 else "00", d_rsvn_end_dt, ord_rsv_no)
                     
                             if rsv_ord_result['NRML_PRCS_YN'] == "Y":
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문취소")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "-" + d_ord_dvsn_name + "] 예약주문취소")
 
                             else:
-                                context.bot.send_message(chat_id=user_id, text="[" + code + "] 예약주문취소 실패")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "-" + d_ord_dvsn_name + "] 예약주문취소 실패")
 
                         except Exception as e:
                             context.bot.send_message(chat_id=user_id, text="[" + code + "] [예약주문취소 오류] - "+str(e))
