@@ -14,13 +14,37 @@ import html
 URL_BASE = "https://api.kiwoom.com"    
 SOCKET_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket"  # 접속 URL
 
-# conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
-conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='192.168.50.80' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
 conn = db.connect(conn_string)
 
 CHAT_ID = "2147256258"
 TOKEN = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"
+
+def safe_day_rate(raw):
+    day_rate = 0.00
+    try:
+        raw = str(raw).strip()
+        if raw:
+            # 부호 처리
+            sign = -1 if raw.startswith('-') else 1
+            # 숫자만 추출
+            digits = ''.join(ch for ch in raw if ch.isdigit())
+            if digits:
+                value = sign * (int(digits) / 1000)  # 3자리 소수점
+                # numeric(8,2) 허용 범위 내로 clamp
+                if value > 999999.99:
+                    day_rate = 999999.99
+                elif value < -999999.99:
+                    day_rate = -999999.99
+                else:
+                    day_rate = round(value, 2)
+    except Exception as e:
+        print(f"등락율 변환 오류: {raw} → {e}")
+        day_rate = 0.00
+    return day_rate
+
 
 # 텔레그램 메시지 전송 함수
 async def send_telegram_message(message_text: str, parse_mode: str = 'HTML'):
@@ -121,7 +145,7 @@ class WebSocketClient:
 
                 elif trnm == 'CNSRLST':
                     self.condition_list = response.get('data', [])
-                    print(f'조건검색 목록 수신: {self.condition_list}')
+                    # print(f'조건검색 목록 수신: {self.condition_list}')
                     if self.condition_list:
                         # 다섯번째 조건검색식: 파워급등주
                         seq5 = self.condition_list[5][0]
@@ -149,12 +173,38 @@ class WebSocketClient:
 
                 elif trnm == 'CNSRREQ':
                     self.search_results = response.get('data', [])
-                    print(f'조건검색 결과 수신: {self.search_results}')
+                    # print(f'조건검색 결과 수신: {self.search_results}')
                     seq = response.get('seq', '').strip()  # 시퀀스 번호로 구분
 
                     if seq == self.condition_list[5][0]:  # 파워급등주 결과
+                        print(f'{self.power_rapid_name}')
+                        # print(f'{self.power_rapid_name}-{self.search_results}')
+                        for i in self.search_results:
+                            code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
+                            name = i['302']
+                            current_price = math.ceil(float(i['10']))
+                            rate = float(i['12']) / 1000
+                            vol = math.ceil(float(i['13']))
+                            high_price = math.ceil(float(i['17']))
+                            low_price = math.ceil(float(i['18']))
+                            print(f"{name} [{code}] 현재가: {format(current_price, ',d')}원, "
+                                  f"거래량: {format(vol, ',d')}주, 고가: {format(high_price, ',d')}원, "
+                                  f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                         await self.save_to_db(self.power_rapid_name, self.search_results)
                     elif seq == self.condition_list[6][0]:  # 파워종목 결과
+                        print(f'{self.power_item_name}')
+                        # print(f'{self.power_item_name}-{self.search_results}')
+                        for i in self.search_results:
+                            code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
+                            name = i['302']
+                            current_price = math.ceil(float(i['10']))
+                            rate = float(i['12']) / 1000
+                            vol = math.ceil(float(i['13']))
+                            high_price = math.ceil(float(i['17']))
+                            low_price = math.ceil(float(i['18']))
+                            print(f"{name} [{code}] 현재가: {format(current_price, ',d')}원, "
+                                  f"거래량: {format(vol, ',d')}주, 고가: {format(high_price, ',d')}원, "
+                                  f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                         await self.save_to_db(self.power_item_name, self.search_results)
                 
                 # 메시지 유형이 PING일 경우 수신값 그대로 송신
@@ -202,6 +252,7 @@ class WebSocketClient:
                         math.ceil(float(i['18'])),  # 저가
                         math.ceil(float(i['17'])),  # 고가
                         math.ceil(float(i['10'])),  # 현재가
+                        safe_day_rate(i.get('12')), # 등락률
                         math.ceil(float(i['13'])),  # 거래량
                         datetime.now()
                     )
@@ -213,7 +264,7 @@ class WebSocketClient:
                     telegram_text = (
                         f"&lt;{safe_search_name}&gt; {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
                         f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
-                        f"저가: {format(math.ceil(float(i['18'])), ',d')}원"
+                        f"저가: {format(math.ceil(float(i['18'])), ',d')}원, 등락율: {safe_day_rate(i.get('12'))}%"
                     )
                     telegram_messages.append((code, telegram_text))
 
@@ -222,7 +273,7 @@ class WebSocketClient:
                 insert_query = """
                     INSERT INTO stock_search_form (
                         search_day, search_time, search_name, code, name,
-                        low_price, high_price, current_price, volumn, cdate
+                        low_price, high_price, current_price, day_rate, volumn, cdate
                     )
                     VALUES %s
                     ON CONFLICT (search_day, search_name, code) DO NOTHING
