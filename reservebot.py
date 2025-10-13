@@ -23,17 +23,17 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 # 텔레그램봇 사용할 token
-if arguments[1] == 'honey_reserve':
+if arguments[1] == 'chichipa':
     token = "8378865179:AAGHrGrKKvcAfBarecR4U8Q5f4otl_42oxY"
-elif arguments[1] == 'phills13_reserve':
+elif arguments[1] == 'phills13':
     token = "8422979456:AAHnPsfzB6IjJFnhMVWEbNzLVSODvZWHeds"
-elif arguments[1] == 'phills15_reserve':
+elif arguments[1] == 'phills15':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-elif arguments[1] == 'phills2_reserve':
+elif arguments[1] == 'phills2':
     token = "8473964098:AAE2tWhb6k9jO6up6BxQ_6jynJ7gFUZ1hmY"
-elif arguments[1] == 'phills75_reserve':
+elif arguments[1] == 'phills75':
     token = "8414188190:AAEXmNMChpLRyPQi0qEGTaLu5znoNmwGbZk"
-elif arguments[1] == 'mama_reserve':
+elif arguments[1] == 'yh480825':
     token = "8441080866:AAFlUYyUjYlFHoctp2vNbQIjhkEkxVEuQBM"
 
 # 텔레그램봇 updater(토큰, 입력값)
