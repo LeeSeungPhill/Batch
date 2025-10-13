@@ -23,20 +23,18 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 # 텔레그램봇 사용할 token
-if arguments[1] == 'chichipa':
-    token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-elif arguments[1] == 'phills13':
-    token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
-elif arguments[1] == 'phills15':
+if arguments[1] == 'honey_reserve':
+    token = "8378865179:AAGHrGrKKvcAfBarecR4U8Q5f4otl_42oxY"
+elif arguments[1] == 'phills13_reserve':
+    token = "8422979456:AAHnPsfzB6IjJFnhMVWEbNzLVSODvZWHeds"
+elif arguments[1] == 'phills15_reserve':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-elif arguments[1] == 'phills2':
-    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[1] == 'phills75':
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
-elif arguments[1] == 'yh480825':
-    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
-else:
-    token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"    
+elif arguments[1] == 'phills2_reserve':
+    token = "8473964098:AAE2tWhb6k9jO6up6BxQ_6jynJ7gFUZ1hmY"
+elif arguments[1] == 'phills75_reserve':
+    token = "8414188190:AAEXmNMChpLRyPQi0qEGTaLu5znoNmwGbZk"
+elif arguments[1] == 'mama_reserve':
+    token = "8441080866:AAFlUYyUjYlFHoctp2vNbQIjhkEkxVEuQBM"
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
