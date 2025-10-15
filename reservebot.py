@@ -90,8 +90,8 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "취소"])
-    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 5))
+    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "취소"])
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -379,6 +379,54 @@ def callback_get(update, context) :
                                       message_id=update.callback_query.message.message_id)
         return
 
+    elif data_selected.find("보유종목") != -1:
+
+        ac = account()
+        acct_no = ac['acct_no']
+        access_token = ac['access_token']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
+
+        try:
+            context.bot.edit_message_text(text="[보유종목 조회]",
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+            # 계좌잔고 조회
+            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+        
+            result_msgs = []
+            ord_psbl_qty = 0
+            for i, name in enumerate(c.index):
+                code = c['pdno'][i]
+                name = c['prdt_name'][i]
+                purchase_price = c['pchs_avg_pric'][i]
+                purchase_amount = int(c['hldg_qty'][i])
+                purchase_sum = int(c['pchs_amt'][i])
+                current_price = int(c['prpr'][i])
+                eval_sum = int(c['evlu_amt'][i])
+                earnings_rate = c['evlu_pfls_rt'][i]
+                valuation_sum = int(c['evlu_pfls_amt'][i])
+                ord_psbl_qty = int(c['ord_psbl_qty'][i])
+
+                msg = f"[{name}[<code>{code}</code>] 단가:{format(int(purchase_price), ',d')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원"
+                result_msgs.append(msg)
+
+            final_message = "\n".join(result_msgs) if result_msgs else "보유종목 조회 대상이 존재하지 않습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )
+
+
+        except Exception as e:
+            print('보유종목 조회 오류.', e)
+            context.bot.edit_message_text(text="[보유종목 조회] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+                
     elif data_selected.find("전체주문") != -1:
 
         ac = account()
@@ -482,7 +530,7 @@ def callback_get(update, context) :
                     d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                     d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                    msg1 = f"[{d_name} {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                    msg1 = f"[{d_name}[<code>{d_code}</code>] {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                     result_msgs.append(msg1)
                     
                     if d_cncl_ord_dt != "":
