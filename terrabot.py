@@ -80,7 +80,7 @@ stock_code['code'] = stock_code['code'].apply(normalize_code)
 if arguments[1] == 'chichipa':
     token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
 elif arguments[1] == 'phills13':
-    token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
+    token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
 elif arguments[1] == 'phills15':
     token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
 elif arguments[1] == 'phills2':
@@ -88,7 +88,7 @@ elif arguments[1] == 'phills2':
 elif arguments[1] == 'phills75':
     token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
 elif arguments[1] == 'yh480825':
-    token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
+    token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
 else:
     token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"    
 
@@ -3518,7 +3518,7 @@ def callback_get(update, context) :
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[<code>" + i[6] + "</code>]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액({format(limit_amt, ',d')})원, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"* {company} 매입가:{format(int(purchase_price), ',d')}원, 매입수량:{format(purchase_amount, ',d')}주, 매입금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earning_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원, 저항가:{format(sign_resist_price, ',d')}원, 지지가:{format(sign_support_price, ',d')}원, 최종목표가:{format(end_target_price, ',d')}원, 최종이탈가:{format(end_loss_price, ',d')}원, 손절가:{format(limit_price, ',d')}원, 손절금액:{format(limit_amt, ',d')}원, 매매계획:{trading_plan} => {sell_command}"), parse_mode="HTML")
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
@@ -5629,7 +5629,7 @@ def echo(update, context):
                     sell_command = f"/BalanceSell_{i[6]}_{avail_amount}"
                     company = i[7] + "[" + i[6] + "]"
            
-                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"{company} : 매입가-{format(int(purchase_price), ',d')}원, 매입수량-{format(purchase_amount, ',d')}주, 매입금액-{format(purchase_sum, ',d')}원, 현재가-{format(current_price, ',d')}원, 평가금액-{format(eval_sum, ',d')}원, 수익률({str(earning_rate)})%, 손수익금액({format(valuation_sum, ',d')})원, 저항가-{format(sign_resist_price, ',d')}원, 지지가-{format(sign_support_price, ',d')}원, 최종목표가-{format(end_target_price, ',d')}원, 최종이탈가-{format(end_loss_price, ',d')}원, 손절가-{format(limit_price, ',d')}원, 손절금액({format(limit_amt, ',d')})원, 매매계획-{trading_plan} => {sell_command}"), parse_mode="HTML")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text=(f"* {company} 매입가:{format(int(purchase_price), ',d')}원, 매입수량:{format(purchase_amount, ',d')}주, 매입금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earning_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원, 저항가:{format(sign_resist_price, ',d')}원, 지지가:{format(sign_support_price, ',d')}원, 최종목표가:{format(end_target_price, ',d')}원, 최종이탈가:{format(end_loss_price, ',d')}원, 손절가:{format(limit_price, ',d')}원, 손절금액:{format(limit_amt, ',d')}원, 매매계획:{trading_plan} => {sell_command}"), parse_mode="HTML")
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
                     updater.dispatcher.add_handler(get_handler)
