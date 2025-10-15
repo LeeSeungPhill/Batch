@@ -3445,7 +3445,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan, COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
                 result_one00 = cur100.fetchall()
                 cur100.close()
 
@@ -5555,7 +5555,7 @@ def echo(update, context):
 
             # 보유종목정보 조회
             cur100 = conn.cursor()
-            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, avail_amount, trading_plan, COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
+            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
             result_one00 = cur100.fetchall()
             cur100.close()
 
