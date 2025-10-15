@@ -408,7 +408,7 @@ def callback_get(update, context) :
                 valuation_sum = int(c['evlu_pfls_amt'][i])
                 ord_psbl_qty = int(c['ord_psbl_qty'][i])
 
-                msg = f"[{name}[<code>{code}</code>] 단가:{format(int(purchase_price), ',d')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원"
+                msg = f"{name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원"
                 result_msgs.append(msg)
 
             final_message = "\n".join(result_msgs) if result_msgs else "보유종목 조회 대상이 존재하지 않습니다."
@@ -461,7 +461,7 @@ def callback_get(update, context) :
                     d_remain_qty = d['rmn_qty'][i]
                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
-                    msg = f"[{d_name} - {d_order_tmd[:2]}:{d_order_tmd[2:4]}:{d_order_tmd[4:]}] 주문번호 : <code>{str(d_order_no)}</code>, {d_order_type}가 : {format(int(d_order_price), ',d')}원, {d_order_type}량 : {format(int(d_order_amount), ',d')}주, 체결량 : {format(int(d_total_complete_qty), ',d')}주, 잔량 : {format(int(d_remain_qty), ',d')}주, 체결금 : {format(int(d_total_complete_amt), ',d')}원"
+                    msg = f"[{d_name} - {d_order_tmd[:2]}:{d_order_tmd[2:4]}:{d_order_tmd[4:]}] 주문번호:<code>{str(d_order_no)}</code>, {d_order_type}가:{format(int(d_order_price), ',d')}원, {d_order_type}량:{format(int(d_order_amount), ',d')}주, 체결량:{format(int(d_total_complete_qty), ',d')}주, 잔량:{format(int(d_remain_qty), ',d')}주, 체결금:{format(int(d_total_complete_amt), ',d')}원"
                     result_msgs.append(msg)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "일별주문체결 조회 대상이 존재하지 않습니다."
@@ -530,14 +530,14 @@ def callback_get(update, context) :
                     d_ord_dvsn_name = d['ord_dvsn_name'][i]             # 주문구분명
                     d_rsvn_end_dt = d['rsvn_end_dt'][i]                 # 예약종료일자
 
-                    msg1 = f"[{d_name}[<code>{d_code}</code>] {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]}] 예약번호 : <code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name} : {format(d_ord_rsvn_unpr, ',d')}원, 예약수량 : {format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                    msg1 = f"{d_name}[<code>{d_code}</code>] {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]} 예약번호:<code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}:{format(d_ord_rsvn_unpr, ',d')}원, 예약수량:{format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                     result_msgs.append(msg1)
                     
                     if d_cncl_ord_dt != "":
-                        msg2 = f", 취소주문일자 : {d_cncl_ord_dt[:4]}/{d_cncl_ord_dt[4:6]}/{d_cncl_ord_dt[6:]}"
+                        msg2 = f", 취소주문일자:{d_cncl_ord_dt[:4]}/{d_cncl_ord_dt[4:6]}/{d_cncl_ord_dt[6:]}"
                         result_msgs.append(msg2)
                     if str(d_order_no) != "":
-                        msg3 = f", 주문번호 : <code>{str(d_order_no)}</code>, 체결수량 : {format(d_tot_ccld_qty, ',d')}주, 체결금액 : {format(d_tot_ccld_amt, ',d')}원"
+                        msg3 = f", 주문번호:<code>{str(d_order_no)}</code>, 체결수량:{format(d_tot_ccld_qty, ',d')}주, 체결금액:{format(d_tot_ccld_amt, ',d')}원"
                         result_msgs.append(msg3)
 
                 final_message = "\n".join(result_msgs) if result_msgs else "전체예약 조회 대상이 존재하지 않습니다."
