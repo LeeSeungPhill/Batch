@@ -139,7 +139,7 @@ if result_one == None:
             if nick == 'chichipa':
                 token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
             elif nick == 'phills13':
-                token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
+                token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
             elif nick == 'phills15':
                 token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
             elif nick == 'phills2':
@@ -147,7 +147,7 @@ if result_one == None:
             elif nick == 'phills75':
                 token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
             elif nick == 'yh480825':
-                token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
+                token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
             else:
                 token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"  
 

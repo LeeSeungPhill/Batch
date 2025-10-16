@@ -284,7 +284,7 @@ if result_one == None:
             if nick == 'chichipa':
                 token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
             elif nick == 'phills13':
-                token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
+                token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
             elif nick == 'phills15':
                 token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
             elif nick == 'phills2':
@@ -292,7 +292,7 @@ if result_one == None:
             elif nick == 'phills75':
                 token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
             elif nick == 'yh480825':
-                token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
+                token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
             else:
                 token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"  
 
@@ -569,6 +569,14 @@ if result_one == None:
 
                             # 매매자동처리 정보의 저가가 이탈시
                             if int(a['stck_prpr']) < i[8]:
+                                
+                                # 매매내역정보의 매매미처리 매수 대상 조회
+                                # 안전마진 확보 매도 및 이탈가 아탈 매도
+                                
+                                # 잔고수량 존재하는 매매내역정보의 매매처리 매수 대상 조회
+                                # 매수당시 이탈가 체크 및 최종변경된 이탈가 체크 : 최종 수익금 체크 매도 
+
+                                
                                 # 계좌종목 조회
                                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
