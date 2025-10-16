@@ -35,19 +35,11 @@ elif arguments[1] == '3':
 elif arguments[1] == '4':
     search_name = "파워종목"        
 
-# 텔레그램봇 사용할 token
-if arguments[2] == 'chichipa':
-    token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-elif arguments[2] == 'phills13':
-    token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
-elif arguments[2] == 'phills15':
-    token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-elif arguments[2] == 'phills2':
-    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[2] == 'yh480825':
-    token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
-else:
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
+cur001 = conn.cursor()
+cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = '" + arguments[2] + "'")
+result_001 = cur001.fetchone()
+cur001.close()
+token = result_001[0]
 
 # 텔레그램 연동 토큰값 설정
 bot = telegram.Bot(token)

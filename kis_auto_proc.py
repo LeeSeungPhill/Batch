@@ -37,14 +37,14 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no, access_token, app_key, app_secret, token_publ_date, token_day = result_two
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1 = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
     if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
@@ -62,7 +62,8 @@ def account(nickname):
         'acct_no': acct_no,
         'access_token': access_token,
         'app_key': app_key,
-        'app_secret': app_secret
+        'app_secret': app_secret,
+        'bot_token1': bot_token1
     }
 
 # 주식현재가 시세
@@ -280,27 +281,12 @@ if result_one == None:
 
     for nick in nickname_list:
         try:
-            # 텔레그램봇 사용할 token
-            if nick == 'chichipa':
-                token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-            elif nick == 'phills13':
-                token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
-            elif nick == 'phills15':
-                token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-            elif nick == 'phills2':
-                token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-            elif nick == 'phills75':
-                token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
-            elif nick == 'yh480825':
-                token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
-            else:
-                token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"  
-
             ac = account(nick)
             acct_no = ac['acct_no']
             access_token = ac['access_token']
             app_key = ac['app_key']
             app_secret = ac['app_secret']
+            token = ac['bot_token1']
 
             # 매매자동처리 조회
             cur31 = conn.cursor()

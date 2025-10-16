@@ -32,21 +32,11 @@ def search(access_token, app_key, app_secret, user_token, search_choice):
     elif search_choice == '4':
         search_name = "파워종목"        
 
-    # 텔레그램봇 사용할 token
-    if user_token == 'chichipa':
-        token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-    elif user_token == 'phills13':
-        token = "5721274603:AAHiwtuara7M-I-MIzcrt3E8TZBCRUpBUB4"
-    elif user_token == 'phills15':
-        token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-    elif user_token == 'phills2':
-        token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-    elif user_token == 'phills75':
-        token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"    
-    elif user_token == 'yh480825':
-        token = "8143915544:AAEF-wVvqg9XZFKkVF4zUjm5LYC648OSWOg"    
-    else:
-        token = "6008784254:AAEcJaePafd6Bh0riGL57OjhZ_ZoFxe6Fw0"     
+    cur001 = conn.cursor()
+    cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = '" + user_token + "'")
+    result_001 = cur001.fetchone()
+    cur001.close()
+    token = result_001[0]
 
     # 텔레그램 연동 토큰값 설정
     bot = telegram.Bot(token)

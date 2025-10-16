@@ -76,21 +76,11 @@ def normalize_code(code):
 
 stock_code['code'] = stock_code['code'].apply(normalize_code)
 
-# 텔레그램봇 사용할 token
-if arguments[1] == 'chichipa':
-    token = "6353758449:AAG6LVdzgSRDSspoSzSJZVGnGw1SGHlAgi4"
-elif arguments[1] == 'phills13':
-    token = "5721274603:AAE8wMUZTmi3RO3td-Ph6MytwSFXJqWy2sM"
-elif arguments[1] == 'phills15':
-    token = "6376313566:AAFPYOKj5_yyZ5jZJJ4JXJPqpyZXXo3fZ4M"
-elif arguments[1] == 'phills2':
-    token = "5458112774:AAGwNnfjuC75WdK2ZYm_mttmXajzkhyvaHc"
-elif arguments[1] == 'phills75':
-    token = "7242807146:AAH9fbu34tKKNaDDtJ2ew6zYPhzXkVvc9KA"
-elif arguments[1] == 'yh480825':
-    token = "8143915544:AAF1TzFXNX0dGpgERgZUVhHXYhoGjqstQlY"    
-else:
-    token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"    
+cur001 = conn.cursor()
+cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+result_001 = cur001.fetchone()
+cur001.close()
+token = result_001[0]
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
