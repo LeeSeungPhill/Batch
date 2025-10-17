@@ -18,9 +18,13 @@ SOCKET_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket"  # 접속 URL
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
 conn = db.connect(conn_string)
+cur001 = conn.cursor()
+cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
+result_001 = cur001.fetchone()
+cur001.close()
 
 CHAT_ID = "2147256258"
-TOKEN = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"
+TOKEN = result_001[0]
 
 def safe_day_rate(raw):
     day_rate = 0.00

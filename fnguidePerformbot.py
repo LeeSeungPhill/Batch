@@ -12,6 +12,7 @@ import urllib3
 from pykrx import stock
 from mplfinance.original_flavor import candlestick2_ohlc
 import matplotlib.ticker as mticker
+import psycopg2 as db
 
 urllib3.disable_warnings()
 matplotlib.use('SVG')
@@ -49,8 +50,15 @@ def normalize_code(code):
 
 stock_code['code'] = stock_code['code'].apply(normalize_code)
 
-# 텔레그램봇 사용할 token
-token = "6008784254:AAGYG-ZqwsJ4EKeidhzxn2EaYNLLFOPRMBI"
+# PostgreSQL 연결 설정
+conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+# DB 연결
+conn = db.connect(conn_string)
+cur001 = conn.cursor()
+cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
+result_001 = cur001.fetchone()
+cur001.close()
+token = result_001[0]
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
