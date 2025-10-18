@@ -18,13 +18,9 @@ SOCKET_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket"  # 접속 URL
 conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 
 conn = db.connect(conn_string)
-cur001 = conn.cursor()
-cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
-result_001 = cur001.fetchone()
-cur001.close()
 
 CHAT_ID = "2147256258"
-TOKEN = result_001[0]
+TOKEN = ""
 
 def safe_day_rate(raw):
     day_rate = 0.00
@@ -318,7 +314,7 @@ class WebSocketClient:
 async def main():
 
     cur01 = conn.cursor()
-    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
+    cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
     result_one = cur01.fetchone()
     cur01.close()
 
@@ -326,6 +322,7 @@ async def main():
     access_token = result_one[1]
     app_key = result_one[2]
     app_secret = result_one[3]
+    TOKEN = result_one[6]
     today = datetime.now().strftime("%Y%m%d")
 
     YmdHMS = datetime.now()
