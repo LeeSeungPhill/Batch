@@ -20,7 +20,6 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 CHAT_ID = "2147256258"
-TOKEN = ""
 
 def safe_day_rate(raw):
     day_rate = 0.00
@@ -47,9 +46,15 @@ def safe_day_rate(raw):
 
 
 # 텔레그램 메시지 전송 함수
-async def send_telegram_message(message_text: str, parse_mode: str = 'HTML'):
-    bot = Bot(token=TOKEN)
-    await bot.send_message(chat_id=CHAT_ID, text=message_text, parse_mode=parse_mode)
+async def send_telegram_message(message_text: str, bot_token: str, parse_mode: str = 'HTML'):
+    bot = Bot(token=bot_token)
+    
+    await asyncio.to_thread(
+        bot.send_message,
+        chat_id=CHAT_ID,
+        text=message_text,
+        parse_mode=parse_mode
+    )
 
 def auth(APP_KEY, APP_SECRET):
 
@@ -73,9 +78,10 @@ def auth(APP_KEY, APP_SECRET):
     return response.json()["token"]
 
 class WebSocketClient:
-    def __init__(self, uri, access_token):
+    def __init__(self, uri, access_token, bot_token):
         self.uri = uri
         self.access_token = access_token
+        self.bot_token = bot_token
         self.websocket = None
         self.connected = False
         self.keep_running = True
@@ -289,10 +295,12 @@ class WebSocketClient:
                 # 삽입된 코드 추출
                 inserted_codes = [row[0] for row in cur.fetchall()]
 
+                bot_token = self.bot_token
+
                 # 텔레그램 메시지 전송
                 for code, message in telegram_messages:
                     if code in inserted_codes:
-                        await send_telegram_message(message, parse_mode='HTML')
+                        await send_telegram_message(message, bot_token, parse_mode='HTML')
 
                 print(f"{len(inserted_codes)}건의 데이터가 저장되고 텔레그램 알림이 전송되었습니다.")
             else:
@@ -322,7 +330,7 @@ async def main():
     access_token = result_one[1]
     app_key = result_one[2]
     app_secret = result_one[3]
-    TOKEN = result_one[6]
+    bot_token = result_one[6]
     today = datetime.now().strftime("%Y%m%d")
 
     YmdHMS = datetime.now()
@@ -344,7 +352,7 @@ async def main():
         cur02.close()
 
 	# WebSocketClient 전역 변수 선언
-    websocket_client = WebSocketClient(SOCKET_URL, access_token)
+    websocket_client = WebSocketClient(SOCKET_URL, access_token, bot_token)
     await websocket_client.run()
 
 # asyncio로 프로그램을 실행합니다.
