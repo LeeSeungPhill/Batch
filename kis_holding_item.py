@@ -1081,10 +1081,10 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
     
         cur600.close()
 
-async def main(telegram_text):
+def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
 
 
 # 휴일정보 조회
@@ -1224,7 +1224,7 @@ if result_one == None:
                                     else:
                                         telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']                            
                                     # 텔레그램 메시지 전송
-                                    asyncio.run(main(telegram_text))
+                                    main(telegram_text)
 
                                     # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                     cur20 = conn.cursor()
@@ -1357,7 +1357,7 @@ if result_one == None:
                             else:
                                 telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']                            
                             # 텔레그램 메시지 전송
-                            asyncio.run(main(telegram_text))
+                            main(telegram_text)
 
                             # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                             cur20 = conn.cursor()

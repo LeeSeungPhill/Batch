@@ -263,10 +263,10 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
-async def main(telegram_text):
+def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
 
 # 휴일정보 조회
 cur0 = conn.cursor()
@@ -520,7 +520,7 @@ if result_one == None:
 
                                 telegram_text = (f"[자동매수]{i[1]}[<code>{i[2]}</code>] : {candle_type}{trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(low_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원 => {buy_command}")
                                 # 텔레그램 메시지 전송
-                                asyncio.run(main(telegram_text))
+                                main(telegram_text)
 
                                 cur400 = conn.cursor()
                                 # UPDATE
@@ -636,7 +636,7 @@ if result_one == None:
 
                                             telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
                                             # 텔레그램 메시지 전송
-                                            asyncio.run(main(telegram_text))
+                                            main(telegram_text)
 
                                         if j_hldg_qty > 0:
                                             cur400 = conn.cursor()

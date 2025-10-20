@@ -77,10 +77,10 @@ def inquire_search_result(access_token, app_key, app_secret, id, seq):
     # ar.printAll()
     return ar.getBody().output2
 
-async def main(telegram_text):
+def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id, telegram_text)
+    bot.send_message(chat_id, telegram_text)
 
 cur01 = conn.cursor()
 cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date from \"stockAccount_stock_account\" where nick_name = '" + arguments[2] + "'")
@@ -141,7 +141,7 @@ for i in item_search:
         # 텔레그램 메시지 전송
         telegram_text = "<" + search_name + "(" + str(number) + ")> " + i['name'] + "[" + i['code'] + "] 현재가 : " + format(math.ceil(float(i['price'])), ',d') + "원, 등략율 : " + str(round(float(i['chgrate']), 2)) + "%, 거래량 : " + format(math.ceil(float(i['acml_vol'])), ',d') + "주, 전일대비 : " + str(round(float(i['chgrate2']), 2)) + "%, 고가 : " + format(math.ceil(float(i['high'])), ',d') + "원, 저가 : " + format(math.ceil(float(i['low'])), ',d') + "원, 시가총액 : " + format(int(round(float(i['stotprice']))), ',d') + "억원"
         # 텔레그램 메시지 전송
-        asyncio.run(main(telegram_text))
+        main(telegram_text)
         # insert 쿼리
         insert_query = "insert into stock_search_form(search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         # insert 인자값 설정

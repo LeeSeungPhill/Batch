@@ -537,10 +537,10 @@ def fundTrail_proc():
                 conn.commit()
                 cur603.close()
 
-async def main(telegram_text):
+def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
 
 # 휴일정보 조회
 cur0 = conn.cursor()
@@ -759,7 +759,7 @@ if result_one == None:
                                                         # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                         telegram_text = "[시장상승]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                     # 텔레그램 메시지 전송
-                                                    asyncio.run(main(telegram_text))
+                                                    main(telegram_text)
 
                                                     # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                                     cur20 = conn.cursor()
@@ -788,7 +788,7 @@ if result_one == None:
                                                         # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                         telegram_text = "[시장하락]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                     # 텔레그램 메시지 전송
-                                                    asyncio.run(main(telegram_text))
+                                                    main(telegram_text)
 
                                                     # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                                     cur20 = conn.cursor()
@@ -817,7 +817,7 @@ if result_one == None:
                                                 else:
                                                     telegram_text = "[장마감전]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                 # 텔레그램 메시지 전송
-                                                asyncio.run(main(telegram_text))
+                                                main(telegram_text)
 
                                                 # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                                 cur20 = conn.cursor()
@@ -961,7 +961,7 @@ if result_one == None:
                                                 # telegram_text = "[시장상승-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                 telegram_text = "[시장상승]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                             # 텔레그램 메시지 전송
-                                            asyncio.run(main(telegram_text))
+                                            main(telegram_text)
 
                                             # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                             cur20 = conn.cursor()
@@ -990,7 +990,7 @@ if result_one == None:
                                                 # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                                 telegram_text = "[시장하락]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                             # 텔레그램 메시지 전송
-                                            asyncio.run(main(telegram_text))
+                                            main(telegram_text)
 
                                             # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                             cur20 = conn.cursor()
@@ -1019,7 +1019,7 @@ if result_one == None:
                                         else:
                                             telegram_text = "[장마감전]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                         # 텔레그램 메시지 전송
-                                        asyncio.run(main(telegram_text))
+                                        main(telegram_text)
 
                                         # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                         cur20 = conn.cursor()
@@ -1253,7 +1253,7 @@ if result_one == None:
                                     print("시장 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
                                     telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주" 
                                     # 텔레그램 메시지 전송
-                                    asyncio.run(main(telegram_text))
+                                    main(telegram_text)
 
                                     # if i[0] == "0001":
                                     #     if len(result_five) > 0:
@@ -1307,7 +1307,7 @@ if result_one == None:
                             print("시장 : " + i[1] + "추적신호 : " + trail_signal_name)
                             telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
                             # 텔레그램 메시지 전송
-                            asyncio.run(main(telegram_text))
+                            main(telegram_text)
 
                             # if i[0] == "0001":
                             #     if len(result_five) > 0:

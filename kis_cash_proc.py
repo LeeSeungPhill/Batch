@@ -118,10 +118,10 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
 
     return pd.DataFrame(output)
 
-async def main(telegram_text):
+def main(telegram_text):
     chat_id = "2147256258"
     bot = telegram.Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
 
 # 휴일정보 조회
 cur0 = conn.cursor()
@@ -207,7 +207,7 @@ if result_one == None:
                             sell_command = f"/HoldingSell_{j[0]}_{cash_rate_qty}"
                             telegram_text = (f"[{round(cash_transfer_rate * 100, 2)}% 현금비중]{j[1]}[<code>{j[0]}</code>] 현재가 : {format(current_price, ',d')}원, 매도량 : {format(cash_rate_qty, ',d')}주, 매도금액 : {format(cash_rate_amt, ',d')}원 => {sell_command}")
                             # 텔레그램 메시지 전송
-                            asyncio.run(main(telegram_text))
+                            main(telegram_text)
 
                     except Exception as ex:
                         print(f"현재가 시세 에러 : [{j[0]}] {ex}")    
