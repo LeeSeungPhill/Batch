@@ -275,7 +275,9 @@ def get_command6(update, context) :
 
                     msg = f"[{d_name}] 매수가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /rebuy"
                     result_msgs.append(msg)
-                    update.message.reply_text(result_msgs, parse_mode='HTML')
+                    reply_text = "\n".join(result_msgs)
+                    reply_text = reply_text.replace('\\/', '/')
+                    update.message.reply_text(reply_text, parse_mode='HTML')
 
             else:
                 print("매수주문 실패")
@@ -380,7 +382,9 @@ def get_command7(update, context) :
 
                     msg = f"[{g_market_sell_company}] 매도가 : {format_number(int(d_order_price))}원, 체결량 : {format(int(d_total_complete_qty))}주, 체결금액 : {format(int(d_total_complete_amt))}원, 주문번호 : <code>{str(d_order_no)}</code> => /resell"
                     result_msgs.append(msg)
-                    update.message.reply_text(result_msgs, parse_mode='HTML')
+                    reply_text = "\n".join(result_msgs)
+                    reply_text = reply_text.replace('\\/', '/')
+                    update.message.reply_text(reply_text, parse_mode='HTML')
                 
             else:
                 print("매도주문 실패")
