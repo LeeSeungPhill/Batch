@@ -67,7 +67,7 @@ def inquire_search_title(access_token, app_key, app_secret, id):
     return ar.getBody().output2
 
 cur01 = conn.cursor()
-cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date from \"stockAccount_stock_account\" where nick_name = 'phills2'")
+cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = 'phills2'")
 result_one = cur01.fetchone()
 cur01.close()
 
@@ -75,12 +75,13 @@ acct_no = result_one[0]
 access_token = result_one[1]
 app_key = result_one[2]
 app_secret = result_one[3]
+today = datetime.now().strftime("%Y%m%d")
 
 YmdHMS = datetime.now()
 validTokenDate = datetime.strptime(result_one[4], '%Y%m%d%H%M%S')
 diff = YmdHMS - validTokenDate
 # print("diff : " + str(diff.days))
-if diff.days >= 1:  # 토큰 유효기간(1일) 만료 재발급
+if diff.days >= 1 or result_one[5] != today:  # 토큰 유효기간(1일) 만료 재발급
     access_token = auth(app_key, app_secret)
     token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
     print("new access_token : " + access_token)
