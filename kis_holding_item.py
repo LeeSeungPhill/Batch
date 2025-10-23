@@ -164,7 +164,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no):
         return []
 
 # 기간별손익일별합산조회
-def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt, end_dt):
+def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt, end_dt, acct_no):
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -475,7 +475,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             last_paid_tax += int(comp_info[2])  # 세금 설정
 
                     # 기간별손익일별합산조회
-                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str, acct_no)
 
                     for item2 in period_profit_loss_sum_output:
             
@@ -486,7 +486,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 else:
                     # 기간별손익일별합산조회
-                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str)
+                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str, acct_no)
 
                     for item2 in period_profit_loss_sum_output:
                     
