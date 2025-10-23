@@ -363,7 +363,7 @@ def get_command7(update, context) :
                     print("매도주문 완료")
 
                     # 기간별손익일별합산조회
-                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_market_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
 
                     pchs_unpr = 0
                     hldg_qty = 0
@@ -6372,7 +6372,7 @@ def echo(update, context):
                                     print("매도주문 완료")
 
                                     # 기간별손익일별합산조회
-                                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+                                    period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
 
                                     pchs_unpr = 0
                                     hldg_qty = 0
