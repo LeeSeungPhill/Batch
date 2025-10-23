@@ -311,10 +311,14 @@ def get_command7(update, context) :
     e = stock_balance(access_token, app_key, app_secret, acct_no, "")
     
     ord_psbl_qty = 0
+    hold_price = 0
+    hldg_qty = 0
     for j, name in enumerate(e.index):
         e_code = e['pdno'][j]
         if e_code == g_market_sell_code:
             ord_psbl_qty = int(e['ord_psbl_qty'][j])
+            hold_price = float(e['pchs_avg_pric'][j])
+            hldg_qty = int(e['hldg_qty'][j])
     print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
     if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
         # 매도량
@@ -365,17 +369,12 @@ def get_command7(update, context) :
                     # 기간별손익일별합산조회
                     period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_market_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
 
-                    pchs_unpr = 0
-                    hldg_qty = 0
                     pfls_rate = 0
                     pfls_amt = 0
                     paid_tax = 0
                     paid_fee = 0
 
                     for item2 in period_profit_loss_sum_output:
-                    
-                        pchs_unpr = float(item2['pchs_unpr'])
-                        hldg_qty = float(item2['hldg_qty'])
                         pfls_rate = float(item2['pfls_rt'])
                         pfls_amt = float(item2['rlzt_pfls'])
                         paid_tax = float(item2['tl_tax'])
@@ -419,8 +418,8 @@ def get_command7(update, context) :
                         int(d_order_amount),
                         int(d_total_complete_qty), 
                         int(d_remain_qty), 
-                        Decimal(pchs_unpr), 
-                        int(hldg_qty),
+                        Decimal(hold_price), 
+                        hldg_qty,
                         Decimal(pfls_rate),
                         int(pfls_amt),
                         int(paid_tax),
@@ -6313,12 +6312,15 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         # 매입가 = 보유단가
                         hold_price = float(e['pchs_avg_pric'][j])
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hldg_qty = int(e['hldg_qty'][j])
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
                     sell_amount = int(round(ord_psbl_qty * int(sell_rate) / 100))
@@ -6374,17 +6376,12 @@ def echo(update, context):
                                     # 기간별손익일별합산조회
                                     period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
 
-                                    pchs_unpr = 0
-                                    hldg_qty = 0
                                     pfls_rate = 0
                                     pfls_amt = 0
                                     paid_tax = 0
                                     paid_fee = 0
 
                                     for item2 in period_profit_loss_sum_output:
-                                    
-                                        pchs_unpr = float(item2['pchs_unpr'])
-                                        hldg_qty = float(item2['hldg_qty'])
                                         pfls_rate = float(item2['pfls_rt'])
                                         pfls_amt = float(item2['rlzt_pfls'])
                                         paid_tax = float(item2['tl_tax'])
@@ -6428,8 +6425,8 @@ def echo(update, context):
                                         int(d_order_amount),
                                         int(d_total_complete_qty), 
                                         int(d_remain_qty), 
-                                        Decimal(pchs_unpr), 
-                                        int(hldg_qty),
+                                        Decimal(hold_price), 
+                                        hldg_qty,
                                         Decimal(pfls_rate),
                                         int(pfls_amt),
                                         int(paid_tax),
