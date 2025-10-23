@@ -110,6 +110,8 @@ g_remain_qty = 0
 g_loss_price = 0
 g_risk_sum = 0
 g_low_price = 0
+g_hold_price = 0
+g_hldg_qty = 0
 
 def format_number(value):
     try:
@@ -412,7 +414,7 @@ def get_command7(update, context) :
                         d_name, 
                         str(d_order_no),
                         str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
-                        int(d_order_amount),
+                        int(d_total_complete_amt),
                         d_order_type, 
                         int(d_order_price), 
                         int(d_order_amount),
@@ -2508,6 +2510,69 @@ def callback_get(update, context) :
                         d_total_complete_amt = d['tot_ccld_amt'][i]
 
                         print("매도주문 완료")
+
+                        # 기간별손익일별합산조회
+                        period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+
+                        pfls_rate = 0
+                        pfls_amt = 0
+                        paid_tax = 0
+                        paid_fee = 0
+
+                        for item2 in period_profit_loss_sum_output:
+                            pfls_rate = float(item2['pfls_rt'])
+                            pfls_amt = float(item2['rlzt_pfls'])
+                            paid_tax = float(item2['tl_tax'])
+                            paid_fee = float(item2['fee'])
+
+                        # 일별체결정보 생성
+                        cur200 = conn.cursor()
+                        cur200.execute("""
+                            INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                                acct_no, 
+                                order_dt,
+                                order_tmd, 
+                                name, 
+                                order_no, 
+                                org_order_no,
+                                total_complete_amt, 
+                                order_type, 
+                                order_price, 
+                                order_amount,
+                                total_complete_qty, 
+                                remain_qty, 
+                                hold_price, 
+                                hold_vol,
+                                profit_loss_rate,
+                                profit_loss_amt,
+                                paid_tax, 
+                                paid_fee,
+                                last_chg_date
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                        """
+                        , (
+                            acct_no, 
+                            d_order_dt, 
+                            d_order_tmd, 
+                            d_name, 
+                            str(d_order_no),
+                            str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
+                            int(d_total_complete_amt),
+                            d_order_type, 
+                            int(d_order_price), 
+                            int(d_order_amount),
+                            int(d_total_complete_qty), 
+                            int(d_remain_qty), 
+                            Decimal(g_hold_price), 
+                            g_hldg_qty,
+                            Decimal(pfls_rate),
+                            int(pfls_amt),
+                            int(paid_tax),
+                            int(paid_fee)
+                        ))
+                        conn.commit()
+                        cur200.close() 
+
                         # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                         cur300 = conn.cursor()
                         cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
@@ -2616,6 +2681,69 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+
+                                            # 기간별손익일별합산조회
+                                            period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+
+                                            pfls_rate = 0
+                                            pfls_amt = 0
+                                            paid_tax = 0
+                                            paid_fee = 0
+
+                                            for item2 in period_profit_loss_sum_output:
+                                                pfls_rate = float(item2['pfls_rt'])
+                                                pfls_amt = float(item2['rlzt_pfls'])
+                                                paid_tax = float(item2['tl_tax'])
+                                                paid_fee = float(item2['fee'])
+
+                                            # 일별체결정보 생성
+                                            cur200 = conn.cursor()
+                                            cur200.execute("""
+                                                INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                                                    acct_no, 
+                                                    order_dt,
+                                                    order_tmd, 
+                                                    name, 
+                                                    order_no, 
+                                                    org_order_no,
+                                                    total_complete_amt, 
+                                                    order_type, 
+                                                    order_price, 
+                                                    order_amount,
+                                                    total_complete_qty, 
+                                                    remain_qty, 
+                                                    hold_price, 
+                                                    hold_vol,
+                                                    profit_loss_rate,
+                                                    profit_loss_amt,
+                                                    paid_tax, 
+                                                    paid_fee,
+                                                    last_chg_date
+                                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                                            """
+                                            , (
+                                                acct_no, 
+                                                d_order_dt, 
+                                                d_order_tmd, 
+                                                d_name, 
+                                                str(d_order_no),
+                                                str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
+                                                int(d_total_complete_amt),
+                                                d_order_type, 
+                                                int(d_order_price), 
+                                                int(d_order_amount),
+                                                int(d_total_complete_qty), 
+                                                int(d_remain_qty), 
+                                                Decimal(g_hold_price), 
+                                                g_hldg_qty,
+                                                Decimal(pfls_rate),
+                                                int(pfls_amt),
+                                                int(paid_tax),
+                                                int(paid_fee)
+                                            ))
+                                            conn.commit()
+                                            cur200.close()
+
                                             # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                                             cur300 = conn.cursor()
                                             cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
@@ -2736,6 +2864,69 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+
+                                            # 기간별손익일별합산조회
+                                            period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+
+                                            pfls_rate = 0
+                                            pfls_amt = 0
+                                            paid_tax = 0
+                                            paid_fee = 0
+
+                                            for item2 in period_profit_loss_sum_output:
+                                                pfls_rate = float(item2['pfls_rt'])
+                                                pfls_amt = float(item2['rlzt_pfls'])
+                                                paid_tax = float(item2['tl_tax'])
+                                                paid_fee = float(item2['fee'])
+
+                                            # 일별체결정보 생성
+                                            cur200 = conn.cursor()
+                                            cur200.execute("""
+                                                INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                                                    acct_no, 
+                                                    order_dt,
+                                                    order_tmd, 
+                                                    name, 
+                                                    order_no, 
+                                                    org_order_no,
+                                                    total_complete_amt, 
+                                                    order_type, 
+                                                    order_price, 
+                                                    order_amount,
+                                                    total_complete_qty, 
+                                                    remain_qty, 
+                                                    hold_price, 
+                                                    hold_vol,
+                                                    profit_loss_rate,
+                                                    profit_loss_amt,
+                                                    paid_tax, 
+                                                    paid_fee,
+                                                    last_chg_date
+                                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                                            """
+                                            , (
+                                                acct_no, 
+                                                d_order_dt, 
+                                                d_order_tmd, 
+                                                d_name, 
+                                                str(d_order_no),
+                                                str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
+                                                int(d_total_complete_amt),
+                                                d_order_type, 
+                                                int(d_order_price), 
+                                                int(d_order_amount),
+                                                int(d_total_complete_qty), 
+                                                int(d_remain_qty), 
+                                                Decimal(g_hold_price), 
+                                                g_hldg_qty,
+                                                Decimal(pfls_rate),
+                                                int(pfls_amt),
+                                                int(paid_tax),
+                                                int(paid_fee)
+                                            ))
+                                            conn.commit()
+                                            cur200.close()  
+
                                             # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                                             cur300 = conn.cursor()
                                             cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
@@ -2856,6 +3047,69 @@ def callback_get(update, context) :
                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                             print("매도주문 완료")
+
+                                            # 기간별손익일별합산조회
+                                            period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, g_sell_code, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"), acct_no)
+
+                                            pfls_rate = 0
+                                            pfls_amt = 0
+                                            paid_tax = 0
+                                            paid_fee = 0
+
+                                            for item2 in period_profit_loss_sum_output:
+                                                pfls_rate = float(item2['pfls_rt'])
+                                                pfls_amt = float(item2['rlzt_pfls'])
+                                                paid_tax = float(item2['tl_tax'])
+                                                paid_fee = float(item2['fee'])
+
+                                            # 일별체결정보 생성
+                                            cur200 = conn.cursor()
+                                            cur200.execute("""
+                                                INSERT INTO \"stockOrderComplete_stock_order_complete\" (
+                                                    acct_no, 
+                                                    order_dt,
+                                                    order_tmd, 
+                                                    name, 
+                                                    order_no, 
+                                                    org_order_no,
+                                                    total_complete_amt, 
+                                                    order_type, 
+                                                    order_price, 
+                                                    order_amount,
+                                                    total_complete_qty, 
+                                                    remain_qty, 
+                                                    hold_price, 
+                                                    hold_vol,
+                                                    profit_loss_rate,
+                                                    profit_loss_amt,
+                                                    paid_tax, 
+                                                    paid_fee,
+                                                    last_chg_date
+                                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                                            """
+                                            , (
+                                                acct_no, 
+                                                d_order_dt, 
+                                                d_order_tmd, 
+                                                d_name, 
+                                                str(d_order_no),
+                                                str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
+                                                int(d_total_complete_amt),
+                                                d_order_type, 
+                                                int(d_order_price), 
+                                                int(d_order_amount),
+                                                int(d_total_complete_qty), 
+                                                int(d_remain_qty), 
+                                                Decimal(g_hold_price), 
+                                                g_hldg_qty,
+                                                Decimal(pfls_rate),
+                                                int(pfls_amt),
+                                                int(paid_tax),
+                                                int(paid_fee)
+                                            ))
+                                            conn.commit()
+                                            cur200.close() 
+
                                             # 매매처리 미처리된 매수체결 단기매매내역정보 조회
                                             cur300 = conn.cursor()
                                             cur300.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and code = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), g_sell_code, '%매수%'))
@@ -5216,6 +5470,8 @@ def echo(update, context):
     global g_loss_price
     global g_risk_sum
     global g_low_price
+    global g_hold_price
+    global g_hldg_qty
 
     code = ""
     company = ""
@@ -6221,10 +6477,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
 
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
@@ -6237,6 +6497,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty                    
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(ord_psbl_qty, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6267,10 +6529,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
 
@@ -6284,6 +6550,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6419,7 +6687,7 @@ def echo(update, context):
                                         d_name, 
                                         str(d_order_no),
                                         str(int(d['orgn_odno'][i])) if d['orgn_odno'][i] != "" else "",
-                                        int(d_order_amount),
+                                        int(d_total_complete_amt),
                                         d_order_type, 
                                         int(d_order_price), 
                                         int(d_order_amount),
@@ -6498,10 +6766,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
                     if ord_psbl_qty >= int(sell_amount):  # 주문가능수량이 매도량보다 큰 경우
@@ -6514,6 +6786,8 @@ def echo(update, context):
                         g_sell_price = int(commandBot[1])
                         g_sell_code = code
                         g_company = company
+                        g_hold_price = hold_price
+                        g_hldg_qty = hldg_qty                        
 
                         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(commandBot[1]), ',d') + "원, 매도량 : " + format(int(sell_amount), ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                         get_handler = CommandHandler('sell', get_command2)
@@ -6547,10 +6821,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
 
@@ -6564,6 +6842,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty                    
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6594,10 +6874,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
 
@@ -6611,6 +6895,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty                    
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6641,10 +6927,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
 
@@ -6658,6 +6948,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty                    
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6688,10 +6980,14 @@ def echo(update, context):
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hold_price = float(e['pchs_avg_pric'][j])
+                        hldg_qty = int(e['hldg_qty'][j])                        
                 print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
 
@@ -6705,6 +7001,8 @@ def echo(update, context):
                     g_sell_price = sell_price
                     g_sell_code = code
                     g_company = company
+                    g_hold_price = hold_price
+                    g_hldg_qty = hldg_qty                    
 
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(sell_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                     get_handler = CommandHandler('sell', get_command2)
@@ -6732,8 +7030,9 @@ def echo(update, context):
                 # 계좌잔고 조회
                 e = stock_balance(access_token, app_key, app_secret, acct_no, "")
                
-                hold_price = 0
                 ord_psbl_qty = 0
+                hold_price = 0
+                hldg_qty = 0                
                 for j, name in enumerate(e.index):
                     e_code = e['pdno'][j]
                     if e_code == code:
@@ -6745,6 +7044,7 @@ def echo(update, context):
                             hold_price = commandBot[1]
                         print("매입가 : " + format(float(hold_price), ',.2f'))    
                         ord_psbl_qty = int(e['ord_psbl_qty'][j])
+                        hldg_qty = int(e['hldg_qty'][j])
 
                 if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
                     # 매도비율
@@ -6776,6 +7076,8 @@ def echo(update, context):
                         g_sell_price = corrected_price
                         g_sell_code = code
                         g_company = company
+                        g_hold_price = hold_price
+                        g_hldg_qty = hldg_qty                        
 
                         context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(int(corrected_price), ',d') + "원, 매도량 : " + format(sell_amount, ',d') + "주, 매도금액 : " + format(int(n_sell_sum), ',d') + "원 => /sell")
                         get_handler = CommandHandler('sell', get_command2)
