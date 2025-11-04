@@ -629,8 +629,6 @@ if result_one == None:
                                             sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
                                             # 매도금액 = 매도량 * 현재가
                                             sell_sum = sell_amount * sell_price
-
-                                            sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
                                     
                                             # 주문가능수량 존재시
                                             if j_ord_psbl_qty > 0:
@@ -672,12 +670,13 @@ if result_one == None:
 
                                                 except Exception as e:
                                                     print('매도주문 오류.', e)
-                                                    msg = f"[100% 정리-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
+                                                    msg = f"[자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_amount):,}주 [매도주문 오류] - {str(e)}"
                                                     result_msgs.append(msg)
 
-                                                telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                                final_message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
+
                                                 # 텔레그램 메시지 전송
-                                                main(telegram_text)
+                                                main(final_message)
 
                                             if j_hldg_qty > 0:
                                                 cur400 = conn.cursor()
@@ -714,8 +713,6 @@ if result_one == None:
                                 
                                 # 잔고수량 존재하는 매매내역정보의 매매처리 매수 대상 조회
                                 # 매수당시 이탈가 체크 및 최종변경된 이탈가 체크 : 최종 수익금 체크 매도 
-
-                                result_msgs = []
 
                                 # 계좌종목 조회
                                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
