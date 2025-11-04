@@ -175,6 +175,40 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     #ar.printAll()
     return ar.getBody().output
 
+# 일별주문체결 조회
+def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8001R",                                # tr_id : TTTC8001R(실전투자 3개월이내), CTSC9215R(실전투자 3개월이전), VTTC0081R(모의투자 3개월이내), VTSC9215R(모의투자 3개월이전)
+               "custtype": "P"
+    }  
+    params = {
+                "CANO": acct_no,
+                "ACNT_PRDT_CD": '01',
+                "INQR_STRT_DT": datetime.now().strftime('%Y%m%d'),  # 조회시작일자 YYYYMMDD
+                "INQR_END_DT": datetime.now().strftime('%Y%m%d'),   # 조회종료일자 YYYYMMDD
+                "SLL_BUY_DVSN_CD": '00',                            # 매도매수구분코드 : 00 전체, 01 매도, 02 매수
+                "PDNO": code,
+                "ORD_GNO_BRNO": "",
+                "ODNO": order_no,
+                "CCLD_DVSN": "00",                                  # 체결구분 : 00 전체, 01 체결, 02 미체결
+                "INQR_DVSN": '00',                                  # 조회구분 : 00 역순, 01 정순
+                "INQR_DVSN_1": "",        
+                "INQR_DVSN_3": "00",                                # 조회구분3 : 00 전체, 01 현금, 02 신용
+                "EXCG_ID_DVSN_CD": "KRX",                           # 거래소ID구분코드 : KRX, NXT
+                "CTX_AREA_FK100": "",
+                "CTX_AREA_NK100": ""
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output1
+
 def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     """
     1분봉을 조회한 뒤 10분봉으로 리샘플링하여 base_dtm 포함 여부 확인.
@@ -428,7 +462,20 @@ if result_one == None:
                     tap.vol,
                     tap.candle_body,
                     tap.trade_sum,
-                    sb.trading_plan
+                    CASE 
+                        WHEN sb.trading_plan IS NOT NULL THEN 
+                            CASE 
+                                WHEN sb.trading_plan = 'as' THEN 100
+                                WHEN sb.trading_plan = '66s' THEN 66
+                                WHEN sb.trading_plan = '50s' THEN 50
+                                WHEN sb.trading_plan = '33s' THEN 33
+                                WHEN sb.trading_plan = '25s' THEN 25
+                                WHEN sb.trading_plan = '20s' THEN 20
+                                ELSE 0
+                            END
+                        ELSE 0
+                    END AS trading_value,
+                    tab.chgr_id
                 FROM public.trade_auto_proc tap
                 LEFT OUTER JOIN public."stockBalance_stock_balance" sb
                 ON tap.acct_no = CAST(sb.acct_no AS varchar)
@@ -445,7 +492,6 @@ if result_one == None:
             cur32.close()
 
             current_time = datetime.now()
-            sell_trading_plan_list = ['20s', '25s', '33s', '50s','66s', 'as']
 
             # 매매자동처리 고가, 저가, 종가, 시가, 거래량, 캔들형태를 각각 실시간 종목시세의 최고가와 최저가 비교
             for i in result_three_two:
@@ -550,11 +596,118 @@ if result_one == None:
                         # 매도 대상
                         elif i[4] == 'S':
 
-                            # '20s', '25s', '33s', '50s','66s', 'as' 매도 계획이 존재하는 경우
-                            # if i[13] in sell_trading_plan_list:                        
+                            # 텔레그램 자산정리 자동처리 대상 존재시
+                            if i[14] == 'AUTO_FUND_UP_SELL':
+
+                                # 매매자동처리 정보의 고가 돌파시 
+                                if int(a['stck_prpr']) > high_price:
+
+                                    result_msgs = []
+                                    
+                                    # 계좌종목 조회
+                                    c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+
+                                    for j, name in enumerate(c.index):
+                                        J_code = c['pdno'][j]
+                                        j_hldg_qty = int(c['hldg_qty'][j])
+                                        j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+
+                                        sell_rate = 0
+                                        sell_amount = 0
+                                        sell_sum = 0
+                                        sell_price = 0
+
+                                        # 잔고정보의 매매자동처리 종목이 존재할 경우
+                                        if J_code == i[2]:
+                                            print("종목명 : " + i[1] + "저항가 : " + format(int(i[7]), ',d') + "원 돌파")
+                                            signal_cd = "02"
+                                            signal_cd_name = format(int(i[7]), ',d') + "원 {저항가 돌파}"
+                                            sell_price = int(a['stck_prpr'])
+                                            # 매도비율(%)
+                                            sell_rate = int(i[13])
+                                            # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                            sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
+                                            # 매도금액 = 매도량 * 현재가
+                                            sell_sum = sell_amount * sell_price
+
+                                            sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
+                                    
+                                            # 주문가능수량 존재시
+                                            if j_ord_psbl_qty > 0:
+                                                
+                                                try:
+                                                    
+                                                    # 매도 : 지정가 주문
+                                                    c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "00", str(sell_amount), str(sell_price))
+                                            
+                                                    if c['ODNO'] != "":
+
+                                                        # 일별주문체결 조회
+                                                        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, J_code, c['ODNO'])
+                                                        tdf = pd.DataFrame(output1)
+                                                        tdf.set_index('odno')
+                                                        d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                                        for i, name in enumerate(d.index):
+                                                            d_order_no = int(d['odno'][i])
+                                                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                                            d_order_dt = d['ord_dt'][i]
+                                                            d_order_tmd = d['ord_tmd'][i]
+                                                            d_name = d['prdt_name'][i]
+                                                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                                            d_order_amount = d['ord_qty'][i]
+                                                            d_total_complete_qty = d['tot_ccld_qty'][i]
+                                                            d_remain_qty = d['rmn_qty'][i]
+                                                            d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                                            print("매도주문 완료")
+                                                            msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                                                            result_msgs.append(msg)
+
+                                                    else:
+                                                        print("매도주문 실패")
+                                                        msg = f"[자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_amount):,}주 매도주문 실패"
+                                                        result_msgs.append(msg)
+
+
+                                                except Exception as e:
+                                                    print('매도주문 오류.', e)
+                                                    msg = f"[100% 정리-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
+                                                    result_msgs.append(msg)
+
+                                                telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                                # 텔레그램 메시지 전송
+                                                main(telegram_text)
+
+                                            if j_hldg_qty > 0:
+                                                cur400 = conn.cursor()
+                                                # UPDATE
+                                                cur400.execute("""
+                                                    UPDATE trade_auto_proc
+                                                    SET
+                                                        signal_cd = %s,
+                                                        proc_yn = 'N',
+                                                        chgr_id = 'AUTO_PROC_BAT',
+                                                        chg_date = now()
+                                                    WHERE acct_no = %s 
+                                                    AND proc_yn = 'Y' 
+                                                    AND base_day = %s 
+                                                    AND code = %s
+                                                    AND trade_tp = 'S'
+                                                """
+                                                , (
+                                                    signal_cd, 
+                                                    str(acct_no),
+                                                    today,
+                                                    i[2]
+                                                ))    
+
+                                                conn.commit()
+                                                cur400.close()
+
 
                             # 매매자동처리 정보의 저가가 이탈시
-                            if int(a['stck_prpr']) < i[8]:
+                            if int(a['stck_prpr']) < low_price:
                                 
                                 # 매매내역정보의 매매미처리 매수 대상 조회
                                 # 안전마진 확보 매도 및 이탈가 아탈 매도
@@ -562,11 +715,10 @@ if result_one == None:
                                 # 잔고수량 존재하는 매매내역정보의 매매처리 매수 대상 조회
                                 # 매수당시 이탈가 체크 및 최종변경된 이탈가 체크 : 최종 수익금 체크 매도 
 
-                                
+                                result_msgs = []
+
                                 # 계좌종목 조회
                                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
-                                balance_list = []
 
                                 for j, name in enumerate(c.index):
                                     J_code = c['pdno'][j]
@@ -582,58 +734,17 @@ if result_one == None:
                                         print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
                                         signal_cd = "02"
                                         signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
+                                        # 매도비율(%)
+                                        sell_rate = int(i[13])
+                                        # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                        sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
+                                        # 매도금액 = 매도량 * 현재가
+                                        sell_sum = sell_amount * int(a['stck_prpr'])
 
+                                        sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
+                                        
                                         # 주문가능수량 존재시
                                         if j_ord_psbl_qty > 0:
-
-                                            # try:
-                                            #     # 매도 : 스탑지정가 주문
-                                            #     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "22", sell_qty, sell_price, )
-                                        
-                                            #     if c['ODNO'] != "":
-
-                                            #         # 일별주문체결 조회
-                                            #         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                            #         tdf = pd.DataFrame(output1)
-                                            #         tdf.set_index('odno')
-                                            #         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                                            #         for i, name in enumerate(d.index):
-                                            #             d_order_no = int(d['odno'][i])
-                                            #             d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                            #             d_order_dt = d['ord_dt'][i]
-                                            #             d_order_tmd = d['ord_tmd'][i]
-                                            #             d_name = d['prdt_name'][i]
-                                            #             d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                            #             d_order_amount = d['ord_qty'][i]
-                                            #             d_total_complete_qty = d['tot_ccld_qty'][i]
-                                            #             d_remain_qty = d['rmn_qty'][i]
-                                            #             d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                                            #             print("매도주문 완료")
-                                            #             msg = f"[100% 정리-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                                            #             result_msgs.append(msg)
-
-                                            #     else:
-                                            #         print("매도주문 실패")
-                                            #         msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 매도주문 실패"
-                                            #         result_msgs.append(msg)
-
-
-                                            # except Exception as e:
-                                            #     print('매도주문 오류.', e)
-                                            #     msg = f"[100% 정리-{company_name}] 매도가 : {int(sell_price):,}원, 매도량 : {int(sell_qty):,}주 [매도주문 오류] - {str(e)}"
-                                            #     result_msgs.append(msg)
-
-                                            # 매도비율(%)
-                                            sell_rate = int(i[12])
-                                            # 매도량 = round((주문가능수량 / 매도비율 )* 100)
-                                            sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                                            # 매도금액 = 매도량 * 현재가
-                                            sell_sum = sell_amount * int(a['stck_prpr'])
-
-                                            sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
-
                                             telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
                                             # 텔레그램 메시지 전송
                                             main(telegram_text)
