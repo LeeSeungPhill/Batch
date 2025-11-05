@@ -215,7 +215,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     필요하면 과거 데이터를 추가 조회.
     최종 반환값은 원본 API 결과(dict 리스트).
     """
-
+    time.sleep(1)
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {access_token}",
@@ -331,7 +331,6 @@ if result_one == None:
 
             # 매매자동처리 거래량과 주식당일분봉조회의 최대 거래량 비교
             for i in result_three_one:
-
                 # base_dtm datetime 변환
                 base_dtm = datetime.strptime(today + i[3], '%Y%m%d%H%M%S')
                 # 10분봉 조회 (필요시 과거 조회 포함)

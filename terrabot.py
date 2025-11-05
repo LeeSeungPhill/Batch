@@ -727,7 +727,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     필요하면 과거 데이터를 추가 조회.
     최종 반환값은 원본 API 결과(dict 리스트).
     """
-
+    time.sleep(1)
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {access_token}",
