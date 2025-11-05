@@ -4091,8 +4091,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4252,8 +4252,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4413,8 +4413,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4574,8 +4574,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4735,8 +4735,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4896,8 +4896,8 @@ def callback_get(update, context) :
                                 """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
-                                acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
-                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                                str(acct_no), company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -7232,8 +7232,8 @@ def echo(update, context):
                         """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
-                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_UP_BUY', datetime.now(), 'AUTO_UP_BUY', datetime.now()
-                        , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
+                        str(acct_no), company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_UP_BUY', datetime.now(), 'AUTO_UP_BUY', datetime.now()
+                        , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
                     ))                    
 
                     was_inserted = cur500.rowcount == 1
@@ -7368,8 +7368,8 @@ def echo(update, context):
                         """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
-                        acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_UP_SELL', datetime.now(), 'AUTO_UP_SELL', datetime.now()
-                        , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
+                        str(acct_no), company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_UP_SELL', datetime.now(), 'AUTO_UP_SELL', datetime.now()
+                        , str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                     ))
 
                     was_inserted = cur500.rowcount == 1

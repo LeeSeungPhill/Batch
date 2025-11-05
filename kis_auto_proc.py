@@ -418,8 +418,8 @@ if result_one == None:
                         """                                    
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
-                        acct_no, i[1], i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), i[4], 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, i[12], 'Y', 'AUTO_PROC_BAT', datetime.now(), 'AUTO_PROC_BAT', datetime.now()
-                        , acct_no, i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), i[4]
+                        str(acct_no), i[1], i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), i[4], 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, i[12], 'Y', 'AUTO_PROC_BAT', datetime.now(), 'AUTO_PROC_BAT', datetime.now()
+                        , str(acct_no), i[2], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), i[4]
                     ))
 
                     was_inserted = cur500.rowcount == 1

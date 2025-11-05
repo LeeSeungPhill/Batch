@@ -912,8 +912,8 @@ if result_one == None:
                                                 """                                    
                                             # insert 인자값 설정
                                             cur500.execute(insert_query, (
-                                                acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
-                                                , acct_no, i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
+                                                str(acct_no), i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
+                                                , str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
                                             ))
 
                                             was_inserted = cur500.rowcount == 1
@@ -1122,8 +1122,8 @@ if result_one == None:
                                         """                                    
                                     # insert 인자값 설정
                                     cur500.execute(insert_query, (
-                                        acct_no, i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
-                                        , acct_no, i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
+                                        str(acct_no), i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_BUY', datetime.now(), 'AUTO_BUY', datetime.now()
+                                        , str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
                                     ))
 
                                     was_inserted = cur500.rowcount == 1
