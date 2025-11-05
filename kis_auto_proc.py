@@ -706,7 +706,7 @@ if result_one == None:
 
 
                             # 매매자동처리 정보의 저가가 이탈시
-                            if int(a['stck_prpr']) < low_price:
+                            elif int(a['stck_prpr']) < low_price:
                                 
                                 # 매매내역정보의 매매미처리 매수 대상 조회
                                 # 안전마진 확보 매도 및 이탈가 아탈 매도
