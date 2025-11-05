@@ -475,7 +475,7 @@ if result_one == None:
                             END
                         ELSE 0
                     END AS trading_value,
-                    tab.chgr_id
+                    tap.chgr_id
                 FROM public.trade_auto_proc tap
                 LEFT OUTER JOIN public."stockBalance_stock_balance" sb
                 ON tap.acct_no = CAST(sb.acct_no AS varchar)
