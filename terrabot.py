@@ -4078,13 +4078,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4231,13 +4239,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4384,13 +4400,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4537,13 +4561,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4690,13 +4722,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -4843,13 +4883,21 @@ def callback_get(update, context) :
                             cur500 = conn.cursor()
                             insert_query = """
                                 INSERT INTO trade_auto_proc (
-                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                                )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                            """
+                                    acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                                    low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                                    regr_id, reg_date, chgr_id, chg_date
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM trade_auto_proc
+                                    WHERE acct_no=%s AND code=%s AND base_day=%s
+                                    AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                                );
+                                """
                             # insert 인자값 설정
                             cur500.execute(insert_query, (
                                 acct_no, company_name, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_FUND_UP_SELL', datetime.now(), 'AUTO_FUND_UP_SELL', datetime.now()
+                                , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                             ))
 
                             was_inserted = cur500.rowcount == 1
@@ -7171,14 +7219,22 @@ def echo(update, context):
                     cur500 = conn.cursor()
                     insert_query = """
                         INSERT INTO trade_auto_proc (
-                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                        )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                    """
+                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                            low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                            regr_id, reg_date, chgr_id, chg_date
+                        )
+                        SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM trade_auto_proc
+                            WHERE acct_no=%s AND code=%s AND base_day=%s
+                            AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                        );
+                        """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
                         acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, buy_amount, 'Y', 'AUTO_UP_BUY', datetime.now(), 'AUTO_UP_BUY', datetime.now()
-                    ))
+                        , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "B"
+                    ))                    
 
                     was_inserted = cur500.rowcount == 1
                 
@@ -7299,13 +7355,21 @@ def echo(update, context):
                     cur500 = conn.cursor()
                     insert_query = """
                         INSERT INTO trade_auto_proc (
-                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
-                        )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
-                    """
+                            acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, 
+                            low_price, close_price, vol, candle_body, trade_sum, proc_yn, 
+                            regr_id, reg_date, chgr_id, chg_date
+                        )
+                        SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM trade_auto_proc
+                            WHERE acct_no=%s AND code=%s AND base_day=%s
+                            AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
+                        );
+                        """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
                         acct_no, company, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, sell_rate, 'Y', 'AUTO_UP_SELL', datetime.now(), 'AUTO_UP_SELL', datetime.now()
+                        , acct_no, code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
                     ))
 
                     was_inserted = cur500.rowcount == 1
