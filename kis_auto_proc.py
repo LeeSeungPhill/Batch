@@ -407,7 +407,7 @@ if result_one == None:
                         INSERT INTO trade_auto_proc (
                             acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price, low_price, close_price, vol, candle_body, trade_sum, proc_yn, regr_id, reg_date, chgr_id, chg_date
                         )       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp) DO NOTHING
+                        ON CONFLICT (acct_no, code, base_day, base_dtm, trade_tp, proc_yn) DO NOTHING
                     """
                     # insert 인자값 설정
                     cur500.execute(insert_query, (
@@ -475,7 +475,7 @@ if result_one == None:
                             END
                         ELSE 0
                     END AS trading_value,
-                    tap.chgr_id
+                    tap.regr_id
                 FROM public.trade_auto_proc tap
                 LEFT OUTER JOIN public."stockBalance_stock_balance" sb
                 ON tap.acct_no = CAST(sb.acct_no AS varchar)
