@@ -727,7 +727,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     필요하면 과거 데이터를 추가 조회.
     최종 반환값은 원본 API 결과(dict 리스트).
     """
-    time.sleep(1)
+    time.sleep(0.3)
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {access_token}",
@@ -3989,7 +3989,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4150,7 +4150,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4311,7 +4311,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4472,7 +4472,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4633,7 +4633,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4794,7 +4794,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
