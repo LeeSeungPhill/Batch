@@ -603,43 +603,53 @@ if result_one == None:
                         # 매도 대상
                         elif i[4] == 'S':
 
-                            # 텔레그램 자산정리 자동처리 대상 존재시
-                            if i[14] == 'AUTO_FUND_UP_SELL':
+                            # 매매자동처리 정보의 저가가 이탈시
+                            if int(a['stck_prpr']) < low_price:
+                                
+                                # 매매내역정보의 매매미처리 매수 대상 조회
+                                # 안전마진 확보 매도 및 이탈가 아탈 매도
+                                
+                                # 잔고수량 존재하는 매매내역정보의 매매처리 매수 대상 조회
+                                # 매수당시 이탈가 체크 및 최종변경된 이탈가 체크 : 최종 수익금 체크 매도 
+                                
+                                result_msgs = []
 
-                                # 매매자동처리 정보의 고가 돌파시 
-                                if int(a['stck_prpr']) > high_price:
+                                # 계좌종목 조회
+                                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
-                                    result_msgs = []
-                                    
-                                    # 계좌종목 조회
-                                    c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                                for j, name in enumerate(c.index):
+                                    J_code = c['pdno'][j]
+                                    j_hldg_qty = int(c['hldg_qty'][j])
+                                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
 
-                                    for j, name in enumerate(c.index):
-                                        J_code = c['pdno'][j]
-                                        j_hldg_qty = int(c['hldg_qty'][j])
-                                        j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
+                                    sell_rate = 0
+                                    sell_amount = 0
+                                    sell_sum = 0
+                                    sell_price = 0
 
-                                        sell_rate = 0
-                                        sell_amount = 0
-                                        sell_sum = 0
-                                        sell_price = 0
+                                    # 잔고정보의 매매자동처리 종목이 존재할 경우
+                                    if J_code == i[2]:
+                                        print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
+                                        signal_cd = "02"
+                                        signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
+                                        # sell_price = int(a['stck_prpr'])
+                                        # sell_price = high_price
+                                        sell_price = close_price
+                                        # 매도비율(%)
+                                        sell_rate = int(i[13])
+                                        # 매도량 = round((주문가능수량 / 매도비율 )* 100)
+                                        sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
+                                        # 매도금액 = 매도량 * 현재가
+                                        sell_sum = sell_amount * sell_price
 
-                                        # 잔고정보의 매매자동처리 종목이 존재할 경우
-                                        if J_code == i[2]:
-                                            print("종목명 : " + i[1] + "저항가 : " + format(int(i[7]), ',d') + "원 돌파")
-                                            signal_cd = "02"
-                                            signal_cd_name = format(int(i[7]), ',d') + "원 {저항가 돌파}"
-                                            sell_price = int(a['stck_prpr'])
-                                            # 매도비율(%)
-                                            sell_rate = int(i[13])
-                                            # 매도량 = round((주문가능수량 / 매도비율 )* 100)
-                                            sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                                            # 매도금액 = 매도량 * 현재가
-                                            sell_sum = sell_amount * sell_price
-                                    
-                                            # 주문가능수량 존재시
-                                            if j_ord_psbl_qty > 0:
-                                                
+                                        sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
+                                        
+                                        # 주문가능수량 존재시
+                                        if j_ord_psbl_qty > 0:
+
+                                            # 텔레그램 자산정리 자동처리 대상 존재시
+                                            if i[14] == 'AUTO_FUND_UP_SELL':
+
                                                 try:
                                                     
                                                     # 매도 : 지정가 주문
@@ -666,7 +676,7 @@ if result_one == None:
                                                             d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                                             print("매도주문 완료")
-                                                            msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도량 : {int(d_order_amount):,}주 매도주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                                                            msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                                             result_msgs.append(msg)
 
                                                     else:
@@ -685,73 +695,10 @@ if result_one == None:
                                                 # 텔레그램 메시지 전송
                                                 main(final_message)
 
-                                            if j_hldg_qty > 0:
-                                                cur400 = conn.cursor()
-                                                # UPDATE
-                                                cur400.execute("""
-                                                    UPDATE trade_auto_proc
-                                                    SET
-                                                        signal_cd = %s,
-                                                        proc_yn = 'N',
-                                                        chgr_id = 'AUTO_PROC_BAT',
-                                                        chg_date = now()
-                                                    WHERE acct_no = %s 
-                                                    AND proc_yn = 'Y' 
-                                                    AND base_day = %s 
-                                                    AND code = %s
-                                                    AND trade_tp = 'S'
-                                                """
-                                                , (
-                                                    signal_cd, 
-                                                    str(acct_no),
-                                                    today,
-                                                    i[2]
-                                                ))    
-
-                                                conn.commit()
-                                                cur400.close()
-
-
-                            # 매매자동처리 정보의 저가가 이탈시
-                            elif int(a['stck_prpr']) < low_price:
-                                
-                                # 매매내역정보의 매매미처리 매수 대상 조회
-                                # 안전마진 확보 매도 및 이탈가 아탈 매도
-                                
-                                # 잔고수량 존재하는 매매내역정보의 매매처리 매수 대상 조회
-                                # 매수당시 이탈가 체크 및 최종변경된 이탈가 체크 : 최종 수익금 체크 매도 
-
-                                # 계좌종목 조회
-                                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
-                                for j, name in enumerate(c.index):
-                                    J_code = c['pdno'][j]
-                                    j_hldg_qty = int(c['hldg_qty'][j])
-                                    j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                                    sell_rate = 0
-                                    sell_amount = 0
-                                    sell_sum = 0
-
-                                    # 잔고정보의 매매자동처리 종목이 존재할 경우
-                                    if J_code == i[2]:
-                                        print("종목명 : " + i[1] + "이탈가 : " + format(int(i[8]), ',d') + "원 이탈")
-                                        signal_cd = "02"
-                                        signal_cd_name = format(int(i[8]), ',d') + "원 {이탈가 이탈}"
-                                        # 매도비율(%)
-                                        sell_rate = int(i[13])
-                                        # 매도량 = round((주문가능수량 / 매도비율 )* 100)
-                                        sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                                        # 매도금액 = 매도량 * 현재가
-                                        sell_sum = sell_amount * int(a['stck_prpr'])
-
-                                        sell_command = f"/HoldingSell_{i[2]}_{sell_amount}"
-                                        
-                                        # 주문가능수량 존재시
-                                        if j_ord_psbl_qty > 0:
-                                            telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
-                                            # 텔레그램 메시지 전송
-                                            main(telegram_text)
+                                            else:
+                                                telegram_text = (f"[자동매도]{i[1]}[<code>{i[2]}</code>] : {candle_type}{signal_cd_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {format(sell_amount, ',d')}주, 매도금액 : {format(sell_sum, ',d')}원 => {sell_command}")
+                                                # 텔레그램 메시지 전송
+                                                main(telegram_text)
 
                                         if j_hldg_qty > 0:
                                             cur400 = conn.cursor()
