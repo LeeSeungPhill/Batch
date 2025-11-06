@@ -663,17 +663,17 @@ if result_one == None:
                                                         tdf.set_index('odno')
                                                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                                                        for i, name in enumerate(d.index):
-                                                            d_order_no = int(d['odno'][i])
-                                                            d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                                            d_order_dt = d['ord_dt'][i]
-                                                            d_order_tmd = d['ord_tmd'][i]
-                                                            d_name = d['prdt_name'][i]
-                                                            d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                                            d_order_amount = d['ord_qty'][i]
-                                                            d_total_complete_qty = d['tot_ccld_qty'][i]
-                                                            d_remain_qty = d['rmn_qty'][i]
-                                                            d_total_complete_amt = d['tot_ccld_amt'][i]
+                                                        for k, name in enumerate(d.index):
+                                                            d_order_no = int(d['odno'][k])
+                                                            d_order_type = d['sll_buy_dvsn_cd_name'][k]
+                                                            d_order_dt = d['ord_dt'][k]
+                                                            d_order_tmd = d['ord_tmd'][k]
+                                                            d_name = d['prdt_name'][k]
+                                                            d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                                                            d_order_amount = d['ord_qty'][k]
+                                                            d_total_complete_qty = d['tot_ccld_qty'][k]
+                                                            d_remain_qty = d['rmn_qty'][k]
+                                                            d_total_complete_amt = d['tot_ccld_amt'][k]
 
                                                             print("매도주문 완료")
                                                             msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
