@@ -4101,7 +4101,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"100% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"100% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -4262,7 +4262,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"66% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"66% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -4423,7 +4423,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"50% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"50% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -4584,7 +4584,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"33% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"33% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -4745,7 +4745,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"25% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"25% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -4906,7 +4906,7 @@ def callback_get(update, context) :
                             cur500.close()
 
                             if was_inserted:
-                                msg = f"20% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
+                                msg = f"20% 정리-{company_name}[<code>{code}</code>] 매도기준 : {기준봉['timestamp'].strftime('%H:%M:%S')}, 고가 : {int(기준봉['high']):,}원, 저가 : {int(기준봉['low']):,}원, 종가 : {int(기준봉['close']):,}원, 거래량 : {int(기준봉['volume']):,}주 자동처리 등록"
                                 result_msgs.append(msg)
 
                                 # 매매자동처리 update
@@ -7242,7 +7242,7 @@ def echo(update, context):
                     cur500.close()
 
                     if was_inserted:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 종가 : " + format(int(기준봉['close']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
                         
                         # 매매자동처리 update
                         cur501 = conn.cursor()
@@ -7378,7 +7378,7 @@ def echo(update, context):
                     cur500.close()
 
                     if was_inserted:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도기준 : " + 기준봉['timestamp'].strftime("%H:%M:%S") + ", 고가 : " + format(int(기준봉['high']), ',d') + "원, 저가 : " + format(int(기준봉['low']), ',d') + "원, 종가 : " + format(int(기준봉['close']), ',d') + "원, 거래량 : " + format(int(기준봉['volume']), ',d') + "주 정보 등록", parse_mode='HTML')
 
                         # 매매자동처리 update
                         cur501 = conn.cursor()
