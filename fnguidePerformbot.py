@@ -85,40 +85,48 @@ def get_dividiend(code):
     r.encoding='utf-8'
     data = pd.read_html(r.text)
 
-    IS_temp = data[0] # 연간
-    #IS_temp = data[1] # 분기
-    IS_temp.index = IS_temp['IFRS(별도)'].values
-    IS_temp.drop(['IFRS(별도)', '전년동기', '전년동기(%)'], inplace=True, axis=1)
+    if not data:
+        print(f"[{code}] 재무 데이터가 존재하지 않습니다.")
+        return None
+    else:
+        IS_temp = data[0] # 연간
+        #IS_temp = data[1] # 분기
+        if 'IFRS(별도)' in IS_temp.columns:
+            IS_temp.index = IS_temp['IFRS(별도)'].values
+            IS_temp.drop(['IFRS(별도)', '전년동기', '전년동기(%)'], inplace=True, axis=1)
+        else:
+            IS_temp.index = IS_temp['IFRS(개별)'].values
+            IS_temp.drop(['IFRS(개별)', '전년동기', '전년동기(%)'], inplace=True, axis=1)
 
-    for i, name in enumerate(IS_temp.index):
+        for i, name in enumerate(IS_temp.index):
 
-        if '참여한' in name:
-            name = name.strip().replace('계산에 참여한 계정 펼치기', '')
-            name = name.replace(' ', '')
-            IS_temp.rename(index = {str(IS_temp.index[i]): str(name)}, inplace=True) # rename 으로 index 다시 설정
+            if '참여한' in name:
+                name = name.strip().replace('계산에 참여한 계정 펼치기', '')
+                name = name.replace(' ', '')
+                IS_temp.rename(index = {str(IS_temp.index[i]): str(name)}, inplace=True) # rename 으로 index 다시 설정
 
-    cols = list(IS_temp.columns)
-    cols = [get_date_str(x) for x in cols]
-    IS_temp.columns = cols
-    IS_temp = IS_temp.T
+        cols = list(IS_temp.columns)
+        cols = [get_date_str(x) for x in cols]
+        IS_temp.columns = cols
+        IS_temp = IS_temp.T
 
-    IS_temp.drop('매출원가', axis=1, inplace=True)
-    IS_temp.drop('매출총이익', axis=1, inplace=True)
-    IS_temp.drop('영업이익(발표기준)', axis=1, inplace=True)
-    IS_temp.drop('판매비와관리비', axis=1, inplace=True)
-    IS_temp.drop('금융원가', axis=1, inplace=True)
-    IS_temp.drop('기타비용', axis=1, inplace=True)
-    IS_temp.drop('종속기업,공동지배기업및관계기업관련손익', axis=1, inplace=True)
-    IS_temp.drop('세전계속사업이익', axis=1, inplace=True)
-    IS_temp.drop('법인세비용', axis=1, inplace=True)
-    IS_temp.drop('계속영업이익', axis=1, inplace=True)
-    IS_temp.drop('중단영업이익', axis=1, inplace=True)
+        IS_temp.drop('매출원가', axis=1, inplace=True)
+        IS_temp.drop('매출총이익', axis=1, inplace=True)
+        IS_temp.drop('영업이익(발표기준)', axis=1, inplace=True)
+        IS_temp.drop('판매비와관리비', axis=1, inplace=True)
+        IS_temp.drop('금융원가', axis=1, inplace=True)
+        IS_temp.drop('기타비용', axis=1, inplace=True)
+        IS_temp.drop('종속기업,공동지배기업및관계기업관련손익', axis=1, inplace=True)
+        IS_temp.drop('세전계속사업이익', axis=1, inplace=True)
+        IS_temp.drop('법인세비용', axis=1, inplace=True)
+        IS_temp.drop('계속영업이익', axis=1, inplace=True)
+        IS_temp.drop('중단영업이익', axis=1, inplace=True)
 
-    IS_temp.index = pd.to_datetime(IS_temp.index)
-    IS_temp = IS_temp[pd.notnull(IS_temp.index)]
-    result = IS_temp.fillna(0)
-    print(result)
-    return result
+        IS_temp.index = pd.to_datetime(IS_temp.index)
+        IS_temp = IS_temp[pd.notnull(IS_temp.index)]
+        result = IS_temp.fillna(0)
+        print(result)
+        return result
 
 # 텔레그램봇 응답 message handler
 def echo(update, context):
@@ -251,7 +259,7 @@ def echo(update, context):
         print(*message, file=io)
         return io.getvalue()
 
-    if len(code) > 0:
+    if len(code) > 0 and dividend is not None:
         get_chart(code)
         context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save2.png', 'rb'))
 
