@@ -3,7 +3,7 @@ import pandas as pd
 from telegram.ext import Updater
 from telegram.ext import MessageHandler, Filters
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2 as db
 import kis_api_resp as resp
 import sys
@@ -331,7 +331,22 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
     return ar.getBody().output
 
 # 주식예약주문조회 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
-def order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, acct_no, code):
+def order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, acct_no, code):
+
+    # 현재 시간이 15:40 이후인지 체크
+    now = datetime.now()
+    cutoff = now.replace(hour=15, minute=40, second=0, microsecond=0)
+
+    # reserve_strt_dt 문자열 → datetime 변환
+    try:
+        start_dt = datetime.strptime(reserve_strt_dt, "%Y%m%d")
+    except ValueError:
+        raise ValueError("reserce_strt_dt 는 YYYYMMDD 형식이어야 합니다.")
+
+    # 현재 날짜와 reserce_strt_dt 날짜가 같고, 현재 시간이 15:40 이후라면 다음날로 변경
+    if now.date() == start_dt.date() and now > cutoff:
+        start_dt = start_dt + timedelta(days=1)
+        reserve_strt_dt = start_dt.strftime("%Y%m%d")
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -340,7 +355,7 @@ def order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, r
                "tr_id": "CTSC0004R",                                # tr_id : CTSC0004R
     }  
     params = {
-                "RSVN_ORD_ORD_DT": reserce_strt_dt,                 # 예약주문시작일자
+                "RSVN_ORD_ORD_DT": reserve_strt_dt,                 # 예약주문시작일자
                 "RSVN_ORD_END_DT": reserve_end_dt,                  # 예약주문종료일자
                 "RSVN_ORD_SEQ": "",                                 # 예약주문순번
                 "TMNL_MDIA_KIND_CD": "00",
@@ -528,10 +543,10 @@ def callback_get(update, context) :
                                             message_id=update.callback_query.message.message_id)
 
             
-            reserce_strt_dt = datetime.now().strftime("%Y%m%d")
+            reserve_strt_dt = datetime.now().strftime("%Y%m%d")
             reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
             # 전체예약 조회
-            output = order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, str(acct_no), "")
+            output = order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, str(acct_no), "")
 
             if len(output) > 0:
                 tdf = pd.DataFrame(output)
@@ -888,8 +903,17 @@ def echo(update, context):
                 ord_rsv_price = int(commandBot[2])      # 정정가(시장가:0)
                 ord_rsv_end_dt = commandBot[3]          # 예약죵료일
 
+                # 현재 날짜 계산 (15:40 이후이면 다음날)
+                now = datetime.now()
+                cutoff = now.replace(hour=15, minute=40, second=0, microsecond=0)
+
+                if now > cutoff:
+                    start_date = (now + timedelta(days=1)).strftime("%Y%m%d")
+                else:
+                    start_date = now.strftime("%Y%m%d")
+
                 # 전체예약 조회
-                output = order_reserve_complete(access_token, app_key, app_secret, datetime.now().strftime("%Y%m%d"), ord_rsv_end_dt, str(acct_no), "")
+                output = order_reserve_complete(access_token, app_key, app_secret, start_date, ord_rsv_end_dt, str(acct_no), "")
 
                 if len(output) > 0:
                     tdf = pd.DataFrame(output)
@@ -944,11 +968,20 @@ def echo(update, context):
             if commandBot[1].isdecimal():
 
                 ord_rsv_no = commandBot[1]              # 예약주문번호
-                reserce_strt_dt = datetime.now().strftime("%Y%m%d")
-                reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
+
+                # 현재 날짜 계산 (15:40 이후이면 다음날)
+                now = datetime.now()
+                cutoff = now.replace(hour=15, minute=40, second=0, microsecond=0)
+
+                if now > cutoff:
+                    reserve_strt_dt = (now + timedelta(days=1)).strftime("%Y%m%d")
+                else:
+                    reserve_strt_dt = now.strftime("%Y%m%d")
+
+                reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")                    
 
                 # 전체예약 조회
-                output = order_reserve_complete(access_token, app_key, app_secret, reserce_strt_dt, reserve_end_dt, str(acct_no), "")
+                output = order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, str(acct_no), "")
 
                 if len(output) > 0:
                     tdf = pd.DataFrame(output)
