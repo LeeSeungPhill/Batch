@@ -4115,7 +4115,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select COALESCE(trading_plan, 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
