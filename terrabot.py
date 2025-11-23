@@ -4136,7 +4136,6 @@ def callback_get(update, context) :
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
-                        # result_msgs = []
                         if order_cancel_proc_result == "success":
 
                             # 매도 가능 수량 조회
@@ -4266,7 +4265,7 @@ def callback_get(update, context) :
 
                         else:
 
-                            msg = f"{company_name} 100% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"100% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                                        
 
                 final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
@@ -4291,7 +4290,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4435,12 +4434,17 @@ def callback_get(update, context) :
 
                                     conn.commit()
                                     cur501.close()
+
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")    
+
                         else:
 
-                            msg = f"66% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"66% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
@@ -4462,7 +4466,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4607,12 +4611,16 @@ def callback_get(update, context) :
                                     conn.commit()
                                     cur501.close()
 
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")                                       
+
                         else:
 
-                            msg = f"50% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"50% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                                    
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
@@ -4634,7 +4642,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4779,12 +4787,16 @@ def callback_get(update, context) :
                                     conn.commit()
                                     cur501.close()
 
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")                                       
+
                         else:
 
-                            msg = f"33% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"33% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)             
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
@@ -4806,7 +4818,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -4951,12 +4963,16 @@ def callback_get(update, context) :
                                     conn.commit()
                                     cur501.close()
 
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")                                       
+
                         else:
 
-                            msg = f"25% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"25% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                                        
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
@@ -4978,7 +4994,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(NULLIF(trading_plan, ''), 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -5123,12 +5139,16 @@ def callback_get(update, context) :
                                     conn.commit()
                                     cur501.close()
 
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")                                       
+
                         else:
 
-                            msg = f"20% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"20% 정리 매도 {company_name} 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                                        
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
