@@ -4119,7 +4119,7 @@ def callback_get(update, context) :
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
-                
+
                 for i in result_one00:
                     trading_plan = i[0]
                     purchase_price = i[1]
@@ -4136,7 +4136,7 @@ def callback_get(update, context) :
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
-
+                        # result_msgs = []
                         if order_cancel_proc_result == "success":
 
                             # 매도 가능 수량 조회
@@ -4260,12 +4260,16 @@ def callback_get(update, context) :
                                     conn.commit()
                                     cur501.close()
 
+                                else:
+
+                                    result_msgs.append(f"{company_name} 자동 처리 이미 존재")
+
                         else:
 
-                            msg = f"100% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
+                            msg = f"{company_name} 100% 정리 매도 주문정보 취소 처리 오류-{order_cancel_proc_result}"
                             result_msgs.append(msg)                                        
 
-                final_message = "\n".join(result_msgs) if result_msgs else "매도대상 종목이 존재하지 않거나 주문 조건을 충족하지 못했습니다."
+                final_message = "\n".join(result_msgs) if result_msgs else "자동 처리 대상이 미존재합니다."
 
                 context.bot.edit_message_text(
                     text=final_message,
