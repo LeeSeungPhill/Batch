@@ -3965,7 +3965,7 @@ def callback_get(update, context) :
                             d_ord_dvsn_name = d['ord_dvsn_name'][j]             # 주문구분명
                             d_rsvn_end_dt = d['rsvn_end_dt'][j]                 # 예약종료일자
 
-                            msg1 = f", {d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]} 예약번호:<code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}:{format(d_ord_rsvn_unpr, ',d')}원, 예약수량:{format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
+                            msg1 = f"{d_rsvn_ord_ord_dt[:4]}/{d_rsvn_ord_ord_dt[4:6]}/{d_rsvn_ord_ord_dt[6:]}~{d_rsvn_end_dt[:4]}/{d_rsvn_end_dt[4:6]}/{d_rsvn_end_dt[6:]} 예약번호:<code>{str(d_rsvn_ord_seq)}</code>, {d_ord_dvsn_name}:{format(d_ord_rsvn_unpr, ',d')}원, 예약수량:{format(d_ord_rsvn_qty, ',d')}주 {d_prcs_rslt}"
                             result_msgs.append(msg1)
                             
                             if d_cncl_ord_dt != "":
@@ -3975,8 +3975,29 @@ def callback_get(update, context) :
                                 msg3 = f", 주문번호:<code>{str(d_order_no)}</code>, 체결수량:{format(d_tot_ccld_qty, ',d')}주, 체결금액:{format(d_tot_ccld_amt, ',d')}원"
                                 result_msgs.append(msg3)
 
-                    final_message = f"* {company} 매입가:{format(int(purchase_price), ',d')}원, 매입수량:{format(purchase_amount, ',d')}주, 매입금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earning_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원, 저항가:{format(sign_resist_price, ',d')}원, 지지가:{format(sign_support_price, ',d')}원, 최종목표가:{format(end_target_price, ',d')}원, 최종이탈가:{format(end_loss_price, ',d')}원, 손절가:{format(limit_price, ',d')}원, 손절금액:{format(limit_amt, ',d')}원, 매매계획:{trading_plan} {result_msgs} => {sell_command}"
+                    base_msg = (
+                        f"* {company} 매입가:{format(int(purchase_price), ',d')}원, "
+                        f"매입수량:{format(purchase_amount, ',d')}주, "
+                        f"매입금액:{format(purchase_sum, ',d')}원, "
+                        f"현재가:{format(current_price, ',d')}원, "
+                        f"평가금액:{format(eval_sum, ',d')}원, "
+                        f"수익률:{earning_rate}%, "
+                        f"손수익금액:{format(valuation_sum, ',d')}원, "
+                        f"저항가:{format(sign_resist_price, ',d')}원, "
+                        f"지지가:{format(sign_support_price, ',d')}원, "
+                        f"최종목표가:{format(end_target_price, ',d')}원, "
+                        f"최종이탈가:{format(end_loss_price, ',d')}원, "
+                        f"손절가:{format(limit_price, ',d')}원, "
+                        f"손절금액:{format(limit_amt, ',d')}원, "
+                        f"매매계획:{trading_plan}"
+                    )
 
+                    if result_msgs:
+                        reserve_msg = "\n".join(result_msgs)
+                        final_message = f"{base_msg}\n{reserve_msg} => {sell_command}"
+                    else:
+                        final_message = f"{base_msg} => {sell_command}"
+                    
                     context.bot.send_message(chat_id=update.effective_chat.id, text=final_message, parse_mode="HTML")
            
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
@@ -6248,8 +6269,29 @@ def echo(update, context):
                                 msg3 = f", 주문번호:<code>{str(d_order_no)}</code>, 체결수량:{format(d_tot_ccld_qty, ',d')}주, 체결금액:{format(d_tot_ccld_amt, ',d')}원"
                                 result_msgs.append(msg3)
 
-                    final_message = f"* {company} 매입가:{format(int(purchase_price), ',d')}원, 매입수량:{format(purchase_amount, ',d')}주, 매입금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earning_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원, 저항가:{format(sign_resist_price, ',d')}원, 지지가:{format(sign_support_price, ',d')}원, 최종목표가:{format(end_target_price, ',d')}원, 최종이탈가:{format(end_loss_price, ',d')}원, 손절가:{format(limit_price, ',d')}원, 손절금액:{format(limit_amt, ',d')}원, 매매계획:{trading_plan} {result_msgs} => {sell_command}"
-           
+                    base_msg = (
+                        f"* {company} 매입가:{format(int(purchase_price), ',d')}원, "
+                        f"매입수량:{format(purchase_amount, ',d')}주, "
+                        f"매입금액:{format(purchase_sum, ',d')}원, "
+                        f"현재가:{format(current_price, ',d')}원, "
+                        f"평가금액:{format(eval_sum, ',d')}원, "
+                        f"수익률:{earning_rate}%, "
+                        f"손수익금액:{format(valuation_sum, ',d')}원, "
+                        f"저항가:{format(sign_resist_price, ',d')}원, "
+                        f"지지가:{format(sign_support_price, ',d')}원, "
+                        f"최종목표가:{format(end_target_price, ',d')}원, "
+                        f"최종이탈가:{format(end_loss_price, ',d')}원, "
+                        f"손절가:{format(limit_price, ',d')}원, "
+                        f"손절금액:{format(limit_amt, ',d')}원, "
+                        f"매매계획:{trading_plan}"
+                    )
+
+                    if result_msgs:
+                        reserve_msg = "\n".join(result_msgs)
+                        final_message = f"{base_msg}\n{reserve_msg} => {sell_command}"
+                    else:
+                        final_message = f"{base_msg} => {sell_command}"
+
                     context.bot.send_message(chat_id=update.effective_chat.id, text=final_message, parse_mode="HTML")
                     command_pattern = f"BalanceSell_{i[6]}_{avail_amount}"
                     get_handler = CommandHandler(command_pattern, get_command3)
