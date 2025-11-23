@@ -3898,7 +3898,8 @@ def callback_get(update, context) :
                     avail_amount = i[15]
                     print("매도가능수량 : " + format(avail_amount, ',d'))
                     # 매메계획
-                    trading_plan = i[16]
+                    trading_plan_key = i[16]  # DB에서 가져온 trading_plan 값
+                    trading_plan = trading_plan_dic.get(trading_plan_key, "미지정")  # 없는 경우 "미지정"
                     print("매매계획 : " + trading_plan)
                     # 손절가
                     limit_price = i[17]
