@@ -341,9 +341,9 @@ def order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, r
     try:
         start_dt = datetime.strptime(reserve_strt_dt, "%Y%m%d")
     except ValueError:
-        raise ValueError("reserce_strt_dt 는 YYYYMMDD 형식이어야 합니다.")
+        raise ValueError("reserve_strt_dt 는 YYYYMMDD 형식이어야 합니다.")
 
-    # 현재 날짜와 reserce_strt_dt 날짜가 같고, 현재 시간이 15:40 이후라면 다음날로 변경
+    # 현재 날짜와 reserve_strt_dt 날짜가 같고, 현재 시간이 15:40 이후라면 다음날로 변경
     if now.date() == start_dt.date() and now > cutoff:
         start_dt = start_dt + timedelta(days=1)
         reserve_strt_dt = start_dt.strftime("%Y%m%d")

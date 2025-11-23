@@ -1440,10 +1440,12 @@ def marketLevel_proc(access_token, app_key, app_secret, acct_no):
 
 # 매도 주문정보 존재시 취소 처리
 def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
+    
+    result_msgs = []
+
     try:
         # 일별주문체결 조회
         output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, '')
-        result_msgs = []
 
         if len(output1) > 0:
         
@@ -3937,12 +3939,12 @@ def callback_get(update, context) :
            
                     # 해당 종목 예약 조회
                     output = order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, str(acct_no), i[6])
+                    result_msgs = []
 
                     if len(output) > 0:
                         tdf = pd.DataFrame(output)
                         tdf.set_index('rsvn_ord_seq')
                         d = tdf[['rsvn_ord_seq', 'rsvn_ord_ord_dt', 'rsvn_ord_rcit_dt', 'pdno', 'ord_dvsn_cd', 'ord_rsvn_qty', 'tot_ccld_qty', 'cncl_ord_dt', 'ord_tmd', 'odno', 'rsvn_ord_rcit_tmd', 'kor_item_shtn_name', 'sll_buy_dvsn_cd', 'ord_rsvn_unpr', 'tot_ccld_amt', 'cncl_rcit_tmd', 'prcs_rslt', 'ord_dvsn_name', 'rsvn_end_dt']]
-                        result_msgs = []
 
                         for j, name in enumerate(d.index):
                             d_rsvn_ord_seq = int(d['rsvn_ord_seq'][j])          # 예약주문 순번
@@ -4113,7 +4115,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select trading_plan, purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
+                cur100.execute("select COALESCE(trading_plan, 'as'), purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and purchase_amount > 0")
                 result_one00 = cur100.fetchall()
                 cur100.close()
                 result_msgs = []
@@ -6231,12 +6233,12 @@ def echo(update, context):
 
                     # 해당 종목 예약 조회
                     output = order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, str(acct_no), i[6])
+                    result_msgs = []
 
                     if len(output) > 0:
                         tdf = pd.DataFrame(output)
                         tdf.set_index('rsvn_ord_seq')
                         d = tdf[['rsvn_ord_seq', 'rsvn_ord_ord_dt', 'rsvn_ord_rcit_dt', 'pdno', 'ord_dvsn_cd', 'ord_rsvn_qty', 'tot_ccld_qty', 'cncl_ord_dt', 'ord_tmd', 'odno', 'rsvn_ord_rcit_tmd', 'kor_item_shtn_name', 'sll_buy_dvsn_cd', 'ord_rsvn_unpr', 'tot_ccld_amt', 'cncl_rcit_tmd', 'prcs_rslt', 'ord_dvsn_name', 'rsvn_end_dt']]
-                        result_msgs = []
 
                         for j, name in enumerate(d.index):
                             d_rsvn_ord_seq = int(d['rsvn_ord_seq'][j])          # 예약주문 순번

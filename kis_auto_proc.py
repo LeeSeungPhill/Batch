@@ -480,7 +480,7 @@ if result_one == None:
                                 WHEN sb.trading_plan = '20s' THEN 20
                                 ELSE 0
                             END
-                        ELSE 0
+                        ELSE 100
                     END AS trading_value,
                     tap.regr_id
                 FROM public.trade_auto_proc tap
