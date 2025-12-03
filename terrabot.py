@@ -4023,7 +4023,7 @@ def callback_get(update, context) :
             elif data_selected.find("매매계획") != -1:
                 menuNum = "162"
 
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획을 입력하세요.",
+                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획(홀딩-h, 투자-i, 전체메도-as, 2/3매도-66s, 절반매도-50s, 1/3매도-33s, 1/4매도-25s, 1/5매도-20s, 1차매수-1b, 2차매수-2b, 3차매수-3b, 4차매수-4b, 5차매수-5b)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                    
 
