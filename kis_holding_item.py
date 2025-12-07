@@ -1384,6 +1384,14 @@ if result_one == None:
                                                             msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                                             result_msgs.append(msg)
 
+                                                        cur13 = conn.cursor()
+                                                        # 보유종목 매매계획 변경(홀딩)
+                                                        update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                                        record_to_update404 = ([str(acct_no), i[0]])
+                                                        cur13.execute(update_query13, record_to_update404)
+                                                        cur13.close()
+                                                        conn.commit()
+
                                                     else:
                                                         print("매도주문 실패")
                                                         msg = f"[자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
@@ -1472,6 +1480,14 @@ if result_one == None:
                                                             print("매도주문 완료")
                                                             msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                                             result_msgs.append(msg)
+
+                                                        cur13 = conn.cursor()
+                                                        # 보유종목 매매계획 변경(홀딩)
+                                                        update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                                        record_to_update404 = ([str(acct_no), i[0]])
+                                                        cur13.execute(update_query13, record_to_update404)
+                                                        cur13.close()
+                                                        conn.commit()
 
                                                     else:
                                                         print("매도주문 실패")
@@ -1563,6 +1579,14 @@ if result_one == None:
                                                             msg = f"[자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                                                             result_msgs.append(msg)
 
+                                                        cur13 = conn.cursor()
+                                                        # 보유종목 매매계획 변경(홀딩)
+                                                        update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                                        record_to_update404 = ([str(acct_no), i[0]])
+                                                        cur13.execute(update_query13, record_to_update404)
+                                                        cur13.close()
+                                                        conn.commit()
+
                                                     else:
                                                         print("매도주문 실패")
                                                         msg = f"[자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
@@ -1579,9 +1603,9 @@ if result_one == None:
                                                 main(final_message)
 
                             # 홀딩대상
-                            elif i[11] == 'h':
-                                trail_signal_code = "16"
-                                trail_signal_name = "홀딩 대상 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
+                            # elif i[11] == 'h':
+                            #     trail_signal_code = "16"
+                            #     trail_signal_name = "홀딩 대상 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
 
                             # 안전마진 확보대상
                             # elif i[11] == 'h':
