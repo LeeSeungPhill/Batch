@@ -4256,8 +4256,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 
@@ -4307,7 +4314,7 @@ def callback_get(update, context) :
                     company_name = i[8]
 
                     # 66% 매도 계획 대상
-                    if trading_plan == "66s":
+                    if trading_plan == "66s" or trading_plan == "1b":
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
@@ -4432,8 +4439,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 
@@ -4483,7 +4497,7 @@ def callback_get(update, context) :
                     company_name = i[8]
 
                     # 50% 매도 계획 대상
-                    if trading_plan == "50s":
+                    if trading_plan == "50s" or trading_plan == "2b":
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
@@ -4608,8 +4622,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 
@@ -4659,7 +4680,7 @@ def callback_get(update, context) :
                     company_name = i[8]
 
                     # 33% 매도 계획 대상
-                    if trading_plan == "33s":
+                    if trading_plan == "33s" or trading_plan == "3b":
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
@@ -4784,8 +4805,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 
@@ -4835,7 +4863,7 @@ def callback_get(update, context) :
                     company_name = i[8]
 
                     # 25% 매도 계획 대상
-                    if trading_plan == "25s":
+                    if trading_plan == "25s" or trading_plan == "4b":
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
@@ -4960,8 +4988,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 
@@ -5011,7 +5046,7 @@ def callback_get(update, context) :
                     company_name = i[8]
 
                     # 20% 매도 계획 대상
-                    if trading_plan == "20s":
+                    if trading_plan == "20s" or trading_plan == "5b":
 
                         # 매도 주문정보 존재시 취소 처리
                         order_cancel_proc_result = sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code)
@@ -5136,8 +5171,15 @@ def callback_get(update, context) :
                                         datetime.now(), str(acct_no), code, datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
                                     ))
 
+                                    cur502 = conn.cursor()
+                                    # 보유종목 매매계획 변경(홀딩)
+                                    update_query502 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
+                                    record_to_update502 = ([str(acct_no), code])
+                                    cur502.execute(update_query502, record_to_update502)
+
                                     conn.commit()
                                     cur501.close()
+                                    cur502.close()
 
                                 else:
 

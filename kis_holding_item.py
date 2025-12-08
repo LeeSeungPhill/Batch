@@ -1217,7 +1217,7 @@ if result_one == None:
     
             # 보유정보 조회
             cur03 = conn.cursor()
-            cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.purchase_amount as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)    and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = A.code and trail_signal_code = '09') as target_over, COALESCE(NULLIF(trading_plan, ''), 'as') from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and (trading_plan is null or trading_plan not in ('i'))")
+            cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '06') as market_over, case when cast(A.purchase_amount as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER)    and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = A.code and trail_signal_code = '09') as target_over, COALESCE(NULLIF(trading_plan, ''), 'as'), safe_margin_sum from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and (trading_plan is null or trading_plan not in ('i'))")
             result_three = cur03.fetchall()
             cur03.close()
 
@@ -1314,7 +1314,7 @@ if result_one == None:
                                 trail_signal_code = "13"
                                 trail_signal_name = "시장 지지선 이탈하고 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
 
-                                # trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"100", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
+                                # trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"66", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
                                 trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20"}
                                 
                                 for key, value in trading_plan_dic.items():
@@ -1412,7 +1412,7 @@ if result_one == None:
                                 trail_signal_code = "14"
                                 trail_signal_name = "시장 추세선 이탈하고 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
 
-                                trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"100", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
+                                trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"66", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
                                 
                                 for key, value in trading_plan_dic.items():
                                     if key == i[11]:
@@ -1509,7 +1509,7 @@ if result_one == None:
                                 trail_signal_code = "15"
                                 trail_signal_name = "최종목표가 돌파하고 전일 저가 "+format(int(i[9]), ',d') +"원 이탈"
 
-                                trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"100", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
+                                trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"66", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
 
                                 for key, value in trading_plan_dic.items():
                                     if key == i[11]:
@@ -1608,7 +1608,7 @@ if result_one == None:
                             #     trail_signal_name = "홀딩 대상 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
 
                             # 안전마진 확보대상
-                            # elif i[11] == 'h':
+                            # elif int(i[12]) > 0:
                             #     trail_signal_code = "17"
                             #     trail_signal_name = "안전마진 확보대상 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"    
 
