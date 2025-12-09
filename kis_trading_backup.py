@@ -143,7 +143,7 @@ for nick in nickname_list:
             SELECT 
                 acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, 
                 eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, 
-                sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, last_chg_date
+                sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, safe_margin_sum, last_chg_date
             FROM dly_stock_balance
             WHERE acct = %s AND dt BETWEEN %s AND %s
         """, (str(acct_no), start_dt, end_dt))
@@ -157,16 +157,16 @@ for nick in nickname_list:
 
         insert_query3 = """
             INSERT INTO dly_stock_balance (
-                acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, last_chg_date
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, safe_margin_sum, last_chg_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (acct, dt, code) DO NOTHING
         """
 
         for row in stock_balance_result:
-            acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, last_chg_date = row
+            acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, safe_margin_sum, last_chg_date = row
             try:
                 remote_cur3.execute(insert_query3, (
-                    acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, last_chg_date
+                    acct, dt, code, name, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, eval_sum, earnings_rate, valuation_sum, open_price, high_price, low_price, volumn, volumn_rate, dly_signal_code, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, limit_amt, safe_margin_sum, last_chg_date
                 ))
             except Exception as e:
                 print(f"[{nick}] Error dly_stock_balance inserting row {row}: {e}")
