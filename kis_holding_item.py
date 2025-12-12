@@ -1044,13 +1044,13 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         safe_margin_sum = 0
                         for item406 in result_one406:
                             if int(item['체결단가']) > 0:
-                                safe_margin_sum = int(item406[0]) + (int(item['체결단가']) - int(item['보유단가'])) * new_complete_qty
+                                safe_margin_sum = Decimal(item406[0]) + (Decimal(item['체결단가']) - Decimal(item['보유단가'])) * new_complete_qty
                             else:
-                                safe_margin_sum = int(item406[0]) + (int(item['주문단가']) - int(item['보유단가'])) * new_complete_qty
+                                safe_margin_sum = Decimal(item406[0]) + (Decimal(item['주문단가']) - Decimal(item['보유단가'])) * new_complete_qty
 
                             # 잔고정보 안전마진총액 변경
                             update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
-                            record_to_update406 = ([safe_margin_sum, acct_no, item['종목명']])
+                            record_to_update406 = ([int(safe_margin_sum), acct_no, item['종목명']])
                             cur407.execute(update_query406, record_to_update406)
                             
                         cur407.close()                        
