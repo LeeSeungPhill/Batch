@@ -4067,6 +4067,10 @@ def callback_get(update, context) :
                 # 자산정보 호출
                 fund_proc(access_token, app_key, app_secret, acct_no)
 
+                # 매수 가능(현금) 조회
+                b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                print("매수 가능(현금) : " + format(int(b), ',d'));
+
                 # 자산관리정보 조회
                 cur300 = conn.cursor()
                 cur300.execute("select market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from (select row_number() over (order by id desc) as ROWNUM, COALESCE(market_ratio, 0) as market_ratio, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
@@ -4074,7 +4078,7 @@ def callback_get(update, context) :
                 cur300.close()
             
                 for i in result_three00:
-                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 매수가능금액 : " + format(int(b), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
 
             elif data_selected.find("자산정리") != -1:
 
