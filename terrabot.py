@@ -3869,27 +3869,27 @@ def callback_get(update, context) :
 
                 for i in result_one00:
 
-                    # 매입가
+                    # 매수가
                     purchase_price = i[0]
-                    print("매입가 : " + format(int(purchase_price), ',d'))
-                    # 매입수량
+                    print("매수가 : " + format(int(purchase_price), ',d'))
+                    # 매수량
                     purchase_amount = i[1]
-                    print("매입수량 : " + format(purchase_amount, ',d'))
-                    # 매입금액
+                    print("매수량 : " + format(purchase_amount, ',d'))
+                    # 매수금액
                     purchase_sum = i[8]
-                    print("매입금액 : " + format(purchase_sum, ',d'))
+                    print("매수금액 : " + format(purchase_sum, ',d'))
                     # 현재가
                     current_price = i[9]
                     print("현재가 : " + format(current_price, ',d'))
-                    # 평가금액
+                    # 현재금액
                     eval_sum = i[10]
-                    print("평가금액 : " + format(eval_sum, ',d'))
+                    print("현재금액 : " + format(eval_sum, ',d'))
                     # 수익률
                     earning_rate = i[11]
                     print("수익률 : " + str(earning_rate))
-                    # 평가손익금액
+                    # 증감액
                     valuation_sum = i[12]
-                    print("평가손익금액 : " + format(valuation_sum, ',d'))
+                    print("증감액 : " + format(valuation_sum, ',d'))
                     # 매도예정금액
                     sell_plan_sum = i[13]
                     print("매도예정금액 : " + format(sell_plan_sum, ',d'))
@@ -3981,13 +3981,13 @@ def callback_get(update, context) :
                                 result_msgs.append(msg3)
 
                     base_msg = (
-                        f"* {company} 매입가:{format(int(purchase_price), ',d')}원, "
-                        f"매입수량:{format(purchase_amount, ',d')}주, "
-                        f"매입금액:{format(purchase_sum, ',d')}원, "
+                        f"* {company} 매수가:{format(int(purchase_price), ',d')}원, "
+                        f"매수량:{format(purchase_amount, ',d')}주, "
+                        f"매수금액:{format(purchase_sum, ',d')}원, "
                         f"현재가:{format(current_price, ',d')}원, "
-                        f"평가금액:{format(eval_sum, ',d')}원, "
+                        f"현재금액:{format(eval_sum, ',d')}원, "
                         f"수익률:{earning_rate}%, "
-                        f"손수익금액:{format(valuation_sum, ',d')}원, "
+                        f"증감액:{format(valuation_sum, ',d')}원, "
                         f"저항가:{format(sign_resist_price, ',d')}원, "
                         f"지지가:{format(sign_support_price, ',d')}원, "
                         f"최종목표가:{format(end_target_price, ',d')}원, "
@@ -6325,27 +6325,27 @@ def echo(update, context):
             if len(result_one00) > 0:
                 for i in result_one00:
 
-                    # 매입가
+                    # 매수가
                     purchase_price = i[0]
-                    print("매입가 : " + format(int(purchase_price), ',d'))
-                    # 매입수량
+                    print("매수가 : " + format(int(purchase_price), ',d'))
+                    # 매수량
                     purchase_amount = i[1]
-                    print("매입수량 : " + format(purchase_amount, ',d'))
-                    # 매입금액
+                    print("매수량 : " + format(purchase_amount, ',d'))
+                    # 매수금액
                     purchase_sum = i[8]
-                    print("매입금액 : " + format(purchase_sum, ',d'))
+                    print("매수금액 : " + format(purchase_sum, ',d'))
                     # 현재가
                     current_price = i[9]
                     print("현재가 : " + format(current_price, ',d'))
-                    # 평가금액
+                    # 현재금액
                     eval_sum = i[10]
-                    print("평가금액 : " + format(eval_sum, ',d'))
+                    print("현재금액 : " + format(eval_sum, ',d'))
                     # 수익률
                     earning_rate = i[11]
                     print("수익률 : " + str(earning_rate))
-                    # 평가손익금액
+                    # 증감액
                     valuation_sum = i[12]
-                    print("평가손익금액 : " + format(valuation_sum, ',d'))
+                    print("증감액 : " + format(valuation_sum, ',d'))
                     # 매도예정금액
                     sell_plan_sum = i[13]
                     print("매도예정금액 : " + format(sell_plan_sum, ',d'))
@@ -6437,13 +6437,13 @@ def echo(update, context):
                                 result_msgs.append(msg3)
 
                     base_msg = (
-                        f"* {company} 매입가:{format(int(purchase_price), ',d')}원, "
-                        f"매입수량:{format(purchase_amount, ',d')}주, "
-                        f"매입금액:{format(purchase_sum, ',d')}원, "
+                        f"* {company} 매수가:{format(int(purchase_price), ',d')}원, "
+                        f"매수량:{format(purchase_amount, ',d')}주, "
+                        f"매수금액:{format(purchase_sum, ',d')}원, "
                         f"현재가:{format(current_price, ',d')}원, "
-                        f"평가금액:{format(eval_sum, ',d')}원, "
+                        f"현재금액:{format(eval_sum, ',d')}원, "
                         f"수익률:{earning_rate}%, "
-                        f"손수익금액:{format(valuation_sum, ',d')}원, "
+                        f"증감액:{format(valuation_sum, ',d')}원, "
                         f"저항가:{format(sign_resist_price, ',d')}원, "
                         f"지지가:{format(sign_support_price, ',d')}원, "
                         f"최종목표가:{format(end_target_price, ',d')}원, "
