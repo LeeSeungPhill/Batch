@@ -827,6 +827,27 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         
                     cur405.close()
 
+                    # 잔고정보 안전마진총액 조회
+                    cur406 = conn.cursor()
+                    cur406.execute("select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = %s and name = %s and proc_yn = 'Y'", (acct_no, item['종목명']))
+                    result_one406 = cur406.fetchall()
+                    cur406.close()
+
+                    cur407 = conn.cursor()
+                    safe_margin_sum = 0
+                    for item406 in result_one406:
+                        if int(item['체결단가']) > 0:
+                            safe_margin_sum = int(item406[0]) + (int(item['체결단가']) - int(item['보유단가'])) * new_complete_qty
+                        else:
+                            safe_margin_sum = int(item406[0]) + (int(item['주문단가']) - int(item['보유단가'])) * new_complete_qty
+
+                        # 잔고정보 안전마진총액 변경
+                        update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
+                        record_to_update406 = ([safe_margin_sum, acct_no, item['종목명']])
+                        cur407.execute(update_query406, record_to_update406)
+                        
+                    cur407.close()
+
                 conn.commit()                        
 
             else:
@@ -1012,6 +1033,27 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                             cur405.execute(update_query404, record_to_update404)
                         
                         cur405.close()
+
+                        # 잔고정보 안전마진총액 조회
+                        cur406 = conn.cursor()
+                        cur406.execute("select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = %s and name = %s and proc_yn = 'Y'", (acct_no, item['종목명']))
+                        result_one406 = cur406.fetchall()
+                        cur406.close()
+
+                        cur407 = conn.cursor()
+                        safe_margin_sum = 0
+                        for item406 in result_one406:
+                            if int(item['체결단가']) > 0:
+                                safe_margin_sum = int(item406[0]) + (int(item['체결단가']) - int(item['보유단가'])) * new_complete_qty
+                            else:
+                                safe_margin_sum = int(item406[0]) + (int(item['주문단가']) - int(item['보유단가'])) * new_complete_qty
+
+                            # 잔고정보 안전마진총액 변경
+                            update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
+                            record_to_update406 = ([safe_margin_sum, acct_no, item['종목명']])
+                            cur407.execute(update_query406, record_to_update406)
+                            
+                        cur407.close()                        
 
                     conn.commit()                            
 
