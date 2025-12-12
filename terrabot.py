@@ -809,6 +809,45 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
+# 기간별매매손익현황 합산조회
+def inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, strt_dt, end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8715R",
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,            # 종합계좌번호
+            'SORT_DVSN': "01",          # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'ACNT_PRDT_CD': "01",
+            'CBLC_DVSN': "00",
+            'PDNO': "",                 # ""공란입력 시, 전체
+            'INQR_STRT_DT': strt_dt,    # 조회시작일(8자리) 
+            'INQR_END_DT': end_dt,      # 조회종료일(8자리)
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-period-trade-profit"
+    URL = f"{URL_BASE}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output2이 있는지 확인
+        body = ar.getBody()
+        if hasattr(body, 'output2'):
+            return body.output2['tot_rlzt_pfls']
+        else:
+            print("기간별매매손익현황 합산조회 응답이 없습니다.")
+            return []  # 혹은 None
+
+    except Exception as e:
+        print("기간별매매손익현황 합산조회 중 오류 발생:", e)
+        return []
+
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
     headers = {"Content-Type": "application/json",
@@ -4071,9 +4110,13 @@ def callback_get(update, context) :
                 # 자산정보 호출
                 fund_proc(access_token, app_key, app_secret, acct_no)
 
+                # 총실현손익
+                result1 = inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, datetime.now().strftime("%Y%m%d"), datetime.now().strftime("%Y%m%d"))
+                print("총실현손익 : " + format(int(result1), ',d'));
+
                 # 매수 가능(현금) 조회
-                b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                print("매수 가능(현금) : " + format(int(b), ',d'));
+                result2 = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                print("매수 가능(현금) : " + format(int(result2), ',d'));
 
                 # 자산관리정보 조회
                 cur300 = conn.cursor()
@@ -4082,7 +4125,7 @@ def callback_get(update, context) :
                 cur300.close()
             
                 for i in result_three00:
-                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 매수진행금액 : " + format(int(i[5])-int(b), ',d') + "원, 매수가능금액 : " + format(int(b), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 총손수익금 : " + format(int(result1), ',d') + "원, 매수가능금액 : " + format(int(result2), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
 
             elif data_selected.find("자산정리") != -1:
 

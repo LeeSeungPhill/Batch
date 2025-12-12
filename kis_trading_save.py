@@ -135,6 +135,68 @@ def inquire_daily_indexchartprice(access_token, app_key, app_secret, market, sto
 
     return ar.getBody().output1
 
+# 기간별매매손익현황 합산조회
+def inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, strt_dt, end_dt):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8715R",
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,            # 종합계좌번호
+            'SORT_DVSN': "01",          # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'ACNT_PRDT_CD': "01",
+            'CBLC_DVSN': "00",
+            'PDNO': "",                 # ""공란입력 시, 전체
+            'INQR_STRT_DT': strt_dt,    # 조회시작일(8자리) 
+            'INQR_END_DT': end_dt,      # 조회종료일(8자리)
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-period-trade-profit"
+    URL = f"{URL_BASE}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output2이 있는지 확인
+        body = ar.getBody()
+        if hasattr(body, 'output2'):
+            return body.output2['tot_rlzt_pfls']
+        else:
+            print("기간별매매손익현황 합산조회 응답이 없습니다.")
+            return []  # 혹은 None
+
+    except Exception as e:
+        print("기간별매매손익현황 합산조회 중 오류 발생:", e)
+        return []
+
+# 매수 가능(현금) 조회
+def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8908R"}    # tr_id : TTTC8908R[실전투자], VTTC8908R[모의투자]
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "PDNO": "",                     # 종목번호(6자리)
+               "ORD_UNPR": "0",                # 1주당 가격
+               "ORD_DVSN": "02",               # 02 : 조건부지정가
+               "CMA_EVLU_AMT_ICLD_YN": "Y",    # CMA평가금액포함여부
+               "OVRS_ICLD_YN": "N"             # 해외포함여부
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-order"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+
+    return ar.getBody().output['nrcvb_buy_amt']
+
 # 일별 매매정보 처리
 def trading_proc(access_token, app_key, app_secret, acct_no):
     # 계좌잔고 조회
@@ -156,10 +218,16 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         u_bfdy_tot_asst_evlu_amt = int(d['bfdy_tot_asst_evlu_amt'][i])  # 전일총자산 평가금액
         u_asst_icdc_amt = int(d['asst_icdc_amt'][i])  # 자산 증감액
 
-    insert_query1 = "with upsert as (update dly_acct_balance set dnca_tot_amt = %s, prvs_excc_amt = %s, td_buy_amt = %s, td_sell_amt = %s, td_tex_amt = %s, user_evlu_amt = %s, tot_evlu_amt = %s, nass_amt = %s, pchs_amt = %s, evlu_amt = %s, evlu_pfls_amt = %s, ytdt_tot_evlu_amt = %s, asst_icdc_amt = %s, last_chg_date = %s where dt = %s and acct = %s returning * ) insert into dly_acct_balance(acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+    # 총실현손익
+    result1 = inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, today, today)
+
+    # 매수 가능(현금) 조회
+    result2 = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+    
+    insert_query1 = "with upsert as (update dly_acct_balance set dnca_tot_amt = %s, prvs_excc_amt = %s, td_buy_amt = %s, td_sell_amt = %s, td_tex_amt = %s, user_evlu_amt = %s, tot_evlu_amt = %s, nass_amt = %s, pchs_amt = %s, evlu_amt = %s, evlu_pfls_amt = %s, ytdt_tot_evlu_amt = %s, asst_icdc_amt = %s, total_profit_loss_amt = %s, buy_psbl_amt = %s, last_chg_date = %s where dt = %s and acct = %s returning * ) insert into dly_acct_balance(acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, total_profit_loss_amt, buy_psbl_amt, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
     # insert 인자값 설정
-    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, datetime.now(), today, str(acct_no),
-        str(acct_no), today, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, datetime.now()])
+    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1), int(result2), datetime.now(), today, str(acct_no),
+        str(acct_no), today, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1), int(result2), datetime.now()])
     # DB 연결된 커서의 쿼리 수행
     cur1.execute(insert_query1, record_to_insert1)
     conn.commit()
