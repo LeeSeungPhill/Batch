@@ -4078,7 +4078,7 @@ def callback_get(update, context) :
                 cur300.close()
             
                 for i in result_three00:
-                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 매수가능금액 : " + format(int(b), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
+                    context.bot.send_message(chat_id=update.effective_chat.id, text="총평가금액 : " + format(int(i[2]), ',d') + "원, 잔고금액 : "+ format(int(i[7]), ',d') +"원, 총예수금 : "+format(int(i[4]), ',d') + "원, 가정산금 : " + format(int(i[5]), ',d') + "원, 매수진행금액 : " + format(int(i[5])-int(b), ',d') + "원, 매수가능금액 : " + format(int(b), ',d') + "원, 전일비증감 : " + format(int(i[8]), ',d') + "원")
 
             elif data_selected.find("자산정리") != -1:
 
