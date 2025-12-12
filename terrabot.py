@@ -3859,7 +3859,7 @@ def callback_get(update, context) :
 
                 # 보유종목정보 조회
                 cur100 = conn.cursor()
-                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
+                cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt, COALESCE(safe_margin_sum, 0) as safe_margin_sum from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y'")
                 result_one00 = cur100.fetchall()
                 cur100.close()
 
@@ -3909,6 +3909,9 @@ def callback_get(update, context) :
                     # 손절금액
                     limit_amt = i[18]
                     print("손절금액 : " + format(limit_amt, ',d'))
+                    # 안전마진금액
+                    safe_margin_amt = i[19]
+                    print("안전마진금액 : " + format(safe_margin_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -3991,6 +3994,7 @@ def callback_get(update, context) :
                         f"최종이탈가:{format(end_loss_price, ',d')}원, "
                         f"손절가:{format(limit_price, ',d')}원, "
                         f"손절금액:{format(limit_amt, ',d')}원, "
+                        f"안전마진금액:{format(safe_margin_amt, ',d')}원, "
                         f"매매계획:{trading_plan}"
                     )
 
@@ -6310,7 +6314,7 @@ def echo(update, context):
 
             # 보유종목정보 조회
             cur100 = conn.cursor()
-            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
+            cur100.execute("select purchase_price, purchase_amount, sign_resist_price, sign_support_price, end_target_price, end_loss_price, code, name, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, COALESCE(sell_plan_sum, 0) as sell_plan_sum, COALESCE(sell_plan_amount, 0) as sell_plan_amount, COALESCE(avail_amount, 0), COALESCE(trading_plan, ''), COALESCE(limit_price, 0) as limit_price, COALESCE(limit_amt, 0) as limit_amt, COALESCE(safe_margin_sum, 0) as safe_margin_sum from \"stockBalance_stock_balance\" where acct_no = '" + str(acct_no) + "' and proc_yn = 'Y' and code = '" + code + "'")
             result_one00 = cur100.fetchall()
             cur100.close()
 
@@ -6361,6 +6365,9 @@ def echo(update, context):
                     # 손절금액
                     limit_amt = i[18]
                     print("손절금액 : " + format(limit_amt, ',d'))
+                    # 안전마진금액
+                    safe_margin_amt = i[19]
+                    print("안전마진금액 : " + format(safe_margin_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -6443,6 +6450,7 @@ def echo(update, context):
                         f"최종이탈가:{format(end_loss_price, ',d')}원, "
                         f"손절가:{format(limit_price, ',d')}원, "
                         f"손절금액:{format(limit_amt, ',d')}원, "
+                        f"안전마진금액:{format(safe_margin_amt, ',d')}원, "
                         f"매매계획:{trading_plan}"
                     )
 
