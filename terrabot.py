@@ -3909,9 +3909,9 @@ def callback_get(update, context) :
                     # 손절금액
                     limit_amt = i[18]
                     print("손절금액 : " + format(limit_amt, ',d'))
-                    # 안전마진금액
+                    # 안전마진
                     safe_margin_amt = i[19]
-                    print("안전마진금액 : " + format(safe_margin_amt, ',d'))
+                    print("안전마진 : " + format(safe_margin_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -3994,7 +3994,7 @@ def callback_get(update, context) :
                         f"최종이탈가:{format(end_loss_price, ',d')}원, "
                         f"손절가:{format(limit_price, ',d')}원, "
                         f"손절금액:{format(limit_amt, ',d')}원, "
-                        f"안전마진금액:{format(safe_margin_amt, ',d')}원, "
+                        f"안전마진:{format(safe_margin_amt, ',d')}원, "
                         f"매매계획:{trading_plan}"
                     )
 
@@ -6365,9 +6365,9 @@ def echo(update, context):
                     # 손절금액
                     limit_amt = i[18]
                     print("손절금액 : " + format(limit_amt, ',d'))
-                    # 안전마진금액
+                    # 안전마진
                     safe_margin_amt = i[19]
-                    print("안전마진금액 : " + format(safe_margin_amt, ',d'))
+                    print("안전마진 : " + format(safe_margin_amt, ',d'))
                     # 저항가
                     if i[2] != None:
                         sign_resist_price = i[2]
@@ -6450,7 +6450,7 @@ def echo(update, context):
                         f"최종이탈가:{format(end_loss_price, ',d')}원, "
                         f"손절가:{format(limit_price, ',d')}원, "
                         f"손절금액:{format(limit_amt, ',d')}원, "
-                        f"안전마진금액:{format(safe_margin_amt, ',d')}원, "
+                        f"안전마진:{format(safe_margin_amt, ',d')}원, "
                         f"매매계획:{trading_plan}"
                     )
 
