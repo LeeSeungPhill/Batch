@@ -548,7 +548,7 @@ cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
 result_one = cur0.fetchone()
 cur0.close()
 
-nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15']
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong']
 
 # 휴일이 아닌 경우
 if result_one == None:
