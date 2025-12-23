@@ -126,7 +126,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC0081R",
+               "tr_id": "TTTC0081R",                            # (3개월이내) TTTC0081R, (3개월이전) CTSC9215R
                "custtype": "P"}
     params = {
             'CANO': acct_no,                                    # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리

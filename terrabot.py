@@ -962,7 +962,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "TTTC8001R",                                # tr_id : TTTC8001R(실전투자 3개월이내), CTSC9215R(실전투자 3개월이전), VTTC0081R(모의투자 3개월이내), VTSC9215R(모의투자 3개월이전)
+               "tr_id": "TTTC0081R",                                # (3개월이내) TTTC0081R, (3개월이전) CTSC9215R
                "custtype": "P"
     }  
     params = {
