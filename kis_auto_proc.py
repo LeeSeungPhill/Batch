@@ -198,7 +198,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
                 "INQR_DVSN": '00',                                  # 조회구분 : 00 역순, 01 정순
                 "INQR_DVSN_1": "",        
                 "INQR_DVSN_3": "00",                                # 조회구분3 : 00 전체, 01 현금, 02 신용
-                "EXCG_ID_DVSN_CD": "KRX",                           # 거래소ID구분코드 : KRX, NXT
+                "EXCG_ID_DVSN_CD": "ALL",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT, SOR (Smart Order Routing) : SOR, ALL : 전체
                 "CTX_AREA_FK100": "",
                 "CTX_AREA_NK100": ""
     }

@@ -69,7 +69,8 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no, 
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
-               "tr_id": "CTSC9215R",                            # (3개월이내) TTTC0081R (3개월이전) CTSC9215R
+               "tr_id": "TTTC0081R",                            # (3개월이내) TTTC0081R, (3개월이전) CTSC9215R
+            #    "tr_id": "CTSC9215R",                            # (3개월이내) TTTC0081R, (3개월이전) CTSC9215R
                "custtype": "P"}
     params = {
             'CANO': acct_no,                                    # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
@@ -87,7 +88,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no, 
             'INQR_DVSN': "01",                                  # 조회구분 00 역순, 01 정순
             'INQR_DVSN_1': "",                                  # 조회구분1 없음: 전체, 1: ELW, 2: 프리보드
             'INQR_DVSN_3': "00",                                # 조회구분3 00 전체, 01 현금, 02 신용, 03 담보, 04 대주, 05 대여, 06 자기융자신규/상환, 07 유통융자신규/상환
-            'EXCG_ID_DVSN_CD': "KRX",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT
+            'EXCG_ID_DVSN_CD': "ALL",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT, SOR (Smart Order Routing) : SOR, ALL : 전체
             'CTX_AREA_NK100': "",
             'CTX_AREA_FK100': "" 
     }
@@ -485,7 +486,7 @@ def stock_order_comploete_proc(access_token, app_key, app_secret, acct_no, code,
     
         cur600.close()        
 
-ac = account('yh480825')
+ac = account('phills75')
 acct_no = ac['acct_no']
 access_token = ac['access_token']
 app_key = ac['app_key']
@@ -493,4 +494,4 @@ app_secret = ac['app_secret']
 token = ac['bot_token1']
 
 # 일별주문체결정보 생성 처리
-stock_order_comploete_proc(access_token, app_key, app_secret, acct_no, '117670', '20250210')        
+stock_order_comploete_proc(access_token, app_key, app_secret, acct_no, '', '20251223')        
