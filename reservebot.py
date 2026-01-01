@@ -411,6 +411,13 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     else:
         return pd.DataFrame([])
 
+def is_positive_int(val: str) -> bool:
+    """양수 정수만 허용 (1~100 범위)"""
+    if val.isdigit():
+        num = int(val)
+        return 0 < num <= 100
+    return False    
+
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
@@ -1092,6 +1099,66 @@ def echo(update, context):
             else:
                 print("날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")         
+
+        elif menuNum == '81':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+                
+                commandBot = user_text.split(sep=',', maxsplit=5)
+                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
+                print("commandBot[2] : ", commandBot[2])    # 시간-4자리(HHMM)
+                print("commandBot[3] : ", commandBot[3])    # 매도가
+                print("commandBot[4] : ", commandBot[4])    # 비중(%)
+
+            # 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 존재시
+            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 4 and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
+                year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
+                hour_minute = commandBot[2]                             # 시간-4자리(HHMM)
+                sell_price = int(commandBot[3])                         # 매도가
+                sell_rate = int(commandBot[4])                          # 비중(%)
+
+                # 계좌잔고 조회
+                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+            
+                hldg_qty = 0
+
+                for i, name in enumerate(c.index):
+                    if code == c['pdno'][i]:
+                        hldg_qty = int(c['hldg_qty'][i])
+
+                sell_qty = int(hldg_qty * sell_rate * 0.01)   # 매도량
+
+                # 매매시뮬레이션 insert
+                cur500 = conn.cursor()
+                insert_query = """
+                    INSERT INTO tradng_simulation (
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, crt_dt, mod_dt
+                    )
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM tradng_simulation
+                        WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
+                    );
+                    """
+                # insert 인자값 설정
+                cur500.execute(insert_query, (
+                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, datetime.now(), datetime.now()
+                    , acct_no, code, year_day, hour_minute, "2"
+                ))
+
+                was_inserted = cur500.rowcount == 1
+
+                conn.commit()
+                cur500.close()
+
+                if was_inserted:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록", parse_mode='HTML')
+                else:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")                        
+
+            else:
+                print("날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 미존재 또는 부적합")                         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
