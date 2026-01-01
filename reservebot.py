@@ -120,7 +120,7 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "취소"])
+    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "취소"])
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
@@ -625,6 +625,20 @@ def callback_get(update, context) :
         context.bot.edit_message_text(text="예약취소할 종목코드(종목명), 예약주문번호를 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)
+        
+    elif data_selected.find("매수등록") != -1:
+        menuNum = "71"
+
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(4자리), 매수가, 이탈가를 입력하세요.",
+                                        chat_id=update.callback_query.message.chat_id,
+                                        message_id=update.callback_query.message.message_id)
+
+    elif data_selected.find("매도등록") != -1:
+        menuNum = "81"
+
+        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리), 시간(4자리), 매도가, 비중(%)을 입력하세요.",
+                                        chat_id=update.callback_query.message.chat_id,
+                                        message_id=update.callback_query.message.message_id)        
 
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
@@ -961,7 +975,7 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=4)
+                commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 예약주문번호
 
             # 예약주문번호 존재시
@@ -1028,6 +1042,56 @@ def echo(update, context):
             else:
                 print("예약주문번호 미존재")
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 예약주문번호 미존재")               
+
+        elif menuNum == '71':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+                
+                commandBot = user_text.split(sep=',', maxsplit=5)
+                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
+                print("commandBot[2] : ", commandBot[2])    # 시간-4자리(HHMM)
+                print("commandBot[3] : ", commandBot[3])    # 매수가
+                print("commandBot[4] : ", commandBot[4])    # 이탈가
+
+            # 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 존재시
+            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 4 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
+                year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
+                hour_minute = commandBot[2]                             # 시간-4자리(HHMM)
+                buy_price = int(commandBot[3])                          # 매수가
+                loss_price = int(commandBot[4])                         # 이탈가
+                safe_margin_price = int(buy_price + buy_price * 0.04)   # 안전마진가
+
+                # 매매시뮬레이션 insert
+                cur500 = conn.cursor()
+                insert_query = """
+                    INSERT INTO tradng_simulation (
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, loss_price, profit_price, crt_dt, mod_dt
+                    )
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM tradng_simulation
+                        WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
+                    );
+                    """
+                # insert 인자값 설정
+                cur500.execute(insert_query, (
+                    acct_no, company, code, year_day, hour_minute, "1", buy_price,  loss_price, safe_margin_price, datetime.now(), datetime.now()
+                    , acct_no, code, year_day, hour_minute, "1"
+                ))
+
+                was_inserted = cur500.rowcount == 1
+
+                conn.commit()
+                cur500.close()
+
+                if was_inserted:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매수등록", parse_mode='HTML')
+                else:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매수등록 미처리")                        
+
+            else:
+                print("날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
