@@ -1132,9 +1132,9 @@ def echo(update, context):
                 cur500 = conn.cursor()
                 insert_query = """
                     INSERT INTO tradng_simulation (
-                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, crt_dt, mod_dt
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, crt_dt, mod_dt
                     )
-                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1 FROM tradng_simulation
                         WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
@@ -1142,7 +1142,7 @@ def echo(update, context):
                     """
                 # insert 인자값 설정
                 cur500.execute(insert_query, (
-                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, datetime.now(), datetime.now()
+                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), datetime.now(), datetime.now()
                     , acct_no, code, year_day, hour_minute, "2"
                 ))
 
