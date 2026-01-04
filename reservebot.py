@@ -753,16 +753,9 @@ def callback_get(update, context) :
             cur200.close()
 
             if was_inserted:
-                msg2 = f"매도추적 등록 완료"
-                result_msgs.append(msg2)
-                final_message = "\n".join(result_msgs) if result_msgs else "매도추적 등록 대상이 존재하지 않습니다."
-
-                context.bot.edit_message_text(
-                    text=final_message,
-                    parse_mode='HTML',
-                    chat_id=update.callback_query.message.chat_id,
-                    message_id=update.callback_query.message.message_id
-                )
+                context.bot.send_message(text="매도추적 등록 처리" ,
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
             else:
                 context.bot.send_message(text="매도추적 등록 미처리" ,
                                             chat_id=update.callback_query.message.chat_id,
