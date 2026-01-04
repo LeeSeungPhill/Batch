@@ -420,7 +420,7 @@ def is_positive_int(val: str) -> bool:
 
 def post_business_day_char(business_day:str):
     cur100 = conn.cursor()
-    cur100.execute("select post_business_day_char("+business_day+"::date)")
+    cur100.execute("select post_business_day_char('"+business_day+"'::date)")
     result_one00 = cur100.fetchall()
     cur100.close()
 
