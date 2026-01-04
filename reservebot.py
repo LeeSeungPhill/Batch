@@ -656,6 +656,10 @@ def callback_get(update, context) :
                                         message_id=update.callback_query.message.message_id)        
     
     elif data_selected.find("매도추적") != -1:
+        
+        context.bot.send_message(text="매도추적 등록 처리" ,
+                                    chat_id=update.callback_query.message.chat_id,
+                                    message_id=update.callback_query.message.message_id)
         ac = account()
         acct_no = ac['acct_no']
 
@@ -744,11 +748,11 @@ def callback_get(update, context) :
         conn.commit()
         cur200.close()
 
-        context.bot.send_message(text="매도추적 등록 처리" ,
+    elif data_selected.find("추적삭제") != -1:
+
+        context.bot.send_message(text="추적 삭제 처리" ,
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)
-
-    elif data_selected.find("추적삭제") != -1:
         ac = account()
         acct_no = ac['acct_no']
 
@@ -765,10 +769,6 @@ def callback_get(update, context) :
 
         conn.commit()
         cur200.close()
-        
-        context.bot.send_message(text="추적 삭제 처리" ,
-                                    chat_id=update.callback_query.message.chat_id,
-                                    message_id=update.callback_query.message.message_id)
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
