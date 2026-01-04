@@ -657,14 +657,14 @@ def callback_get(update, context) :
     
     elif data_selected.find("매도추적") != -1:
         
+        ac = account()
+        acct_no = ac['acct_no']
+        business_day = datetime.now().strftime("%Y%m%d")
+        trail_day = post_business_day_char(business_day)
+
         context.bot.send_message(text="매도추적 등록 처리" ,
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)
-        ac = account()
-        acct_no = ac['acct_no']
-
-        business_day = datetime.now().strftime("%Y%m%d")
-        trail_day = post_business_day_char(business_day)
 
         # 매도추적 insert
         cur200 = conn.cursor()
@@ -750,14 +750,14 @@ def callback_get(update, context) :
 
     elif data_selected.find("추적삭제") != -1:
 
+        ac = account()
+        acct_no = ac['acct_no']
+        business_day = datetime.now().strftime("%Y%m%d")
+        trail_day = post_business_day_char(business_day)
+
         context.bot.send_message(text="추적 삭제 처리" ,
                                     chat_id=update.callback_query.message.chat_id,
                                     message_id=update.callback_query.message.message_id)
-        ac = account()
-        acct_no = ac['acct_no']
-
-        business_day = datetime.now().strftime("%Y%m%d")
-        trail_day = post_business_day_char(business_day)
     
         # 추적 delete
         cur200 = conn.cursor()
