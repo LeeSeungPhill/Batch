@@ -738,13 +738,13 @@ def callback_get(update, context) :
                     FROM trading_trail T
                     WHERE T.acct_no = AA.acct_no
                     AND T.code = AA.code
-                    AND T.trail_day = COALESCE(BB.trail_day, AA.trade_day)
-                    AND T.trail_dtm = COALESCE(BB.trail_dtm, AA.trade_dtm)
-                    AND T.trail_tp = '1'
+                    AND T.trail_day = %s
+                    AND T.trail_dtm = %s
+                    AND T.trail_tp = %s
                 );
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
+            cur200.execute(insert_query, (trail_day, '090000', '1', acct_no, trail_day, '090000', '1'))
 
             was_inserted = cur200.rowcount >= 1
 
