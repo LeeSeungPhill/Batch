@@ -746,7 +746,7 @@ def callback_get(update, context) :
             # insert 인자값 설정
             cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
 
-            was_inserted = cur200.rowcount == 1
+            was_inserted = cur200.rowcount >= 1
 
             conn.commit()
             cur200.close()
@@ -794,7 +794,7 @@ def callback_get(update, context) :
             # delete 인자값 설정
             cur200.execute(delete_query, (acct_no, trail_day))
 
-            was_deleted = cur200.rowcount == 1
+            was_deleted = cur200.rowcount >= 1
 
             conn.commit()
             cur200.close()
