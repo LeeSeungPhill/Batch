@@ -656,115 +656,170 @@ def callback_get(update, context) :
                                         message_id=update.callback_query.message.message_id)        
     
     elif data_selected.find("매도추적") != -1:
-        
         ac = account()
         acct_no = ac['acct_no']
-        business_day = datetime.now().strftime("%Y%m%d")
-        trail_day = post_business_day_char(business_day)
 
-        context.bot.send_message(chat_id=update.callback_query.message.chat_id, text="매도추적 등록 처리")
-
-        # 매도추적 insert
-        cur200 = conn.cursor()
-        insert_query = """
-            WITH AA AS (
-                SELECT
-                    B.acct_no,
-                    B.code,
-                    B.name,
-                    B.trade_day,
-                    B.trade_dtm,
-                    B.loss_price,
-                    B.profit_price
-                FROM (
+        try:
+            context.bot.edit_message_text(text="[매도추적 등록]",
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+            
+            business_day = datetime.now().strftime("%Y%m%d")
+            trail_day = post_business_day_char(business_day)
+            result_msgs = []
+            # 매도추적 insert
+            cur200 = conn.cursor()
+            insert_query = """
+                WITH AA AS (
                     SELECT
-                        acct_no,
-                        code,
-                        MAX(trade_day || trade_dtm) AS trdtm
-                    FROM public.tradng_simulation
-                    WHERE trade_tp = '1'
-                    AND proc_yn = 'N'
-                    GROUP BY acct_no, code
-                ) A
-                JOIN public.tradng_simulation B
-                ON A.acct_no = B.acct_no
-                AND A.code    = B.code
-                AND substr(A.trdtm, 1, 8) = B.trade_day
-                AND substr(A.trdtm, 9, 6) = B.trade_dtm
-                AND B.trade_tp = '1'
-                AND B.proc_yn  = 'N'
-            )
-            INSERT INTO trading_trail (
-                acct_no,
-                name,
-                code,
-                trail_day,
-                trail_dtm,
-                trail_tp,
-                exit_price,
-                target_price,
-                crt_dt,
-                mod_dt
-            )
-            SELECT
-                AA.acct_no,
-                AA.name,
-                AA.code,
-                %s,
-                %s,
-                %s,
-                CASE
-                    WHEN BB.acct_no IS NULL THEN AA.loss_price
-                    ELSE BB.exit_price
-                END AS exit_price,
-                CASE
-                    WHEN BB.acct_no IS NULL THEN AA.profit_price
-                    ELSE BB.target_price
-                END AS target_price,
-                now(),
-                now()
-            FROM AA
-            LEFT JOIN trading_trail BB
-            ON AA.acct_no = BB.acct_no
-            AND AA.code = BB.code
-            AND BB.trail_day = get_previous_business_day(now()::date)::char
-            AND BB.trail_tp = '1'
-            WHERE AA.acct_no = %s
-            AND NOT EXISTS (
-                SELECT 1
-                FROM trading_trail T
-                WHERE T.acct_no = AA.acct_no
-                AND T.code = AA.code
-                AND T.trail_day = COALESCE(BB.trail_day, AA.trade_day)
-                AND T.trail_dtm = COALESCE(BB.trail_dtm, AA.trade_dtm)
-                AND T.trail_tp = '1'
-            );
-            """
-        # insert 인자값 설정
-        cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
+                        B.acct_no,
+                        B.code,
+                        B.name,
+                        B.trade_day,
+                        B.trade_dtm,
+                        B.loss_price,
+                        B.profit_price
+                    FROM (
+                        SELECT
+                            acct_no,
+                            code,
+                            MAX(trade_day || trade_dtm) AS trdtm
+                        FROM public.tradng_simulation
+                        WHERE trade_tp = '1'
+                        AND proc_yn = 'N'
+                        GROUP BY acct_no, code
+                    ) A
+                    JOIN public.tradng_simulation B
+                    ON A.acct_no = B.acct_no
+                    AND A.code    = B.code
+                    AND substr(A.trdtm, 1, 8) = B.trade_day
+                    AND substr(A.trdtm, 9, 6) = B.trade_dtm
+                    AND B.trade_tp = '1'
+                    AND B.proc_yn  = 'N'
+                )
+                INSERT INTO trading_trail (
+                    acct_no,
+                    name,
+                    code,
+                    trail_day,
+                    trail_dtm,
+                    trail_tp,
+                    exit_price,
+                    target_price,
+                    crt_dt,
+                    mod_dt
+                )
+                SELECT
+                    AA.acct_no,
+                    AA.name,
+                    AA.code,
+                    %s,
+                    %s,
+                    %s,
+                    CASE
+                        WHEN BB.acct_no IS NULL THEN AA.loss_price
+                        ELSE BB.exit_price
+                    END AS exit_price,
+                    CASE
+                        WHEN BB.acct_no IS NULL THEN AA.profit_price
+                        ELSE BB.target_price
+                    END AS target_price,
+                    now(),
+                    now()
+                FROM AA
+                LEFT JOIN trading_trail BB
+                ON AA.acct_no = BB.acct_no
+                AND AA.code = BB.code
+                AND BB.trail_day = get_previous_business_day(now()::date)::char
+                AND BB.trail_tp = '1'
+                WHERE AA.acct_no = %s
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM trading_trail T
+                    WHERE T.acct_no = AA.acct_no
+                    AND T.code = AA.code
+                    AND T.trail_day = COALESCE(BB.trail_day, AA.trade_day)
+                    AND T.trail_dtm = COALESCE(BB.trail_dtm, AA.trade_dtm)
+                    AND T.trail_tp = '1'
+                );
+                """
+            # insert 인자값 설정
+            cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
 
-        conn.commit()
-        cur200.close()
+            was_inserted = cur200.rowcount == 1
+
+            conn.commit()
+            cur200.close()
+
+            if was_inserted:
+                msg = f"* 매도추적 등록 처리"
+                result_msgs.append(msg)
+            else:
+                msg = f"* 매도추적 등록 미처리"
+                result_msgs.append(msg)
+
+            final_message = "\n".join(result_msgs) if result_msgs else "매도추적 등록 대상이 존재하지 않습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )
+
+        except Exception as e:
+            print('매도추적 등록 오류.', e)
+            context.bot.edit_message_text(text="[매도추적 등록] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)   
 
     elif data_selected.find("추적삭제") != -1:
-
         ac = account()
         acct_no = ac['acct_no']
-        business_day = datetime.now().strftime("%Y%m%d")
-        trail_day = post_business_day_char(business_day)
 
-        context.bot.send_message(chat_id=update.callback_query.message.chat_id, text="추적 삭제 처리")
+        try:
+            context.bot.edit_message_text(text="[추적삭제]",
+                                chat_id=update.callback_query.message.chat_id,
+                                message_id=update.callback_query.message.message_id)
+            
+            business_day = datetime.now().strftime("%Y%m%d")
+            trail_day = post_business_day_char(business_day)
+            result_msgs = []
         
-        # 추적 delete
-        cur200 = conn.cursor()
-        delete_query = """
-            DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
-            """
-        # delete 인자값 설정
-        cur200.execute(delete_query, (acct_no, trail_day))
+            # 추적 delete
+            cur200 = conn.cursor()
+            delete_query = """
+                DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
+                """
+            # delete 인자값 설정
+            cur200.execute(delete_query, (acct_no, trail_day))
 
-        conn.commit()
-        cur200.close()
+            was_deleted = cur200.rowcount == 1
+
+            conn.commit()
+            cur200.close()
+
+            if was_deleted:
+                msg = f"* 추적 삭제 처리"
+                result_msgs.append(msg)
+            else:
+                msg = f"* 추적 삭제 미처리"
+                result_msgs.append(msg)
+
+            final_message = "\n".join(result_msgs) if result_msgs else "추적 삭제 대상이 존재하지 않습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )                
+
+        except Exception as e:
+            print('추적 삭제 오류.', e)
+            context.bot.edit_message_text(text="[추적 삭제] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)   
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
