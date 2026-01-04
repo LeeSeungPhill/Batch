@@ -741,19 +741,12 @@ def callback_get(update, context) :
         # insert 인자값 설정
         cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
 
-        was_inserted = cur200.rowcount == 1
-
         conn.commit()
         cur200.close()
 
-        if was_inserted:
-            context.bot.send_message(text="매도추적 등록 처리" ,
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        else:
-            context.bot.send_message(text="매도추적 등록 미처리" ,
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+        context.bot.send_message(text="매도추적 등록 처리" ,
+                                    chat_id=update.callback_query.message.chat_id,
+                                    message_id=update.callback_query.message.message_id)
 
     elif data_selected.find("추적삭제") != -1:
         ac = account()
@@ -770,20 +763,12 @@ def callback_get(update, context) :
         # delete 인자값 설정
         cur200.execute(delete_query, (acct_no, trail_day))
 
-        was_deleted = cur200.rowcount == 1
-
         conn.commit()
         cur200.close()
-
-        if was_deleted:
-            context.bot.send_message(text="추적 삭제 처리" ,
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        else:
-            context.bot.send_message(text="추적 삭제 미처리" ,
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-
+        
+        context.bot.send_message(text="추적 삭제 처리" ,
+                                    chat_id=update.callback_query.message.chat_id,
+                                    message_id=update.callback_query.message.message_id)
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
