@@ -666,7 +666,6 @@ def callback_get(update, context) :
             
             business_day = datetime.now().strftime("%Y%m%d")
             trail_day = post_business_day_char(business_day)
-            result_msgs = []
 
             # 매도추적 insert
             cur200 = conn.cursor()
@@ -772,6 +771,13 @@ def callback_get(update, context) :
         acct_no = ac['acct_no']
 
         try:
+            context.bot.edit_message_text(text="[추적삭제]",
+                                chat_id=update.callback_query.message.chat_id,
+                                message_id=update.callback_query.message.message_id)
+            
+            business_day = datetime.now().strftime("%Y%m%d")
+            trail_day = post_business_day_char(business_day)
+        
             # 추적 delete
             cur200 = conn.cursor()
             delete_query = """
