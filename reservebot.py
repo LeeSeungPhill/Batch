@@ -120,7 +120,7 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "취소"])
+    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "취소"])
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
@@ -418,6 +418,14 @@ def is_positive_int(val: str) -> bool:
         return 0 < num <= 100
     return False    
 
+def post_business_day_char(business_day:str):
+    cur100 = conn.cursor()
+    cur100.execute("select post_business_day_char("+business_day+"::date)")
+    result_one00 = cur100.fetchall()
+    cur100.close()
+
+    return result_one00[0][0]
+
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
@@ -636,16 +644,135 @@ def callback_get(update, context) :
     elif data_selected.find("매수등록") != -1:
         menuNum = "71"
 
-        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(4자리), 매수가, 이탈가를 입력하세요.",
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매수가, 이탈가를 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)
 
     elif data_selected.find("매도등록") != -1:
         menuNum = "81"
 
-        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리), 시간(4자리), 매도가, 비중(%)을 입력하세요.",
+        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매도가, 비중(%)을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)        
+
+    elif data_selected.find("매도추적") != -1:
+        ac = account()
+        acct_no = ac['acct_no']
+
+        try:
+            context.bot.edit_message_text(text="[매도추적 등록]",
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+            
+            business_day = datetime.now().strftime("%Y%m%d")
+            trail_day = post_business_day_char(business_day)
+            result_msgs = []
+
+            # 매도추적 insert
+            cur200 = conn.cursor()
+            insert_query = """
+                WITH AA AS (
+                    SELECT
+                        B.acct_no,
+                        B.code,
+                        B.name,
+                        B.trade_day,
+                        B.trade_dtm,
+                        B.loss_price,
+                        B.profit_price
+                    FROM (
+                        SELECT
+                            acct_no,
+                            code,
+                            MAX(trade_day || trade_dtm) AS trdtm
+                        FROM public.tradng_simulation
+                        WHERE trade_tp = '1'
+                        AND proc_yn = 'N'
+                        GROUP BY acct_no, code
+                    ) A
+                    JOIN public.tradng_simulation B
+                    ON A.acct_no = B.acct_no
+                    AND A.code    = B.code
+                    AND substr(A.trdtm, 1, 8) = B.trade_day
+                    AND substr(A.trdtm, 9, 6) = B.trade_dtm
+                    AND B.trade_tp = '1'
+                    AND B.proc_yn  = 'N'
+                )
+                INSERT INTO trading_trail (
+                    acct_no,
+                    name,
+                    code,
+                    trail_day,
+                    trail_dtm,
+                    trail_tp,
+                    exit_price,
+                    target_price,
+                    crt_dt,
+                    mod_dt
+                )
+                SELECT
+                    AA.acct_no,
+                    AA.name,
+                    AA.code,
+                    %s,
+                    %s,
+                    %s,
+                    CASE
+                        WHEN BB.acct_no IS NULL THEN AA.loss_price
+                        ELSE BB.exit_price
+                    END AS exit_price,
+                    CASE
+                        WHEN BB.acct_no IS NULL THEN AA.profit_price
+                        ELSE BB.target_price
+                    END AS target_price,
+                    now(),
+                    now()
+                FROM AA
+                LEFT JOIN trading_trail BB
+                ON AA.acct_no = BB.acct_no
+                AND AA.code = BB.code
+                AND BB.trail_day = get_previous_business_day(now()::date)::char
+                AND BB.trail_tp = '1'
+                WHERE AA.acct_no = %s
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM trading_trail T
+                    WHERE T.acct_no = AA.acct_no
+                    AND T.code = AA.code
+                    AND T.trail_day = COALESCE(BB.trail_day, AA.trade_day)
+                    AND T.trail_dtm = COALESCE(BB.trail_dtm, AA.trade_dtm)
+                    AND T.trail_tp = '1'
+                );
+                """
+            # insert 인자값 설정
+            cur200.execute(insert_query, (trail_day, '090000', '1', acct_no))
+
+            was_inserted = cur200.rowcount == 1
+
+            conn.commit()
+            cur200.close()
+
+            if was_inserted:
+                msg2 = f"매도추적 등록 완료"
+                result_msgs.append(msg2)
+                final_message = "\n".join(result_msgs) if result_msgs else "매도추적 등록 대상이 존재하지 않습니다."
+
+                context.bot.edit_message_text(
+                    text=final_message,
+                    parse_mode='HTML',
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id
+                )
+            else:
+                context.bot.send_message(text="매도추적 등록 미처리" ,
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+
+        except Exception as e:
+            print('매도추적 등록 오류.', e)
+            context.bot.edit_message_text(text="[매도추적 등록] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)   
 
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
@@ -1056,14 +1183,14 @@ def echo(update, context):
                 
                 commandBot = user_text.split(sep=',', maxsplit=5)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
-                print("commandBot[2] : ", commandBot[2])    # 시간-4자리(HHMM)
+                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS)
                 print("commandBot[3] : ", commandBot[3])    # 매수가
                 print("commandBot[4] : ", commandBot[4])    # 이탈가
 
-            # 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 존재시
-            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 4 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
+            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 존재시
+            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
                 year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
-                hour_minute = commandBot[2]                             # 시간-4자리(HHMM)
+                hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
                 buy_price = int(commandBot[3])                          # 매수가
                 loss_price = int(commandBot[4])                         # 이탈가
                 safe_margin_price = int(buy_price + buy_price * 0.04)   # 안전마진가
@@ -1072,9 +1199,9 @@ def echo(update, context):
                 cur500 = conn.cursor()
                 insert_query = """
                     INSERT INTO tradng_simulation (
-                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, loss_price, profit_price, crt_dt, mod_dt
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, loss_price, profit_price, proc_yn, crt_dt, mod_dt
                     )
-                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1 FROM tradng_simulation
                         WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
@@ -1082,7 +1209,7 @@ def echo(update, context):
                     """
                 # insert 인자값 설정
                 cur500.execute(insert_query, (
-                    acct_no, company, code, year_day, hour_minute, "1", buy_price,  loss_price, safe_margin_price, datetime.now(), datetime.now()
+                    acct_no, company, code, year_day, hour_minute, "1", buy_price,  loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
                     , acct_no, code, year_day, hour_minute, "1"
                 ))
 
@@ -1097,8 +1224,8 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매수등록 미처리")                        
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매수가, 이탈가 미존재 또는 부적합")         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 미존재 또는 부적합")         
 
         elif menuNum == '81':
             initMenuNum()
@@ -1106,14 +1233,14 @@ def echo(update, context):
                 
                 commandBot = user_text.split(sep=',', maxsplit=5)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
-                print("commandBot[2] : ", commandBot[2])    # 시간-4자리(HHMM)
+                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS)
                 print("commandBot[3] : ", commandBot[3])    # 매도가
                 print("commandBot[4] : ", commandBot[4])    # 비중(%)
 
-            # 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 존재시
-            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 4 and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
+            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 존재시
+            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
                 year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
-                hour_minute = commandBot[2]                             # 시간-4자리(HHMM)
+                hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
                 sell_price = int(commandBot[3])                         # 매도가
                 sell_rate = int(commandBot[4])                          # 비중(%)
 
@@ -1132,9 +1259,9 @@ def echo(update, context):
                 cur500 = conn.cursor()
                 insert_query = """
                     INSERT INTO tradng_simulation (
-                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, crt_dt, mod_dt
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
                     )
-                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1 FROM tradng_simulation
                         WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
@@ -1142,7 +1269,7 @@ def echo(update, context):
                     """
                 # insert 인자값 설정
                 cur500.execute(insert_query, (
-                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), datetime.now(), datetime.now()
+                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
                     , acct_no, code, year_day, hour_minute, "2"
                 ))
 
@@ -1157,8 +1284,8 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")                        
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-4자리(HHMM), 매도가, 비중(%) 미존재 또는 부적합")                         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 미존재 또는 부적합")                         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
