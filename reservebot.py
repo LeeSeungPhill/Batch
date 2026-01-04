@@ -120,7 +120,7 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "취소"])
+    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "취소"])
     show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
@@ -654,7 +654,7 @@ def callback_get(update, context) :
         context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매도가, 비중(%)을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)        
-
+    
     elif data_selected.find("매도추적") != -1:
         ac = account()
         acct_no = ac['acct_no']
@@ -767,6 +767,39 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)   
 
+    elif data_selected.find("추적삭제") != -1:
+        ac = account()
+        acct_no = ac['acct_no']
+
+        try:
+            # 추적 delete
+            cur200 = conn.cursor()
+            delete_query = """
+                DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
+                """
+            # delete 인자값 설정
+            cur200.execute(delete_query, (acct_no, trail_day))
+
+            was_deleted = cur200.rowcount == 1
+
+            conn.commit()
+            cur200.close()
+
+            if was_deleted:
+                context.bot.send_message(text="추적 삭제 처리" ,
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+            else:
+                context.bot.send_message(text="추적 삭제 미처리" ,
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)
+
+        except Exception as e:
+            print('추적 삭제 오류.', e)
+            context.bot.edit_message_text(text="[추적 삭제] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)   
+            
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
 
