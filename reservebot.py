@@ -659,10 +659,6 @@ def callback_get(update, context) :
         ac = account()
         acct_no = ac['acct_no']
 
-        context.bot.edit_message_text(text="[매도추적 등록]",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        
         business_day = datetime.now().strftime("%Y%m%d")
         trail_day = post_business_day_char(business_day)
 
@@ -763,10 +759,6 @@ def callback_get(update, context) :
         ac = account()
         acct_no = ac['acct_no']
 
-        context.bot.edit_message_text(text="[추적삭제]",
-                            chat_id=update.callback_query.message.chat_id,
-                            message_id=update.callback_query.message.message_id)
-        
         business_day = datetime.now().strftime("%Y%m%d")
         trail_day = post_business_day_char(business_day)
     
