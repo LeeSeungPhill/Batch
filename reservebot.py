@@ -677,7 +677,7 @@ def callback_get(update, context) :
                         B.name,
                         B.trade_day,
                         B.trade_dtm,
-                        B.buy_price
+                        B.buy_price,
                         B.loss_price,
                         B.profit_price
                     FROM (
