@@ -734,7 +734,7 @@ def callback_get(update, context) :
                 ON AA.acct_no = BB.acct_no
                 AND AA.code = BB.code
                 AND BB.trail_day = get_previous_business_day(now()::date)::char
-                AND BB.trail_tp = '1'
+                AND BB.trail_tp IN ('1', '2', '3')
                 WHERE AA.acct_no = %s
                 AND NOT EXISTS (
                     SELECT 1
