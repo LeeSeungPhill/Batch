@@ -496,6 +496,8 @@ def get_kis_1min_from_datetime(
                             f"목표가 돌파 후 10분 기준봉 저가 {tenmin_state['base_low']:,}원 이탈 → 종료"
                         )
 
+                    update_trading_mng("Y", acct_no, stock_code, start_date, start_time, "1")
+                    
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
                     update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "1")
