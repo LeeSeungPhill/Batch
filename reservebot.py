@@ -718,7 +718,7 @@ def callback_get(update, context) :
                     %s,
                     %s,
                     %s,
-                    AA.buy_price
+                    AA.buy_price,
                     CASE
                         WHEN BB.acct_no IS NULL THEN AA.loss_price
                         ELSE BB.stop_price
