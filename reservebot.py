@@ -677,6 +677,7 @@ def callback_get(update, context) :
                         B.name,
                         B.trade_day,
                         B.trade_dtm,
+                        B.buy_price
                         B.loss_price,
                         B.profit_price
                     FROM (
@@ -704,7 +705,8 @@ def callback_get(update, context) :
                     trail_day,
                     trail_dtm,
                     trail_tp,
-                    exit_price,
+                    basic_price,
+                    stop_price,
                     target_price,
                     crt_dt,
                     mod_dt
@@ -716,10 +718,11 @@ def callback_get(update, context) :
                     %s,
                     %s,
                     %s,
+                    AA.buy_price
                     CASE
                         WHEN BB.acct_no IS NULL THEN AA.loss_price
-                        ELSE BB.exit_price
-                    END AS exit_price,
+                        ELSE BB.stop_price
+                    END AS stop_price,
                     CASE
                         WHEN BB.acct_no IS NULL THEN AA.profit_price
                         ELSE BB.target_price
@@ -746,13 +749,13 @@ def callback_get(update, context) :
             # insert 인자값 설정
             cur200.execute(insert_query, (trail_day, '090000', '1', acct_no, trail_day, '090000', '1'))
 
-            was_inserted = cur200.rowcount >= 1
+            countProc = cur200.rowcount
 
             conn.commit()
             cur200.close()
 
-            if was_inserted:
-                msg = f"* 매도추적 등록 처리"
+            if countProc >= 1:
+                msg = f"* 매도추적 등록 {countProc}건 처리"
                 result_msgs.append(msg)
             else:
                 msg = f"* 매도추적 등록 미처리"
@@ -794,13 +797,13 @@ def callback_get(update, context) :
             # delete 인자값 설정
             cur200.execute(delete_query, (acct_no, trail_day))
 
-            was_deleted = cur200.rowcount >= 1
+            countProc = cur200.rowcount
 
             conn.commit()
             cur200.close()
 
-            if was_deleted:
-                msg = f"* 추적 삭제 처리"
+            if countProc >= 1:
+                msg = f"* 추적 삭제 {countProc}건 처리"
                 result_msgs.append(msg)
             else:
                 msg = f"* 추적 삭제 미처리"
