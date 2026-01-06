@@ -747,7 +747,7 @@ def callback_get(update, context) :
                 );
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, '090000', '1', acct_no, trail_day, '090000', '1'))
+            cur200.execute(insert_query, (trail_day, '090000', acct_no, trail_day, '090000'))
 
             countProc = cur200.rowcount
 
