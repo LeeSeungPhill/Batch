@@ -717,7 +717,7 @@ def callback_get(update, context) :
                     AA.code,
                     %s,
                     %s,
-                    %s,
+                    CASE WHEN COALESCE(BB.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
                     AA.buy_price,
                     CASE
                         WHEN BB.acct_no IS NULL THEN AA.loss_price
@@ -734,7 +734,7 @@ def callback_get(update, context) :
                 ON AA.acct_no = BB.acct_no
                 AND AA.code = BB.code
                 AND BB.trail_day = get_previous_business_day(now()::date)::char
-                AND BB.trail_tp IN ('1', '2', '3')
+                AND BB.trail_tp IN ('1', '2', '3', 'L')
                 WHERE AA.acct_no = %s
                 AND NOT EXISTS (
                     SELECT 1
@@ -743,7 +743,7 @@ def callback_get(update, context) :
                     AND T.code = AA.code
                     AND T.trail_day = %s
                     AND T.trail_dtm = %s
-                    AND T.trail_tp = %s
+                    AND T.trail_tp IN ('1', 'L')
                 );
                 """
             # insert 인자값 설정
