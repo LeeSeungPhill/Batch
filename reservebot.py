@@ -99,6 +99,21 @@ def format_number(value):
         return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
     except:
         return str(value)
+    
+def build_date_buttons(days=7):
+    today = datetime.now().date()
+    buttons = []
+
+    for i in range(days):
+        d = today - timedelta(days=i)
+        buttons.append(
+            InlineKeyboardButton(
+                text=d.strftime("%Y-%m-%d"),
+                callback_data=f"sell_trace_date:{d.strftime('%Y-%m-%d')}"
+            )
+        )
+
+    return InlineKeyboardMarkup(build_menu(buttons, 4))
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -656,6 +671,12 @@ def callback_get(update, context) :
                                         message_id=update.callback_query.message.message_id)        
     
     elif data_selected.find("매도추적") != -1:
+        update.callback_query.edit_message_text(
+            text="📅 매도 추적 시작일을 선택하세요",
+            reply_markup=build_date_buttons(50)  # 최근 50일
+        )
+
+    elif data_selected.startswith("sell_trace_date:"):
         ac = account()
         acct_no = ac['acct_no']
 
@@ -664,40 +685,12 @@ def callback_get(update, context) :
                                             chat_id=update.callback_query.message.chat_id,
                                             message_id=update.callback_query.message.message_id)
             
-            business_day = datetime.now().strftime("%Y%m%d")
+            business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
             result_msgs = []
             # 매도추적 insert
             cur200 = conn.cursor()
             insert_query = """
-                WITH AA AS (
-                    SELECT
-                        B.acct_no,
-                        B.code,
-                        B.name,
-                        B.trade_day,
-                        B.trade_dtm,
-                        B.buy_price,
-                        B.loss_price,
-                        B.profit_price
-                    FROM (
-                        SELECT
-                            acct_no,
-                            code,
-                            MAX(trade_day || trade_dtm) AS trdtm
-                        FROM public.tradng_simulation
-                        WHERE trade_tp = '1'
-                        AND proc_yn = 'N'
-                        GROUP BY acct_no, code
-                    ) A
-                    JOIN public.tradng_simulation B
-                    ON A.acct_no = B.acct_no
-                    AND A.code    = B.code
-                    AND substr(A.trdtm, 1, 8) = B.trade_day
-                    AND substr(A.trdtm, 9, 6) = B.trade_dtm
-                    AND B.trade_tp = '1'
-                    AND B.proc_yn  = 'N'
-                )
                 INSERT INTO trading_trail (
                     acct_no,
                     name,
@@ -712,42 +705,59 @@ def callback_get(update, context) :
                     mod_dt
                 )
                 SELECT
-                    AA.acct_no,
-                    AA.name,
-                    AA.code,
+                    acct_no,
+                    name,
+                    code,
                     %s,
                     %s,
-                    CASE WHEN COALESCE(BB.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
-                    AA.buy_price,
-                    CASE
-                        WHEN BB.acct_no IS NULL THEN AA.loss_price
-                        ELSE BB.stop_price
-                    END AS stop_price,
-                    CASE
-                        WHEN BB.acct_no IS NULL THEN AA.profit_price
-                        ELSE BB.target_price
-                    END AS target_price,
+                    trade_tp,
+                    buy_price,
+                    loss_price,
+                    profit_price,
                     now(),
                     now()
-                FROM AA
-                LEFT JOIN trading_trail BB
-                ON AA.acct_no = BB.acct_no
-                AND AA.code = BB.code
-                AND BB.trail_day = get_previous_business_day(now()::date)::char
-                AND BB.trail_tp IN ('1', '2', '3', 'L')
-                WHERE AA.acct_no = %s
+                FROM tradng_simulation A
+                WHERE trade_tp = '1'
+                AND acct_no = %s
+                AND proc_yn  = 'N'
                 AND NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
-                    WHERE T.acct_no = AA.acct_no
-                    AND T.code = AA.code
+                    WHERE T.acct_no = A.acct_no
+                    AND T.code = A.code
+                    AND T.trail_day = %s
+                    AND T.trail_dtm = %s
+                    AND T.trail_tp IN ('1', 'L')
+                )
+                UNION ALL
+                SELECT
+                    acct_no,
+                    name,
+                    code,
+                    %s,
+                    %s,
+                    CASE WHEN trail_tp IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
+                    basic_price,
+                    stop_price,
+                    target_price,
+                    now(),
+                    now()
+                FROM trading_trail B
+                WHERE acct_no = %s
+                AND trail_day = prev_business_day_char(%s::date)
+                AND trail_tp IN ('2', '3')
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM trading_trail T
+                    WHERE T.acct_no = B.acct_no
+                    AND T.code = B.code
                     AND T.trail_day = %s
                     AND T.trail_dtm = %s
                     AND T.trail_tp IN ('1', 'L')
                 );
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, '090000', acct_no, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, '090000', acct_no, trail_day, '090000', trail_day, '090000', acct_no, trail_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 
