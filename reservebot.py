@@ -728,7 +728,7 @@ def callback_get(update, context) :
                     name,
                     code,
                     %s,
-                    CASE WHEN A.trade_day = %s THEN A.trade_time ELSE %s END,
+                    CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END,
                     trade_tp,
                     buy_price,
                     loss_price,
