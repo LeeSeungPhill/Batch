@@ -94,14 +94,6 @@ g_loss_price = 0
 g_risk_sum = 0
 g_low_price = 0
 
-def get_holidays(conn):
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT holiday_date
-            FROM stock_holiday
-        """)
-        return {row[0] for row in cur.fetchall()}
-
 def format_number(value):
     try:
         return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
@@ -110,7 +102,11 @@ def format_number(value):
     
 def build_date_buttons(days=7):
     today = datetime.now().date()
-    holidays = get_holidays(conn) if conn else set()
+
+    cur00 = conn.cursor()
+    cur00.execute("SELECT holiday FROM stock_holiday")
+    holidays = {row[0] for row in cur00.fetchall()}
+    cur00.close()
 
     buttons = []
     cnt = 0
