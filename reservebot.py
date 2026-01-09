@@ -94,6 +94,14 @@ g_loss_price = 0
 g_risk_sum = 0
 g_low_price = 0
 
+def get_holidays(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT holiday_date
+            FROM stock_holiday
+        """)
+        return {row[0] for row in cur.fetchall()}
+
 def format_number(value):
     try:
         return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
@@ -102,16 +110,31 @@ def format_number(value):
     
 def build_date_buttons(days=7):
     today = datetime.now().date()
-    buttons = []
+    holidays = get_holidays(conn) if conn else set()
 
-    for i in range(days):
-        d = today - timedelta(days=i)
+    buttons = []
+    cnt = 0
+    offset = 0
+
+    while cnt < days:
+        d = today - timedelta(days=offset)
+        offset += 1
+
+        # 주말 제외
+        if d.weekday() >= 5:
+            continue
+
+        # 휴장일 제외
+        if d in holidays:
+            continue
+
         buttons.append(
             InlineKeyboardButton(
                 text=d.strftime("%Y-%m-%d"),
                 callback_data=f"sell_trace_date:{d.strftime('%Y-%m-%d')}"
             )
         )
+        cnt += 1
 
     return InlineKeyboardMarkup(build_menu(buttons, 2))
 
