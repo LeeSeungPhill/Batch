@@ -728,7 +728,7 @@ def callback_get(update, context) :
                     name,
                     code,
                     %s,
-                    %s,
+                    CASE WHEN A.trade_day = %s THEN A.trade_time ELSE %s END,
                     trade_tp,
                     buy_price,
                     loss_price,
@@ -777,7 +777,7 @@ def callback_get(update, context) :
                 );
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, '090000', acct_no, business_day, trail_day, '090000', trail_day, '090000', acct_no, business_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, trail_day, '090000', acct_no, business_day, trail_day, '090000', trail_day, '090000', acct_no, business_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 
