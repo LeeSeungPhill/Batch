@@ -114,6 +114,7 @@ def build_date_buttons(days=7):
 
     while cnt < days:
         d = today - timedelta(days=offset)
+        date_str = d.strftime("%Y%m%d")
         offset += 1
 
         # 주말 제외
@@ -121,7 +122,7 @@ def build_date_buttons(days=7):
             continue
 
         # 휴장일 제외
-        if d in holidays:
+        if date_str in holidays:
             continue
 
         buttons.append(
