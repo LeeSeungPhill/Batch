@@ -113,7 +113,7 @@ def build_date_buttons(days=7):
             )
         )
 
-    return InlineKeyboardMarkup(build_menu(buttons, 4))
+    return InlineKeyboardMarkup(build_menu(buttons, 2))
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -766,10 +766,10 @@ def callback_get(update, context) :
             cur200.close()
 
             if countProc >= 1:
-                msg = f"* 매도추적 등록 {countProc}건 처리"
+                msg = f"* [{trail_day}]-매도추적 등록 {countProc}건 처리"
                 result_msgs.append(msg)
             else:
-                msg = f"* 매도추적 등록 미처리"
+                msg = f"* [{trail_day}]-매도추적 등록 미처리"
                 result_msgs.append(msg)
 
             final_message = "\n".join(result_msgs) if result_msgs else "매도추적 등록 대상이 존재하지 않습니다."
@@ -814,10 +814,10 @@ def callback_get(update, context) :
             cur200.close()
 
             if countProc >= 1:
-                msg = f"* 추적 삭제 {countProc}건 처리"
+                msg = f"* [{trail_day}]-추적 삭제 {countProc}건 처리"
                 result_msgs.append(msg)
             else:
-                msg = f"* 추적 삭제 미처리"
+                msg = f"* [{trail_day}]-추적 삭제 미처리"
                 result_msgs.append(msg)
 
             final_message = "\n".join(result_msgs) if result_msgs else "추적 삭제 대상이 존재하지 않습니다."
