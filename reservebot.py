@@ -717,9 +717,10 @@ def callback_get(update, context) :
                     now(),
                     now()
                 FROM tradng_simulation A
-                WHERE trade_tp = '1'
-                AND acct_no = %s
-                AND proc_yn  = 'N'
+                WHERE A.trade_tp = '1'
+                AND A.acct_no = %s
+                AND A.proc_yn IN ('N', 'C')
+                AND A.trade_day <= prev_business_day_char(%s::date)
                 AND NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
@@ -727,7 +728,7 @@ def callback_get(update, context) :
                     AND T.code = A.code
                     AND T.trail_day = %s
                     AND T.trail_dtm = %s
-                    AND T.trail_tp IN ('1', 'L')
+                    AND T.trail_tp IN ('1', '2', '3')
                 )
                 UNION ALL
                 SELECT
@@ -736,7 +737,7 @@ def callback_get(update, context) :
                     code,
                     %s,
                     %s,
-                    CASE WHEN trail_tp IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
+                    CASE WHEN trail_tp = '3' THEN 'L' ELSE '1' END AS trail_tp,
                     basic_price,
                     stop_price,
                     target_price,
@@ -753,11 +754,11 @@ def callback_get(update, context) :
                     AND T.code = B.code
                     AND T.trail_day = %s
                     AND T.trail_dtm = %s
-                    AND T.trail_tp IN ('1', 'L')
+                    AND T.trail_tp IN ('1', '2', '3')
                 );
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, '090000', acct_no, trail_day, '090000', trail_day, '090000', acct_no, trail_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, '090000', acct_no, business_day, trail_day, '090000', trail_day, '090000', acct_no, business_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 
