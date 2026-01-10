@@ -131,6 +131,12 @@ def build_date_buttons(days=7):
                 callback_data=f"sell_trace_date:{d.strftime('%Y-%m-%d')}"
             )
         )
+        buttons.append(
+            InlineKeyboardButton(
+                text=d.strftime("%Y-%m-%d"),
+                callback_data=f"trace_delete_date:{d.strftime('%Y-%m-%d')}"
+            )
+        )
         cnt += 1
 
     return InlineKeyboardMarkup(build_menu(buttons, 2))
@@ -782,6 +788,12 @@ def callback_get(update, context) :
                                             message_id=update.callback_query.message.message_id)   
 
     elif data_selected.find("추적삭제") != -1:
+        update.callback_query.edit_message_text(
+            text="📅 추적 삭제 시작일을 선택하세요",
+            reply_markup=build_date_buttons(50)  # 최근 50일
+        )
+            
+    elif data_selected.startswith("trace_delete_date:"):            
         ac = account()
         acct_no = ac['acct_no']
 
@@ -790,7 +802,7 @@ def callback_get(update, context) :
                                 chat_id=update.callback_query.message.chat_id,
                                 message_id=update.callback_query.message.message_id)
             
-            business_day = datetime.now().strftime("%Y%m%d")
+            business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
             result_msgs = []
         
@@ -827,7 +839,7 @@ def callback_get(update, context) :
             print('추적 삭제 오류.', e)
             context.bot.edit_message_text(text="[추적 삭제] 오류 : "+str(e),
                                             chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)   
+                                            message_id=update.callback_query.message.message_id)           
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
