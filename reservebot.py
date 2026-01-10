@@ -100,7 +100,7 @@ def format_number(value):
     except:
         return str(value)
     
-def build_date_buttons(days=7):
+def build_date_buttons1(days=7):
     today = datetime.now().date()
 
     cur00 = conn.cursor()
@@ -131,6 +131,35 @@ def build_date_buttons(days=7):
                 callback_data=f"sell_trace_date:{d.strftime('%Y-%m-%d')}"
             )
         )
+        cnt += 1
+
+    return InlineKeyboardMarkup(build_menu(buttons, 2))
+
+def build_date_buttons2(days=7):
+    today = datetime.now().date()
+
+    cur00 = conn.cursor()
+    cur00.execute("SELECT holiday FROM stock_holiday")
+    holidays = {row[0] for row in cur00.fetchall()}
+    cur00.close()
+
+    buttons = []
+    cnt = 0
+    offset = 0
+
+    while cnt < days:
+        d = today - timedelta(days=offset)
+        date_str = d.strftime("%Y%m%d")
+        offset += 1
+
+        # 주말 제외
+        if d.weekday() >= 5:
+            continue
+
+        # 휴장일 제외
+        if date_str in holidays:
+            continue
+
         buttons.append(
             InlineKeyboardButton(
                 text=d.strftime("%Y-%m-%d"),
@@ -699,7 +728,7 @@ def callback_get(update, context) :
     elif data_selected.find("매도추적") != -1:
         update.callback_query.edit_message_text(
             text="📅 매도 추적 시작일을 선택하세요",
-            reply_markup=build_date_buttons(50)  # 최근 50일
+            reply_markup=build_date_buttons1(50)  # 최근 50일
         )
 
     elif data_selected.startswith("sell_trace_date:"):
@@ -790,7 +819,7 @@ def callback_get(update, context) :
     elif data_selected.find("추적삭제") != -1:
         update.callback_query.edit_message_text(
             text="📅 추적 삭제 시작일을 선택하세요",
-            reply_markup=build_date_buttons(50)  # 최근 50일
+            reply_markup=build_date_buttons2(50)  # 최근 50일
         )
             
     elif data_selected.startswith("trace_delete_date:"):            
