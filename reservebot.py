@@ -718,6 +718,7 @@ def callback_get(update, context) :
                     trail_day,
                     trail_dtm,
                     trail_tp,
+                    CASE WHEN proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
                     basic_price,
                     stop_price,
                     target_price,
@@ -739,7 +740,7 @@ def callback_get(update, context) :
                 FROM tradng_simulation A
                 WHERE A.trade_tp = '1'
                 AND A.acct_no = %s
-                AND A.proc_yn IN ('N', 'C')
+                AND A.proc_yn IN ('N', 'C', 'L')
                 AND A.trade_day <= prev_business_day_char(%s::date)
                 AND NOT EXISTS (
                     SELECT 1
@@ -750,32 +751,6 @@ def callback_get(update, context) :
                     AND T.trail_dtm = %s
                     AND T.trail_tp IN ('1', '2', '3')
                 )
-                UNION ALL
-                SELECT
-                    acct_no,
-                    name,
-                    code,
-                    %s,
-                    %s,
-                    CASE WHEN trail_tp = '3' THEN 'L' ELSE '1' END AS trail_tp,
-                    basic_price,
-                    stop_price,
-                    target_price,
-                    now(),
-                    now()
-                FROM trading_trail B
-                WHERE acct_no = %s
-                AND trail_day = prev_business_day_char(%s::date)
-                AND trail_tp IN ('2', '3')
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM trading_trail T
-                    WHERE T.acct_no = B.acct_no
-                    AND T.code = B.code
-                    AND T.trail_day = %s
-                    AND T.trail_dtm = %s
-                    AND T.trail_tp IN ('1', '2', '3')
-                );
                 """
             # insert 인자값 설정
             cur200.execute(insert_query, (trail_day, trail_day, '090000', acct_no, business_day, trail_day, '090000', trail_day, '090000', acct_no, business_day, trail_day, '090000'))
