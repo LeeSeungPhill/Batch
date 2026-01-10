@@ -748,7 +748,7 @@ def callback_get(update, context) :
                     AND T.code = A.code
                     AND T.trail_day = %s
                     AND T.trail_dtm = A.trade_dtm
-                    AND T.trail_tp IN ('1', '2', '3')
+                    AND T.trail_tp IN ('1', '2', '3', 'L')
                 )
                 """
             # insert 인자값 설정
