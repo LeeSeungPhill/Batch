@@ -718,7 +718,6 @@ def callback_get(update, context) :
                     trail_day,
                     trail_dtm,
                     trail_tp,
-                    trail_tp,
                     basic_price,
                     stop_price,
                     target_price,
