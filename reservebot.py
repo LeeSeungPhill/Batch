@@ -747,12 +747,12 @@ def callback_get(update, context) :
                     WHERE T.acct_no = A.acct_no
                     AND T.code = A.code
                     AND T.trail_day = %s
-                    AND T.trail_dtm = %s
+                    AND T.trail_dtm = A.trade_dtm
                     AND T.trail_tp IN ('1', '2', '3')
                 )
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, trail_day, '090000', acct_no, business_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, trail_day, '090000', acct_no, business_day, trail_day,))
 
             countProc = cur200.rowcount
 
