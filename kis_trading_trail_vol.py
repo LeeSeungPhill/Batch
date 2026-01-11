@@ -64,6 +64,58 @@ def account(nickname):
         'bot_token1': bot_token1
     }
 
+def get_kis_daily_chart(
+        stock_code: str,
+        trade_date: str,
+        access_token: str,
+        app_key: str,
+        app_secret: str,
+        market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
+        period: str = "D",                # D:최근30거래일, W:최근30주, M:최근30개월
+        adjust_price: str = "1",          # 0:수정주가미반영, 1:수정주가반영
+        verbose: bool = True              # 출력 제어 옵션
+    ):
+    url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
+
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appkey": app_key,
+        "appsecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P"
+    }
+
+    params = {
+        "FID_COND_MRKT_DIV_CODE": market_code,
+        "FID_INPUT_ISCD": stock_code,
+        "FID_PERIOD_DIV_CODE": period,
+        "FID_ORG_ADJ_PRC": adjust_price,
+    }
+
+    res = requests.get(url, headers=headers, params=params)
+    data = res.json()
+
+    if "output" not in data or not data["output"]:
+        if verbose:
+            print(f"⛔ 일봉 데이터 없음")
+        return None
+
+    df = pd.DataFrame(data["output"])
+    if df.empty:
+        return None
+
+    # 날짜 필터 (YYYYMMDD)
+    day_df = df[df["stck_bsop_date"] == trade_date]
+
+    if day_df.empty:
+        if verbose:
+            print(f"⛔ {trade_date} 일봉 없음")
+        return None
+
+    # trade_date 저가
+    return int(day_df.iloc[0]["stck_lwpr"])
+
 def get_kis_1min_dailychart(
     stock_code: str,
     trade_date: str,
@@ -166,20 +218,13 @@ def is_business_day(check_date: datetime) -> bool:
 def get_prev_day_low(stock_code, trade_date, access_token, app_key, app_secret):
     prev_date = get_previous_business_day((datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
 
-    df = get_kis_1min_full_day(
+    return get_kis_daily_chart(
         stock_code=stock_code,
         trade_date=prev_date,
-        start_time="153000",
         access_token=access_token,
         app_key=app_key,
-        app_secret=app_secret,
-        verbose=False
+        app_secret=app_secret
     )
-
-    if df.empty:
-        return None
-
-    return int(df["저가"].astype(int).min())
 
 def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
     cur03 = conn.cursor()
@@ -712,7 +757,7 @@ if __name__ == "__main__":
 
     # 매매추적 조회
     cur200 = conn.cursor()
-    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '20251125'")
+    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '20251128'")
     result_two00 = cur200.fetchall()
     cur200.close()
 

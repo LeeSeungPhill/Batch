@@ -1287,7 +1287,7 @@ def echo(update, context):
                 hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
                 buy_price = int(commandBot[3])                          # 매수가
                 loss_price = int(commandBot[4])                         # 이탈가
-                safe_margin_price = int(buy_price + buy_price * 0.04)   # 안전마진가
+                safe_margin_price = int(buy_price + buy_price * 0.05)   # 안전마진가
 
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()
