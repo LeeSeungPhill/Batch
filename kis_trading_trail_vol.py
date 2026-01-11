@@ -6,8 +6,11 @@ import pandas as pd
 import psycopg2 as db
 import json
 from datetime import time
+import sys
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
+
+arguments = sys.argv
 
 # PostgreSQL 연결 설정
 # conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
@@ -770,7 +773,7 @@ if __name__ == "__main__":
 
     if is_business_day(today):
 
-        ac = account('yh480825')
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
