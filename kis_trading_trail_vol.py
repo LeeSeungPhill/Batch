@@ -768,41 +768,43 @@ def get_kis_1min_from_datetime(
 
 if __name__ == "__main__":
 
-    ac = account('yh480825')
-    acct_no = ac['acct_no']
-    access_token = ac['access_token']
-    app_key = ac['app_key']
-    app_secret = ac['app_secret']
-    token = ac['bot_token1']
+    if is_business_day(today):
 
-    # 매매추적 조회
-    cur200 = conn.cursor()
-    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '20251229'")
-    result_two00 = cur200.fetchall()
-    cur200.close()
+        ac = account('yh480825')
+        acct_no = ac['acct_no']
+        access_token = ac['access_token']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
+        token = ac['bot_token1']
 
-    if len(result_two00) > 0:
-        
-        for i in result_two00:
+        # 매매추적 조회
+        cur200 = conn.cursor()
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "'")
+        result_two00 = cur200.fetchall()
+        cur200.close()
 
-            signal = get_kis_1min_from_datetime(
-                stock_code=i[0],
-                stock_name=i[1], 
-                start_date=i[2],
-                start_time=i[3],
-                target_price=int(i[4]),
-                stop_price=int(i[5]),
-                basic_price=int(i[6]),
-                long_hold=i[7],
-                access_token=ac['access_token'],
-                app_key=ac['app_key'],
-                app_secret=ac['app_secret'],
-                breakout_type="high",   
-                verbose=True
-            )
+        if len(result_two00) > 0:
+            
+            for i in result_two00:
 
-            if signal:
-                print("\n📌 신호 결과")
-                print(signal)
-            else:
-                print("\n📌 아직 신호 없음")
+                signal = get_kis_1min_from_datetime(
+                    stock_code=i[0],
+                    stock_name=i[1], 
+                    start_date=i[2],
+                    start_time=i[3],
+                    target_price=int(i[4]),
+                    stop_price=int(i[5]),
+                    basic_price=int(i[6]),
+                    long_hold=i[7],
+                    access_token=ac['access_token'],
+                    app_key=ac['app_key'],
+                    app_secret=ac['app_secret'],
+                    breakout_type="high",   
+                    verbose=True
+                )
+
+                if signal:
+                    print("\n📌 신호 결과")
+                    print(signal)
+                else:
+                    print("\n📌 아직 신호 없음")
