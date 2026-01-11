@@ -496,6 +496,14 @@ def post_business_day_char(business_day:str):
 
     return result_one00[0][0]
 
+def get_previous_business_day(day):
+    cur100 = conn.cursor()
+    cur100.execute("select prev_business_day_char(%s)", (day,))
+    result_one00 = cur100.fetchall()
+    cur100.close()
+
+    return result_one00[0][0]
+
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     global menuNum
@@ -742,6 +750,7 @@ def callback_get(update, context) :
             
             business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
+            prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
             result_msgs = []
             # 매도추적 insert
             cur200 = conn.cursor()
@@ -767,8 +776,8 @@ def callback_get(update, context) :
                     CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END,
                     CASE WHEN A.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
                     A.buy_price,
-                    A.loss_price,
-                    A.profit_price,
+                    CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.stop_price, A.loss_price) ELSE A.loss_price END AS loss_price,
+                    CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.target_price, A.profit_price) ELSE A.profit_price END AS profit_price,
                     now(),
                     now()
                 FROM tradng_simulation A JOIN (
@@ -781,10 +790,15 @@ def callback_get(update, context) :
 				    GROUP BY acct_no, code, trade_tp
 				) B
                 ON A.acct_no = B.acct_no AND A.code = B.code AND A.trade_tp = B.trade_tp AND A.trade_day = B.max_trade_day
+                LEFT JOIN trading_trail C
+                ON C.acct_no = A.acct_no
+                AND C.code = A.code
+                AND C.trail_day = %s
+                AND C.trail_tp IN ('1', '2', '3', 'L')
                 WHERE A.trade_tp = '1'
                 AND A.acct_no = %s
                 AND A.proc_yn IN ('N', 'C', 'L')
-                AND A.trade_day <= prev_business_day_char(%s::date)
+                AND A.trade_day <= %s
                 AND NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
@@ -796,7 +810,7 @@ def callback_get(update, context) :
                 )
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, trail_day, '090000', acct_no, business_day, trail_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 

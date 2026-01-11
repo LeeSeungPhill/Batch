@@ -1,7 +1,7 @@
 import psycopg2 as db
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 기본 DB 연결 정보
 conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
@@ -60,6 +60,14 @@ def post_business_day_char(business_day:str):
 
     return result_one00[0][0]
 
+def get_previous_business_day(day):
+    cur100 = conn.cursor()
+    cur100.execute("select prev_business_day_char(%s)", (day,))
+    result_one00 = cur100.fetchall()
+    cur100.close()
+
+    return result_one00[0][0]
+
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong']
 
 for nick in nickname_list:
@@ -69,6 +77,7 @@ for nick in nickname_list:
 
         business_day = datetime.now().strftime("%Y-%m-%d")
         trail_day = post_business_day_char(business_day)
+        prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
 
         cur1 = conn.cursor()
         cur1.execute("""
@@ -80,8 +89,8 @@ for nick in nickname_list:
                 CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END,
                 CASE WHEN A.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
                 A.buy_price,
-                A.loss_price,
-                A.profit_price,
+                CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.stop_price, A.loss_price) ELSE A.loss_price END AS loss_price,
+                CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.target_price, A.profit_price) ELSE A.profit_price END AS profit_price,
                 now(),
                 now()
             FROM tradng_simulation A JOIN (
@@ -94,10 +103,15 @@ for nick in nickname_list:
                 GROUP BY acct_no, code, trade_tp
             ) B
             ON A.acct_no = B.acct_no AND A.code = B.code AND A.trade_tp = B.trade_tp AND A.trade_day = B.max_trade_day
+            LEFT JOIN trading_trail C
+            ON C.acct_no = A.acct_no
+            AND C.code = A.code
+            AND C.trail_day = %s
+            AND C.trail_tp IN ('1', '2', '3', 'L')
             WHERE A.trade_tp = '1'
             AND A.acct_no = %s
             AND A.proc_yn IN ('N', 'C', 'L')
-            AND A.trade_day <= prev_business_day_char(%s::date)
+            AND A.trade_day <= %s
             AND NOT EXISTS (
                 SELECT 1
                 FROM trading_trail T
@@ -107,7 +121,7 @@ for nick in nickname_list:
                 AND T.trail_dtm = CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END
                 AND T.trail_tp IN ('1', '2', '3', 'L')
             )
-        """, (trail_day, trail_day, '090000', acct_no, business_day, trail_day, trail_day, '090000'))
+        """, (trail_day, trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
         trading_trail_create_list = cur1.fetchall()
         cur1.close()
 
