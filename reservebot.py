@@ -760,18 +760,27 @@ def callback_get(update, context) :
                     mod_dt
                 )
                 SELECT
-                    acct_no,
-                    name,
-                    code,
+                    A.acct_no,
+                    A.name,
+                    A.code,
                     %s,
                     CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END,
-                    CASE WHEN proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                    buy_price,
-                    loss_price,
-                    profit_price,
+                    CASE WHEN A.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                    A.buy_price,
+                    A.loss_price,
+                    A.profit_price,
                     now(),
                     now()
-                FROM tradng_simulation A
+                FROM tradng_simulation A JOIN (
+				    SELECT
+				        acct_no,
+				        code,
+				        trade_tp,
+				        MAX(trade_day) AS max_trade_day
+				    FROM tradng_simulation
+				    GROUP BY acct_no, code, trade_tp
+				) B
+                ON A.acct_no = B.acct_no AND A.code = B.code AND A.trade_tp = B.trade_tp AND A.trade_day = B.max_trade_day
                 WHERE A.trade_tp = '1'
                 AND A.acct_no = %s
                 AND A.proc_yn IN ('N', 'C', 'L')

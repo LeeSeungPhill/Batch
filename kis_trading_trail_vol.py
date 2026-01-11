@@ -256,6 +256,24 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
     conn.commit()
     cur03.close()
 
+def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp):
+    cur04 = conn.cursor()
+    cur04.execute("""
+        UPDATE public.trading_trail SET 
+            trail_price = %s
+            , trail_rate = %s      
+            , trail_plan = %s
+            , trail_tp = %s                  
+            , mod_dt = %s
+        WHERE acct_no = %s
+        AND code = %s
+        AND trail_day = %s
+        AND trail_dtm = %s
+        AND trail_tp = 'L'                  
+    """, (trail_price, trail_rate, trail_plan, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    conn.commit()
+    cur04.close()    
+
 def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp):
     cur04 = conn.cursor()
     cur04.execute("""
@@ -269,6 +287,7 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
+        AND trail_tp <> 'L'                  
     """, (trail_price, trail_rate, trail_plan, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
@@ -300,6 +319,7 @@ def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, tra
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
+        AND trail_tp <> 'L'
     """, (stop_price, target_price, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
@@ -525,7 +545,7 @@ def get_kis_1min_from_datetime(
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
-                    update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4")
+                    update_trading_daily_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4")
 
                     signals.append({
                         "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -757,7 +777,7 @@ if __name__ == "__main__":
 
     # 매매추적 조회
     cur200 = conn.cursor()
-    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '20251128'")
+    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '20251229'")
     result_two00 = cur200.fetchall()
     cur200.close()
 
