@@ -750,7 +750,7 @@ def callback_get(update, context) :
             
             business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
-            prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
+            prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
             result_msgs = []
             # 매도추적 insert
             cur200 = conn.cursor()
@@ -798,7 +798,7 @@ def callback_get(update, context) :
                 WHERE A.trade_tp = '1'
                 AND A.acct_no = %s
                 AND A.proc_yn IN ('N', 'C', 'L')
-                AND A.trade_day <= %s
+                AND A.trade_day <= replace(%s, '-', '')
                 AND NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T

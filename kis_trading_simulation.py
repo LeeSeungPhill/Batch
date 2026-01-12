@@ -77,7 +77,7 @@ for nick in nickname_list:
 
         business_day = datetime.now().strftime("%Y-%m-%d")
         trail_day = post_business_day_char(business_day)
-        prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
+        prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
 
         cur1 = conn.cursor()
         cur1.execute("""
@@ -111,7 +111,7 @@ for nick in nickname_list:
             WHERE A.trade_tp = '1'
             AND A.acct_no = %s
             AND A.proc_yn IN ('N', 'C', 'L')
-            AND A.trade_day <= %s
+            AND A.trade_day <= replace(%s, '-', '')
             AND NOT EXISTS (
                 SELECT 1
                 FROM trading_trail T
