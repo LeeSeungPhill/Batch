@@ -769,15 +769,15 @@ def callback_get(update, context) :
                     mod_dt
                 )
                 SELECT
-                    A.acct_no,
-                    A.name,
-                    A.code,
+                    X.acct_no,
+                    X.name,
+                    X.code,
                     %s,
-                    CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END,
-                    CASE WHEN A.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                    A.buy_price,
-                    CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.stop_price, A.loss_price) ELSE A.loss_price END AS loss_price,
-                    CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.target_price, A.profit_price) ELSE A.profit_price END AS profit_price,
+                    CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
+                    CASE WHEN X.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                    X.buy_price,
+                    X.loss_price,
+                    X.profit_price,
                     now(),
                     now()
                 FROM (
