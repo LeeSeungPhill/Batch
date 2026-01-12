@@ -782,7 +782,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "'")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' order by code, trail_dtm, crt_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 

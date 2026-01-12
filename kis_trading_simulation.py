@@ -93,33 +93,41 @@ for nick in nickname_list:
                 CASE WHEN A.proc_yn <> 'Y' THEN COALESCE(C.target_price, A.profit_price) ELSE A.profit_price END AS profit_price,
                 now(),
                 now()
-            FROM tradng_simulation A JOIN (
+            FROM (
                 SELECT
-                    acct_no,
-                    code,
-                    trade_tp,
-                    MAX(trade_day) AS max_trade_day
-                FROM tradng_simulation
-                WHERE proc_yn <> 'Y'
-                GROUP BY acct_no, code, trade_tp
-            ) B
-            ON A.acct_no = B.acct_no AND A.code = B.code AND A.trade_tp = B.trade_tp AND A.trade_day = B.max_trade_day
-            LEFT JOIN trading_trail C
-            ON C.acct_no = A.acct_no
-            AND C.code = A.code
-            AND C.trail_day = %s
-            AND C.trail_tp IN ('1', '2', '3', 'L')
-            WHERE A.trade_tp = '1'
-            AND A.acct_no = %s
-            AND A.proc_yn IN ('N', 'C', 'L')
-            AND A.trade_day <= replace(%s, '-', '')
+                    A.acct_no,
+                    A.name,
+                    A.code,
+                    A.trade_day,
+                    A.trade_dtm,
+                    A.buy_price,
+                    COALESCE(B.stop_price, A.loss_price) AS loss_price,
+                    COALESCE(B.target_price, A.profit_price) AS profit_price,
+                    A.proc_yn,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY A.acct_no, A.code
+                        ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC 
+                    ) AS rn
+                FROM tradng_simulation A
+                LEFT JOIN trading_trail B
+                ON B.acct_no = A.acct_no
+                AND B.code = A.code
+                AND B.trail_day = %s
+                and B.trail_dtm = A.trade_dtm
+                AND B.trail_tp IN ('1', '2', '3', 'L')
+                WHERE A.trade_tp = '1'
+                AND A.acct_no = %s
+                AND A.proc_yn IN ('N', 'C', 'L')
+                AND A.trade_day <= replace(%s, '-', '')
+            ) X
+            WHERE X.rn = 1
             AND NOT EXISTS (
                 SELECT 1
                 FROM trading_trail T
-                WHERE T.acct_no = A.acct_no
-                AND T.code = A.code
+                WHERE T.acct_no = X.acct_no
+                AND T.code = X.code
                 AND T.trail_day = %s
-                AND T.trail_dtm = CASE WHEN A.trade_day = %s THEN A.trade_dtm ELSE %s END
+                AND T.trail_dtm = CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END
                 AND T.trail_tp IN ('1', '2', '3', 'L')
             )
         """, (trail_day, trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
