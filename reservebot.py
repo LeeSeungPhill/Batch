@@ -787,6 +787,7 @@ def callback_get(update, context) :
 				        trade_tp,
 				        MAX(trade_day) AS max_trade_day
 				    FROM tradng_simulation
+                    WHERE proc_yn <> 'Y'
 				    GROUP BY acct_no, code, trade_tp
 				) B
                 ON A.acct_no = B.acct_no AND A.code = B.code AND A.trade_tp = B.trade_tp AND A.trade_day = B.max_trade_day
