@@ -440,7 +440,7 @@ def get_kis_1min_from_datetime(
     trade_date = current.strftime("%Y%m%d")
 
     if verbose:
-        print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime("%H%M%S")} 1분봉 생성 중")
+        print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
 
     if long_hold == 'L':
         prev_low = get_prev_day_low(
