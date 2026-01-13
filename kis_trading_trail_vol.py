@@ -300,7 +300,7 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
             trail_price = %s
             , trail_rate = %s      
             , trail_plan = %s
-            , trail_tp = %
+            , trail_tp = %s
             , proc_min = to_char(now()::date, 'HHMMSS')                                    
             , mod_dt = %s
         WHERE acct_no = %s
