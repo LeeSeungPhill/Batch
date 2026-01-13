@@ -91,6 +91,7 @@ for nick in nickname_list:
                 X.buy_price,
                 X.loss_price,
                 X.profit_price,
+                CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
                 now(),
                 now()
             FROM (
@@ -130,7 +131,7 @@ for nick in nickname_list:
                 AND T.trail_dtm = CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END
                 AND T.trail_tp IN ('1', '2', '3', 'L')
             )
-        """, (trail_day, trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
+        """, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
         trading_trail_create_list = cur1.fetchall()
         cur1.close()
 
@@ -148,17 +149,18 @@ for nick in nickname_list:
                 basic_price,
                 stop_price,
                 target_price,
+                proc_min,
                 crt_dt,
                 mod_dt
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
         """
         cur2 = conn.cursor()
         for row in trading_trail_create_list:
-            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, crt_dt, mod_dt = row
+            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt = row
             try:
                 cur2.execute(insert_query1, (
-                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, crt_dt, mod_dt
+                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt
                 ))
             except Exception as e:
                 print(f"[{nick}] Error trading_trail inserting row {row}: {e}")

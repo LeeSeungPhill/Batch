@@ -229,6 +229,21 @@ def get_prev_day_low(stock_code, trade_date, access_token, app_key, app_secret):
         app_secret=app_secret
     )
 
+def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
+    cur03 = conn.cursor()
+    cur03.execute("""
+        UPDATE public.tradng_simulation SET 
+            proc_yn = %s
+            , mod_dt = %s
+        WHERE acct_no = %s
+        AND code = %s
+        AND trade_tp = %s
+        AND trade_day <= %s
+        AND proc_yn = 'L'
+    """, (udt_proc_yn, datetime.now(), acct_no, code, trade_tp, start_date))
+    conn.commit()
+    cur03.close()    
+
 def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
     cur03 = conn.cursor()
     cur03.execute("""
@@ -266,7 +281,8 @@ def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, cod
             trail_price = %s
             , trail_rate = %s      
             , trail_plan = %s
-            , trail_tp = %s                  
+            , trail_tp = %s
+            , proc_min = to_char(now()::date, 'HHMMSS')                  
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
@@ -284,7 +300,8 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
             trail_price = %s
             , trail_rate = %s      
             , trail_plan = %s
-            , trail_tp = %s                  
+            , trail_tp = %
+            , proc_min = to_char(now()::date, 'HHMMSS')                                    
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
@@ -295,21 +312,6 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
     conn.commit()
     cur04.close()    
 
-def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
-    cur03 = conn.cursor()
-    cur03.execute("""
-        UPDATE public.tradng_simulation SET 
-            proc_yn = %s
-            , mod_dt = %s
-        WHERE acct_no = %s
-        AND code = %s
-        AND trade_tp = %s
-        AND trade_day <= %s
-        AND proc_yn = 'L'
-    """, (udt_proc_yn, datetime.now(), acct_no, code, trade_tp, start_date))
-    conn.commit()
-    cur03.close()    
-
 def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, trail_dtm, trail_tp):
     cur04 = conn.cursor()
     cur04.execute("""
@@ -317,6 +319,7 @@ def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, tra
             stop_price = %s      
             , target_price = %s
             , trail_tp = %s
+            , proc_min = to_char(now()::date, 'HHMMSS')      
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
@@ -437,7 +440,7 @@ def get_kis_1min_from_datetime(
     trade_date = current.strftime("%Y%m%d")
 
     if verbose:
-        print(f"[{stock_name}-{stock_code}] {trade_date} 1분봉 생성 중")
+        print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime("%H%M%S")} 1분봉 생성 중")
 
     if long_hold == 'L':
         prev_low = get_prev_day_low(
@@ -782,7 +785,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' order by code, trail_dtm, crt_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 

@@ -765,6 +765,7 @@ def callback_get(update, context) :
                     basic_price,
                     stop_price,
                     target_price,
+                    proc_min,
                     crt_dt,
                     mod_dt
                 )
@@ -778,6 +779,7 @@ def callback_get(update, context) :
                     X.buy_price,
                     X.loss_price,
                     X.profit_price,
+                    CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
                     now(),
                     now()
                 FROM (
@@ -819,7 +821,7 @@ def callback_get(update, context) :
                 )
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 
