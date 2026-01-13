@@ -274,7 +274,7 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
     conn.commit()
     cur03.close()
 
-def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp):
+def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
@@ -282,18 +282,18 @@ def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, cod
             , trail_rate = %s      
             , trail_plan = %s
             , trail_tp = %s
-            , proc_min = to_char(now()::date, 'HHMMSS')                  
+            , proc_min = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp = 'L'                  
-    """, (trail_price, trail_rate, trail_plan, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
-def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp):
+def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
@@ -301,32 +301,32 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
             , trail_rate = %s      
             , trail_plan = %s
             , trail_tp = %s
-            , proc_min = to_char(now()::date, 'HHMMSS')                                    
+            , proc_min = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'                  
-    """, (trail_price, trail_rate, trail_plan, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
-def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, trail_dtm, trail_tp):
+def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
             stop_price = %s      
             , target_price = %s
             , trail_tp = %s
-            , proc_min = to_char(now()::date, 'HHMMSS')      
+            , proc_min = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'
-    """, (stop_price, target_price, trail_tp, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (stop_price, target_price, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
@@ -664,7 +664,7 @@ def get_kis_1min_from_datetime(
 
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
-                    update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4")
+                    update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -702,6 +702,9 @@ def get_kis_1min_from_datetime(
                             f"저가 {tenmin_state['base_low']:,})"
                         )
 
+                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date)
+                    update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+
                     signals.append({
                         "signal_type": "BREAKOUT",
                         "종목명": stock_name,
@@ -729,7 +732,7 @@ def get_kis_1min_from_datetime(
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
-                    update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "3")
+                    update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "BASE_10MIN_LOW_BREAK",
@@ -768,7 +771,7 @@ def get_kis_1min_from_datetime(
                                 f"고가 {new_high:,}, 저가 {new_low:,}, 거래량 {new_vol:,}"
                             )
                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date)
-                        update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2")    
+                        update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
 
