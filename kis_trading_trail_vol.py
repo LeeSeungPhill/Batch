@@ -703,7 +703,7 @@ def get_kis_1min_from_datetime(
                         )
 
                     update_safe_trading_mng("C", acct_no, stock_code, "1", start_date)
-                    update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                    update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
                     signals.append({
                         "signal_type": "BREAKOUT",
