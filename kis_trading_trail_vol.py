@@ -550,11 +550,11 @@ def get_kis_1min_from_datetime(
                             f"15:10 이후 일봉 기준 전일 저가 {prev_low:,}원 이탈 → 종료"
                         )
 
-                    update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date)
+                    update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
-                    update_trading_daily_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4")
+                    update_trading_daily_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
