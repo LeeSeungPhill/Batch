@@ -119,6 +119,7 @@ for nick in nickname_list:
                 WHERE A.trade_tp = '1'
                 AND A.acct_no = %s
                 AND A.proc_yn IN ('N', 'C', 'L')
+                AND SUBSTR(COALESCE(A.proc_dtm, %s), 1, 8) < %s 
                 AND A.trade_day <= replace(%s, '-', '')
             ) X
             WHERE X.rn = 1
@@ -131,7 +132,7 @@ for nick in nickname_list:
                 AND T.trail_dtm = CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END
                 AND T.trail_tp IN ('1', '2', '3', 'L')
             )
-        """, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
+        """, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, prev_date, trail_day, business_day, trail_day, trail_day, '090000'))
         trading_trail_create_list = cur1.fetchall()
         cur1.close()
 

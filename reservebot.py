@@ -807,6 +807,7 @@ def callback_get(update, context) :
 	                WHERE A.trade_tp = '1'
 	                AND A.acct_no = %s
 	                AND A.proc_yn IN ('N', 'C', 'L')
+                    AND SUBSTR(COALESCE(A.proc_dtm, %s), 1, 8) < %s 
 	                AND A.trade_day <= replace(%s, '-', '')
 	            ) X
 				WHERE X.rn = 1
@@ -821,7 +822,7 @@ def callback_get(update, context) :
                 )
                 """
             # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, business_day, trail_day, trail_day, '090000'))
+            cur200.execute(insert_query, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, prev_date, trail_day, business_day, trail_day, trail_day, '090000'))
 
             countProc = cur200.rowcount
 

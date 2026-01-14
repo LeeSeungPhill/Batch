@@ -229,48 +229,51 @@ def get_prev_day_low(stock_code, trade_date, access_token, app_key, app_secret):
         app_secret=app_secret
     )
 
-def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
+def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
         UPDATE public.tradng_simulation SET 
             proc_yn = %s
+            , proc_dtm = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trade_tp = %s
         AND trade_day <= %s
         AND proc_yn = 'L'
-    """, (udt_proc_yn, datetime.now(), acct_no, code, trade_tp, start_date))
+    """, (udt_proc_yn, proc_dtm, datetime.now(), acct_no, code, trade_tp, start_date))
     conn.commit()
     cur03.close()    
 
-def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
+def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
         UPDATE public.tradng_simulation SET 
             proc_yn = %s
+            , proc_dtm = %s                  
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trade_tp = %s
         AND trade_day <= %s
         AND proc_yn = 'N'
-    """, (udt_proc_yn, datetime.now(), acct_no, code, trade_tp, start_date))
+    """, (udt_proc_yn, proc_dtm, datetime.now(), acct_no, code, trade_tp, start_date))
     conn.commit()
     cur03.close()
 
-def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date):
+def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
         UPDATE public.tradng_simulation SET 
             proc_yn = %s
+            , proc_dtm = %s 
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trade_tp = %s
         AND trade_day <= %s
         AND proc_yn IN ('N', 'C')
-    """, (udt_proc_yn, datetime.now(), acct_no, code, trade_tp, start_date))
+    """, (udt_proc_yn, proc_dtm, datetime.now(), acct_no, code, trade_tp, start_date))
     conn.commit()
     cur03.close()
 
@@ -660,7 +663,7 @@ def get_kis_1min_from_datetime(
                             f"돌파 전 이탈가 {stop_price:,}원 이탈 → 종료"
                         )
 
-                    update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date)
+                    update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
@@ -702,7 +705,7 @@ def get_kis_1min_from_datetime(
                             f"저가 {tenmin_state['base_low']:,})"
                         )
 
-                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date)
+                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                     update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
                     signals.append({
@@ -728,7 +731,7 @@ def get_kis_1min_from_datetime(
                             f"목표가 돌파 후 10분 기준봉 저가 {tenmin_state['base_low']:,}원 이탈 → 종료"
                         )
 
-                    update_safe_trading_mng("L", acct_no, stock_code, "1", start_date)
+                    update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
@@ -770,7 +773,7 @@ def get_kis_1min_from_datetime(
                                 f"[{completed_key.strftime('%Y%m%d %H:%M')}] "
                                 f"고가 {new_high:,}, 저가 {new_low:,}, 거래량 {new_vol:,}"
                             )
-                        update_safe_trading_mng("C", acct_no, stock_code, "1", start_date)
+                        update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                         update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
