@@ -654,127 +654,129 @@ def get_kis_1min_from_datetime(
             breakout_check = high_price if breakout_type == "high" else close_price
             breakdown_check = low_price if breakdown_type == "low" else close_price
 
-            if not breakout_done:
-                # 돌파 이전 이탈 → 즉시 종료
-                if breakdown_check <= stop_price:
-                    if verbose:
-                        print(
-                            f"🚨 [{row['일자']} {row['시간']}] "
-                            f"돌파 전 이탈가 {stop_price:,}원 이탈 → 종료"
-                        )
+            if high_price > low_price:
+                if not breakout_done:
+                    # 돌파 이전 이탈 → 즉시 종료
+                    if breakdown_check <= stop_price:
+                        if verbose:
+                            print(
+                                f"🚨 [{row['일자']} {row['시간']}] "
+                                f"돌파 전 이탈가 {stop_price:,}원 이탈 → 종료"
+                            )
 
-                    update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                        update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                        trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
 
-                    update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
-                    signals.append({
-                        "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
-                        "종목명": stock_name,
-                        "종목코드": stock_code,
-                        "발생일자": row["일자"],
-                        "발생시간": row["시간"],
-                        "이탈가격": breakdown_check
-                    })
-                    return signals
+                        signals.append({
+                            "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                            "종목명": stock_name,
+                            "종목코드": stock_code,
+                            "발생일자": row["일자"],
+                            "발생시간": row["시간"],
+                            "이탈가격": breakdown_check
+                        })
+                        return signals
 
-                # 목표가 돌파
-                if breakout_check >= target_price:
-                    breakout_done = True
+                    # 목표가 돌파
+                    if breakout_check >= target_price:
+                        breakout_done = True
 
-                    base_key = get_completed_10min_key(row["dt"])
-                    base_10min = df[df["dt"].apply(get_10min_key) == base_key]
+                        base_key = get_completed_10min_key(row["dt"])
+                        base_10min = df[df["dt"].apply(get_10min_key) == base_key]
 
-                    if base_10min.empty:
-                        continue
+                        if base_10min.empty:
+                            continue
 
-                    tenmin_state.update({
-                        "active": True,
-                        "base_key": base_key,
-                        "base_low": base_10min["저가"].astype(int).min(),
-                        "base_high": base_10min["고가"].astype(int).max(),
-                        "base_vol": base_10min["거래량"].astype(int).sum(),
-                        "base_end_dt": base_key + timedelta(minutes=10),
-                    })
-
-                    if verbose:
-                        print(
-                            f"🔥 [{row['일자']} {row['시간']}] 목표가 {int(target_price):,}원 돌파 → 기준봉 설정 "
-                            f"(고가 {tenmin_state['base_high']:,}, "
-                            f"저가 {tenmin_state['base_low']:,})"
-                        )
-
-                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                    update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
-
-                    signals.append({
-                        "signal_type": "BREAKOUT",
-                        "종목명": stock_name,
-                        "종목코드": stock_code,
-                        "기준가격": target_price,
-                        "발생일자": row["일자"],
-                        "발생시간": row["시간"],
-                        "돌파가격": breakout_check
-                    })
-                    continue
-
-            # ===============================
-            # 돌파 이후
-            # ===============================
-            if breakout_done and tenmin_state["active"]:
-                # 기준봉 저가 이탈 → 즉시 종료
-                if low_price < tenmin_state["base_low"]:
-                    if verbose:
-                        print(
-                            f"🔥 [{row['일자']} {row['시간']}] "
-                            f"목표가 돌파 후 10분 기준봉 저가 {tenmin_state['base_low']:,}원 이탈 → 종료"
-                        )
-
-                    update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                    
-                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-
-                    update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
-
-                    signals.append({
-                        "signal_type": "BASE_10MIN_LOW_BREAK",
-                        "종목명": stock_name,
-                        "종목코드": stock_code,
-                        "발생일자": row["일자"],
-                        "발생시간": row["시간"],
-                        "기준봉저가": tenmin_state["base_low"],
-                        "10분봉 저가": row["저가"]
-                    })
-                    return signals
-
-                # 10분봉 완성 시 기준봉 갱신
-                completed_key = get_completed_10min_key(row["dt"])
-                tenmin_df = df[df["dt"].apply(get_completed_10min_key) == completed_key]
-
-                if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
-                    new_high = tenmin_df["고가"].astype(int).max()
-                    new_low = tenmin_df["저가"].astype(int).min()
-                    new_vol = tenmin_df["거래량"].astype(int).sum()
-
-                    if new_high > tenmin_state["base_high"] or new_vol > tenmin_state["base_vol"]:
                         tenmin_state.update({
-                            "base_key": completed_key,
-                            "base_low": new_low,
-                            "base_high": new_high,
-                            "base_vol": new_vol,
-                            "base_end_dt": completed_key
+                            "active": True,
+                            "base_key": base_key,
+                            "base_low": base_10min["저가"].astype(int).min(),
+                            "base_high": base_10min["고가"].astype(int).max(),
+                            "base_vol": base_10min["거래량"].astype(int).sum(),
+                            "base_end_dt": base_key + timedelta(minutes=10),
                         })
 
                         if verbose:
-                            reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
                             print(
-                                f"🔁 기준봉 갱신 ({reason}) "
-                                f"[{completed_key.strftime('%Y%m%d %H:%M')}] "
-                                f"고가 {new_high:,}, 저가 {new_low:,}, 거래량 {new_vol:,}"
+                                f"🔥 [{row['일자']} {row['시간']}] 목표가 {int(target_price):,}원 돌파 → 기준봉 설정 "
+                                f"(고가 {tenmin_state['base_high']:,}, "
+                                f"저가 {tenmin_state['base_low']:,})"
                             )
+
                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                        update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                        update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+
+                        signals.append({
+                            "signal_type": "BREAKOUT",
+                            "종목명": stock_name,
+                            "종목코드": stock_code,
+                            "기준가격": target_price,
+                            "발생일자": row["일자"],
+                            "발생시간": row["시간"],
+                            "돌파가격": breakout_check
+                        })
+                        continue
+
+                # ===============================
+                # 돌파 이후
+                # ===============================
+                if breakout_done and tenmin_state["active"]:
+                    # 기준봉 저가 이탈 → 즉시 종료
+                    if low_price < tenmin_state["base_low"]:
+                        if verbose:
+                            print(
+                                f"🔥 [{row['일자']} {row['시간']}] "
+                                f"목표가 돌파 후 10분 기준봉 저가 {tenmin_state['base_low']:,}원 이탈 → 종료"
+                            )
+
+                        update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                        
+                        trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+
+                        update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+
+                        signals.append({
+                            "signal_type": "BASE_10MIN_LOW_BREAK",
+                            "종목명": stock_name,
+                            "종목코드": stock_code,
+                            "발생일자": row["일자"],
+                            "발생시간": row["시간"],
+                            "기준봉저가": tenmin_state["base_low"],
+                            "10분봉 저가": row["저가"]
+                        })
+                        return signals
+
+                    # 10분봉 완성 시 기준봉 갱신
+                    completed_key = get_completed_10min_key(row["dt"])
+                    tenmin_df = df[df["dt"].apply(get_completed_10min_key) == completed_key]
+
+                    if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
+                        new_high = tenmin_df["고가"].astype(int).max()
+                        new_low = tenmin_df["저가"].astype(int).min()
+                        new_vol = tenmin_df["거래량"].astype(int).sum()
+
+                        if new_high > new_low:
+                            if new_high > tenmin_state["base_high"] or new_vol > tenmin_state["base_vol"]:
+                                tenmin_state.update({
+                                    "base_key": completed_key,
+                                    "base_low": new_low,
+                                    "base_high": new_high,
+                                    "base_vol": new_vol,
+                                    "base_end_dt": completed_key
+                                })
+
+                                if verbose:
+                                    reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
+                                    print(
+                                        f"🔁 기준봉 갱신 ({reason}) "
+                                        f"[{completed_key.strftime('%Y%m%d %H:%M')}] "
+                                        f"고가 {new_high:,}, 저가 {new_low:,}, 거래량 {new_vol:,}"
+                                    )
+                                update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
 
