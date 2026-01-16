@@ -769,40 +769,10 @@ def callback_get(update, context) :
                 ))
 
             balance_sql = """
-                WITH balance(acct_no, code, purchase_price) AS (
-                    VALUES %s
-                )
-            """
-
-            insert_query = f"""
-            INSERT INTO trading_trail (
-                acct_no,
-                name,
-                code,
-                trail_day,
-                trail_dtm,
-                trail_tp,
-                basic_price,
-                stop_price,
-                target_price,
-                proc_min,
-                crt_dt,
-                mod_dt
-            )
-            SELECT
-                X.acct_no,
-                X.name,
-                X.code,
-                '{trail_day}',
-                CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END,
-                CASE WHEN X.proc_yn = 'L' THEN 'L' ELSE '1' END,
-                COALESCE(BAL.purchase_price, X.buy_price),
-                X.loss_price,
-                X.profit_price,
-                CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END,
-                now(),
-                now()
-            FROM (
+            WITH balance(acct_no, code, purchase_price) AS (
+                VALUES %s
+            ),
+            sim AS (
                 SELECT
                     A.acct_no,
                     A.name,
@@ -829,20 +799,64 @@ def callback_get(update, context) :
                 AND A.proc_yn IN ('N','C','L')
                 AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'),1,8) < '{trail_day}'
                 AND A.trade_day <= replace('{business_day}','-','')
-            ) X
-            LEFT JOIN balance BAL
-            ON BAL.acct_no = X.acct_no
-            AND BAL.code = X.code
-            WHERE X.rn = 1
-            AND NOT EXISTS (
+            )
+            """
+
+
+            insert_query = f"""
+            INSERT INTO trading_trail (
+                acct_no,
+                name,
+                code,
+                trail_day,
+                trail_dtm,
+                trail_tp,
+                basic_price,
+                stop_price,
+                target_price,
+                proc_min,
+                crt_dt,
+                mod_dt
+            )
+            SELECT
+                BAL.acct_no,
+                COALESCE(S.name, '') AS name,
+                BAL.code,
+                '{trail_day}' AS trail_day,
+                CASE
+                    WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm
+                    ELSE '090000'
+                END AS trail_dtm,
+                CASE
+                    WHEN S.proc_yn = 'L' THEN 'L'
+                    ELSE '1'
+                END AS trail_tp,
+                BAL.purchase_price AS basic_price,              -- ✅ balance 기준
+                COALESCE(S.loss_price, 0) AS stop_price,
+                COALESCE(S.profit_price, 0) AS target_price,
+                CASE
+                    WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm
+                    ELSE '090000'
+                END AS proc_min,
+                now(),
+                now()
+            FROM balance BAL
+            LEFT JOIN sim S
+                ON S.acct_no = BAL.acct_no
+            AND S.code = BAL.code
+            AND S.rn = 1
+            WHERE NOT EXISTS (
                 SELECT 1
                 FROM trading_trail T
-                WHERE T.acct_no = X.acct_no
-                AND T.code = X.code
+                WHERE T.acct_no = BAL.acct_no
+                AND T.code = BAL.code
                 AND T.trail_day = '{trail_day}'
-                AND T.trail_dtm = CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END
+                AND T.trail_dtm = CASE
+                        WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm
+                        ELSE '090000'
+                    END
                 AND T.trail_tp IN ('1','2','3','L')
-            )
+            );
             """
 
             cur200 = conn.cursor()
