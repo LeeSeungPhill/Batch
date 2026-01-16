@@ -795,7 +795,7 @@ def callback_get(update, context) :
                     AND B.trail_dtm = A.trade_dtm
                     AND B.trail_tp IN ('1','2','3','L')
                 WHERE A.trade_tp = '1'
-                AND A.acct_no = '{int_acct_no}'
+                AND A.acct_no = {int_acct_no}
                 AND A.proc_yn IN ('N','C','L')
                 AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'),1,8) < '{trail_day}'
                 AND A.trade_day <= replace('{business_day}','-','')
