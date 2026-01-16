@@ -12,6 +12,7 @@ import json
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from dateutil.relativedelta import relativedelta
+from psycopg2.extras import execute_values
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -742,6 +743,9 @@ def callback_get(update, context) :
     elif data_selected.startswith("sell_trace_date:"):
         ac = account()
         acct_no = ac['acct_no']
+        access_token = ac['access_token']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
 
         try:
             context.bot.edit_message_text(text="[매도추적 등록]",
@@ -752,7 +756,24 @@ def callback_get(update, context) :
             trail_day = post_business_day_char(business_day)
             prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
             result_msgs = []
-            # 매도추적 insert
+
+            # 계좌잔고 조회
+            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+
+            balance_rows = []
+            for i in range(len(c)):
+                balance_rows.append((
+                    acct_no,
+                    c['pdno'][i],                    # code
+                    float(c['pchs_avg_pric'][i])     # purchase_price
+                ))
+
+            balance_sql = """
+                WITH balance(acct_no, code, purchase_price) AS (
+                    VALUES %s
+                )
+            """
+
             cur200 = conn.cursor()
             insert_query = """
                 INSERT INTO trading_trail (
@@ -776,7 +797,7 @@ def callback_get(update, context) :
                     %s,
                     CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
                     CASE WHEN X.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                    X.buy_price,
+                    COALESCE(BAL.purchase_price, X.buy_price) AS basic_price,
                     X.loss_price,
                     X.profit_price,
                     CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
@@ -799,18 +820,21 @@ def callback_get(update, context) :
 			            ) AS rn
 	                FROM tradng_simulation A
 	                LEFT JOIN trading_trail B
-	                ON B.acct_no = A.acct_no
-	                AND B.code = A.code
-	                AND B.trail_day = %s
-	                and B.trail_dtm = A.trade_dtm
-	                AND B.trail_tp IN ('1', '2', '3', 'L')
+                        ON B.acct_no = A.acct_no
+                        AND B.code = A.code
+                        AND B.trail_day = %s
+                        and B.trail_dtm = A.trade_dtm
+                        AND B.trail_tp IN ('1', '2', '3', 'L')
 	                WHERE A.trade_tp = '1'
 	                AND A.acct_no = %s
 	                AND A.proc_yn IN ('N', 'C', 'L')
                     AND SUBSTR(COALESCE(A.proc_dtm, %s), 1, 8) < %s 
 	                AND A.trade_day <= replace(%s, '-', '')
 	            ) X
-				WHERE X.rn = 1
+				LEFT JOIN balance BAL
+                    ON BAL.acct_no = X.acct_no
+                    AND BAL.code = X.code
+                WHERE X.rn = 1
                 AND NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
@@ -821,8 +845,31 @@ def callback_get(update, context) :
                     AND T.trail_tp IN ('1', '2', '3', 'L')
                 )
                 """
-            # insert 인자값 설정
-            cur200.execute(insert_query, (trail_day, trail_day, '090000', trail_day, '090000', prev_date, acct_no, prev_date, trail_day, business_day, trail_day, trail_day, '090000'))
+
+            full_query = balance_sql + insert_query
+
+            execute_values(
+                cur200,
+                full_query,
+                balance_rows,
+                template="(%s,%s,%s)",
+                fetch=False,
+                args=(
+                    trail_day,
+                    trail_day,
+                    '090000',
+                    trail_day,
+                    '090000',
+                    prev_date,
+                    acct_no,
+                    prev_date,
+                    trail_day,
+                    business_day,
+                    trail_day,
+                    trail_day,
+                    '090000'
+                )
+            )
 
             countProc = cur200.rowcount
 
