@@ -774,101 +774,85 @@ def callback_get(update, context) :
                 )
             """
 
-            cur200 = conn.cursor()
-            insert_query = """
-                INSERT INTO trading_trail (
-                    acct_no,
-                    name,
-                    code,
-                    trail_day,
-                    trail_dtm,
-                    trail_tp,
-                    basic_price,
-                    stop_price,
-                    target_price,
-                    proc_min,
-                    crt_dt,
-                    mod_dt
-                )
+            insert_query = f"""
+            INSERT INTO trading_trail (
+                acct_no,
+                name,
+                code,
+                trail_day,
+                trail_dtm,
+                trail_tp,
+                basic_price,
+                stop_price,
+                target_price,
+                proc_min,
+                crt_dt,
+                mod_dt
+            )
+            SELECT
+                X.acct_no,
+                X.name,
+                X.code,
+                '{trail_day}',
+                CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END,
+                CASE WHEN X.proc_yn = 'L' THEN 'L' ELSE '1' END,
+                COALESCE(BAL.purchase_price, X.buy_price),
+                X.loss_price,
+                X.profit_price,
+                CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END,
+                now(),
+                now()
+            FROM (
                 SELECT
-                    X.acct_no,
-                    X.name,
-                    X.code,
-                    %s,
-                    CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
-                    CASE WHEN X.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                    COALESCE(BAL.purchase_price, X.buy_price) AS basic_price,
-                    X.loss_price,
-                    X.profit_price,
-                    CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END,
-                    now(),
-                    now()
-                FROM (
-				    SELECT
-	                    A.acct_no,
-	                    A.name,
-	                    A.code,
-	                    A.trade_day,
-	                    A.trade_dtm,
-	                    A.buy_price,
-	                    COALESCE(B.stop_price, A.loss_price) AS loss_price,
-	                	COALESCE(B.target_price, A.profit_price) AS profit_price,
-	                    A.proc_yn,
-	                    ROW_NUMBER() OVER (
-			                PARTITION BY A.acct_no, A.code
-			                ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC 
-			            ) AS rn
-	                FROM tradng_simulation A
-	                LEFT JOIN trading_trail B
-                        ON B.acct_no = A.acct_no
-                        AND B.code = A.code
-                        AND B.trail_day = %s
-                        and B.trail_dtm = A.trade_dtm
-                        AND B.trail_tp IN ('1', '2', '3', 'L')
-	                WHERE A.trade_tp = '1'
-	                AND A.acct_no = %s
-	                AND A.proc_yn IN ('N', 'C', 'L')
-                    AND SUBSTR(COALESCE(A.proc_dtm, %s), 1, 8) < %s 
-	                AND A.trade_day <= replace(%s, '-', '')
-	            ) X
-				LEFT JOIN balance BAL
-                    ON BAL.acct_no = X.acct_no
-                    AND BAL.code = X.code
-                WHERE X.rn = 1
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM trading_trail T
-                    WHERE T.acct_no = X.acct_no
-                    AND T.code = X.code
-                    AND T.trail_day = %s
-                    AND T.trail_dtm = CASE WHEN X.trade_day = %s THEN X.trade_dtm ELSE %s END
-                    AND T.trail_tp IN ('1', '2', '3', 'L')
-                )
-                """
+                    A.acct_no,
+                    A.name,
+                    A.code,
+                    A.trade_day,
+                    A.trade_dtm,
+                    A.buy_price,
+                    COALESCE(B.stop_price, A.loss_price) AS loss_price,
+                    COALESCE(B.target_price, A.profit_price) AS profit_price,
+                    A.proc_yn,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY A.acct_no, A.code
+                        ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
+                    ) AS rn
+                FROM tradng_simulation A
+                LEFT JOIN trading_trail B
+                    ON B.acct_no = A.acct_no
+                    AND B.code = A.code
+                    AND B.trail_day = '{prev_date}'
+                    AND B.trail_dtm = A.trade_dtm
+                    AND B.trail_tp IN ('1','2','3','L')
+                WHERE A.trade_tp = '1'
+                AND A.acct_no = '{acct_no}'
+                AND A.proc_yn IN ('N','C','L')
+                AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'),1,8) < '{trail_day}'
+                AND A.trade_day <= replace('{business_day}','-','')
+            ) X
+            LEFT JOIN balance BAL
+            ON BAL.acct_no = X.acct_no
+            AND BAL.code = X.code
+            WHERE X.rn = 1
+            AND NOT EXISTS (
+                SELECT 1
+                FROM trading_trail T
+                WHERE T.acct_no = X.acct_no
+                AND T.code = X.code
+                AND T.trail_day = '{trail_day}'
+                AND T.trail_dtm = CASE WHEN X.trade_day = '{trail_day}' THEN X.trade_dtm ELSE '090000' END
+                AND T.trail_tp IN ('1','2','3','L')
+            )
+            """
 
+            cur200 = conn.cursor()
             full_query = balance_sql + insert_query
 
             execute_values(
                 cur200,
                 full_query,
                 balance_rows,
-                template="(%s,%s,%s)",
-                fetch=False,
-                args=(
-                    trail_day,
-                    trail_day,
-                    '090000',
-                    trail_day,
-                    '090000',
-                    prev_date,
-                    acct_no,
-                    prev_date,
-                    trail_day,
-                    business_day,
-                    trail_day,
-                    trail_day,
-                    '090000'
-                )
+                template="(%s,%s,%s)"
             )
 
             countProc = cur200.rowcount
