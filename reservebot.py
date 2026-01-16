@@ -768,7 +768,7 @@ def callback_get(update, context) :
                     float(c['pchs_avg_pric'][i])     # purchase_price
                 ))
 
-            balance_sql = """
+            balance_sql = f"""
             WITH balance(acct_no, code, purchase_price) AS (
                 VALUES %s
             ),
@@ -831,7 +831,7 @@ def callback_get(update, context) :
                     WHEN S.proc_yn = 'L' THEN 'L'
                     ELSE '1'
                 END AS trail_tp,
-                BAL.purchase_price AS basic_price,              -- ✅ balance 기준
+                BAL.purchase_price AS basic_price,              
                 COALESCE(S.loss_price, 0) AS stop_price,
                 COALESCE(S.profit_price, 0) AS target_price,
                 CASE
