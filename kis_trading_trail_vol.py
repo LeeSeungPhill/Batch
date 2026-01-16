@@ -417,7 +417,7 @@ def get_kis_1min_from_datetime(
     target_price: int,
     stop_price: int, 
     basic_price: int,
-    long_hold: str,
+    trail_tp: str,
     access_token: str,
     app_key: str,
     app_secret: str,
@@ -445,7 +445,7 @@ def get_kis_1min_from_datetime(
     if verbose:
         print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
 
-    if long_hold == 'L':
+    if trail_tp == 'L':
         prev_low = get_prev_day_low(
             stock_code,
             trade_date,
@@ -657,7 +657,7 @@ def get_kis_1min_from_datetime(
             if high_price > low_price:
                 if not breakout_done:
                     # 돌파 이전 이탈 → 즉시 종료
-                    if breakdown_check <= stop_price:
+                    if trail_tp == '1' and breakdown_check <= stop_price:
                         if verbose:
                             print(
                                 f"🚨 [{row['일자']} {row['시간']}] "
@@ -793,7 +793,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE NULL END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
@@ -809,7 +809,7 @@ if __name__ == "__main__":
                     target_price=int(i[4]),
                     stop_price=int(i[5]),
                     basic_price=int(i[6]),
-                    long_hold=i[7],
+                    trail_tp=i[7],
                     access_token=ac['access_token'],
                     app_key=ac['app_key'],
                     app_secret=ac['app_secret'],
@@ -822,3 +822,6 @@ if __name__ == "__main__":
                     print(signal)
                 else:
                     print("\n📌 아직 신호 없음")
+
+        # 일별 매매 잔고 현행화
+                    
