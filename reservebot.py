@@ -762,13 +762,51 @@ def callback_get(update, context) :
             
             cur199 = conn.cursor()
             balance_rows = []
-            
+
             for i in range(len(c)):
                 if int(c['hldg_qty'][i]) >  0:
 
-                    insert_query199 = "with upsert as (update dly_trading_balance set balance_price = %s, balance_qty = %s, balance_amt = %s, value_rate = %s, value_amt = %s, mod_dt = %s, where balance_day = %s and code = %s and acct_no = %s returning * ) insert into dly_trading_balance(acct_no, code, name, balance_day, balance_price, balance_qty, balance_amt, value_rate, value_amt, use_yn, crt_dt, mod_dt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
-                    record_to_insert199 = ([float(c['pchs_avg_pric'][i]), int(c['hldg_qty'][i]), int(c['pchs_amt'][i]), float(c['evlu_pfls_rt'][i]), int(c['evlu_pfls_amt'][i]), datetime.now(), business_day, c['pdno'][i], acct_no,
-                    acct_no, c['pdno'][i], c['prdt_name'][i], business_day, float(c['pchs_avg_pric'][i]), int(c['hldg_qty'][i]), int(c['pchs_amt'][i]), float(c['evlu_pfls_rt'][i]), int(c['evlu_pfls_amt'][i]), 'Y', datetime.now(), datetime.now()])
+                    insert_query199 = """
+                        INSERT INTO dly_trading_balance (
+                            acct_no,
+                            code,
+                            name,
+                            balance_day,
+                            balance_price,
+                            balance_qty,
+                            balance_amt,
+                            value_rate,
+                            value_amt,
+                            use_yn,
+                            crt_dt,
+                            mod_dt
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                        ON CONFLICT (acct_no, code, balance_day)
+                        DO UPDATE SET
+                            balance_price = EXCLUDED.balance_price,
+                            balance_qty   = EXCLUDED.balance_qty,
+                            balance_amt   = EXCLUDED.balance_amt,
+                            value_rate    = EXCLUDED.value_rate,
+                            value_amt     = EXCLUDED.value_amt,
+                            mod_dt        = EXCLUDED.mod_dt;
+                    """
+                    record_to_insert199 = (
+                        acct_no,
+                        c['pdno'][i],
+                        c['prdt_name'][i],
+                        business_day,
+                        float(c['pchs_avg_pric'][i]),
+                        int(c['hldg_qty'][i]),
+                        int(c['pchs_amt'][i]),
+                        float(c['evlu_pfls_rt'][i]),
+                        int(c['evlu_pfls_amt'][i]),
+                        'Y',
+                        datetime.now(),
+                        datetime.now()
+                    )
                     cur199.execute(insert_query199, record_to_insert199)
                     conn.commit()
 
