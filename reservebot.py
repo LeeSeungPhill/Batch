@@ -874,7 +874,7 @@ def callback_get(update, context) :
                 COALESCE(BAL.code, S.code) AS code,
                 '{trail_day}' AS trail_day,
                 CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
-                CASE WHEN WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
                 COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
                 COALESCE(S.loss_price, 0) AS stop_price,
                 COALESCE(S.profit_price, 0) AS target_price,
