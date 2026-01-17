@@ -746,7 +746,7 @@ def callback_get(update, context) :
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
-        int_acct_no = int(acct_no)
+
         try:
             context.bot.edit_message_text(text="[매도추적 등록]",
                                             chat_id=update.callback_query.message.chat_id,
@@ -759,16 +759,27 @@ def callback_get(update, context) :
 
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
+            
+            cur199 = conn.cursor()
             balance_rows = []
+            
             for i in range(len(c)):
                 if int(c['hldg_qty'][i]) >  0:
+
+                    insert_query199 = "with upsert as (update dly_trading_balance set balance_price = %s, balance_qty = %s, balance_amt = %s, value_rate = %s, value_amt = %s, mod_dt = %s, where balance_day = %s and code = %s and acct_no = %s returning * ) insert into dly_trading_balance(acct_no, code, name, balance_day, balance_price, balance_qty, balance_amt, value_rate, value_amt, use_yn, crt_dt, mod_dt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+                    record_to_insert199 = ([float(c['pchs_avg_pric'][i]), int(c['hldg_qty'][i]), int(c['pchs_amt'][i]), float(c['evlu_pfls_rt'][i]), int(c['evlu_pfls_amt'][i]), datetime.now(), business_day, c['pdno'][i], acct_no,
+                    acct_no, c['pdno'][i], c['prdt_name'][i], business_day, float(c['pchs_avg_pric'][i]), int(c['hldg_qty'][i]), int(c['pchs_amt'][i]), float(c['evlu_pfls_rt'][i]), int(c['evlu_pfls_amt'][i]), 'Y', datetime.now(), datetime.now()])
+                    cur199.execute(insert_query199, record_to_insert199)
+                    conn.commit()
+
                     balance_rows.append((
                         acct_no,
                         c['pdno'][i],                   # code
                         c['prdt_name'][i],              # name
                         float(c['pchs_avg_pric'][i])    # purchase_price
                     ))
+
+            cur199.close()
 
             balance_sql = f"""
             WITH balance(acct_no, code, name, purchase_price) AS (
@@ -799,7 +810,7 @@ def callback_get(update, context) :
                         AND B.trail_dtm = A.trade_dtm
                         AND B.trail_tp IN ('1','2','3','L')
                     WHERE A.trade_tp = '1'
-                    AND A.acct_no = {int_acct_no}
+                    AND A.acct_no = {acct_no}
                     AND A.proc_yn IN ('N','C','L')
                     AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
                     AND A.trade_day <= replace('{business_day}', '-', '')
@@ -829,7 +840,7 @@ def callback_get(update, context) :
                 COALESCE(BAL.code, S.code) AS code,
                 '{trail_day}' AS trail_day,
                 CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
-                CASE WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                CASE WHEN WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
                 COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
                 COALESCE(S.loss_price, 0) AS stop_price,
                 COALESCE(S.profit_price, 0) AS target_price,
