@@ -795,7 +795,7 @@ def callback_get(update, context) :
                         acct_no,
                         c['pdno'][i],
                         c['prdt_name'][i],
-                        business_day,
+                        business_day.replace('-', ''),
                         float(c['pchs_avg_pric'][i]),
                         int(c['hldg_qty'][i]),
                         int(c['pchs_amt'][i]),
