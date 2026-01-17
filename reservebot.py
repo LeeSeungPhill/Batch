@@ -762,7 +762,8 @@ def callback_get(update, context) :
             
             cur199 = conn.cursor()
             balance_rows = []
-
+            
+            #  일별 매매 잔고 현행화
             for i in range(len(c)):
                 if int(c['hldg_qty'][i]) >  0:
 

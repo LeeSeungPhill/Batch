@@ -7,6 +7,7 @@ import psycopg2 as db
 import json
 from datetime import time
 import sys
+import kis_api_resp as resp
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -66,6 +67,42 @@ def account(nickname):
         'app_secret': app_secret,
         'bot_token1': bot_token1
     }
+
+# 계좌잔고 조회
+def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
+   
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC8434R"}            # tr_id : TTTC8434R[실전투자], VTTC8434R[모의투자]
+    params = {
+                "CANO": acct_no,
+                'ACNT_PRDT_CD': '01',
+                'AFHR_FLPR_YN': 'N',
+                'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
+                'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
+                'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
+                'FUND_STTL_ICLD_YN': 'N',       # 펀드결제분포함여부 : Y 포함, N 포함하지 않음
+                'FNCG_AMT_AUTO_RDPT_YN': 'N',   # 융자금액자동상환여부 : N 기본값
+                'PRCS_DVSN': '01',              # 처리구분 : 00 전일매매포함, 01 전일매매미포함
+                'CTX_AREA_FK100': '',
+                'CTX_AREA_NK100': ''
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
+    URL = f"{BASE_URL}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False)
+    ar = resp.APIResp(res)
+   
+    if rtFlag == "all" and ar.isOK():
+        output = ar.getBody().output2
+    else:    
+        output = ar.getBody().output1
+
+    if isinstance(output, list):
+        return pd.DataFrame(output)
+    else:
+        return pd.DataFrame([])
 
 def get_kis_daily_chart(
         stock_code: str,
@@ -791,6 +828,57 @@ if __name__ == "__main__":
         app_secret = ac['app_secret']
         token = ac['bot_token1']
 
+        # 계좌잔고 조회
+        c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+            
+        cur199 = conn.cursor()
+
+        # 일별 매매 잔고 현행화
+        for i in range(len(c)):
+            if int(c['hldg_qty'][i]) >  0:
+
+                insert_query199 = """
+                    INSERT INTO dly_trading_balance (
+                        acct_no,
+                        code,
+                        name,
+                        balance_day,
+                        balance_price,
+                        balance_qty,
+                        balance_amt,
+                        value_rate,
+                        value_amt,
+                        mod_dt
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (acct_no, code, balance_day)
+                    DO UPDATE SET
+                        balance_price = EXCLUDED.balance_price,
+                        balance_qty   = EXCLUDED.balance_qty,
+                        balance_amt   = EXCLUDED.balance_amt,
+                        value_rate    = EXCLUDED.value_rate,
+                        value_amt     = EXCLUDED.value_amt,
+                        mod_dt        = EXCLUDED.mod_dt;
+                """
+                record_to_insert199 = (
+                    acct_no,
+                    c['pdno'][i],
+                    c['prdt_name'][i],
+                    today,
+                    float(c['pchs_avg_pric'][i]),
+                    int(c['hldg_qty'][i]),
+                    int(c['pchs_amt'][i]),
+                    float(c['evlu_pfls_rt'][i]),
+                    int(c['evlu_pfls_amt'][i]),
+                    datetime.now()
+                )
+                cur199.execute(insert_query199, record_to_insert199)
+                conn.commit()
+
+        cur199.close()        
+
         # 매매추적 조회
         cur200 = conn.cursor()
         cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
@@ -822,6 +910,4 @@ if __name__ == "__main__":
                     print(signal)
                 else:
                     print("\n📌 아직 신호 없음")
-
-        # 일별 매매 잔고 현행화
                     
