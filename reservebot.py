@@ -777,12 +777,10 @@ def callback_get(update, context) :
                             balance_amt,
                             value_rate,
                             value_amt,
-                            use_yn,
-                            crt_dt,
                             mod_dt
                         )
                         VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         )
                         ON CONFLICT (acct_no, code, balance_day)
                         DO UPDATE SET
@@ -803,8 +801,6 @@ def callback_get(update, context) :
                         int(c['pchs_amt'][i]),
                         float(c['evlu_pfls_rt'][i]),
                         int(c['evlu_pfls_amt'][i]),
-                        'Y',
-                        datetime.now(),
                         datetime.now()
                     )
                     cur199.execute(insert_query199, record_to_insert199)
