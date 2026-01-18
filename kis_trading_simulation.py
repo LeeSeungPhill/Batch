@@ -273,19 +273,23 @@ for nick in nickname_list:
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
         """
-        cur2 = conn.cursor()
+        inserted_count = 0
+        cur201 = conn.cursor()
         for row in trading_trail_create_list:
             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt = row
             try:
-                cur2.execute(insert_query1, (
+                cur201.execute(insert_query1, (
                     acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt
                 ))
+                inserted_count += cur201.rowcount
             except Exception as e:
                 print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
 
         conn.commit()
-        cur2.close()
-        print(f"[{nick}] Insert trading_trail completed. ({len(trading_trail_create_list)} rows processed)")
+        cur201.close()
+
+        skipped_count = len(trading_trail_create_list) - inserted_count
+        print(f"[{nick}] Insert trading_trail completed. (TOTAL : {len(trading_trail_create_list)} rows, INSERT : {inserted_count} row, SKIP : {skipped_count} row processed)")
 
     except Exception as e:
         print(f"[{nick}] Error trading_trail Insert : {e}")
