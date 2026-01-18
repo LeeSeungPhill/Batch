@@ -5313,7 +5313,7 @@ def callback_get(update, context) :
             elif data_selected.find("하락지속") != -1:
 
                 result_msgs = []
-                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong']
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong', 'honeylong']
                 for nick in nickname_list:
                     ac = account(nick)
                     acct_no = ac['acct_no']
@@ -5373,7 +5373,7 @@ def callback_get(update, context) :
             elif data_selected.find("단기상승") != -1:
 
                 result_msgs = []
-                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong']
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong', 'honeylong']
                 for nick in nickname_list:
                     ac = account(nick)
                     acct_no = ac['acct_no']
@@ -5433,7 +5433,7 @@ def callback_get(update, context) :
             elif data_selected.find("패턴") != -1:
 
                 result_msgs = []
-                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong']
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong', 'honeylong']
                 for nick in nickname_list:
                     ac = account(nick)
                     acct_no = ac['acct_no']
@@ -5493,7 +5493,7 @@ def callback_get(update, context) :
             elif data_selected.find("눌림") != -1:
 
                 result_msgs = []
-                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong']
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong', 'honeylong']
                 for nick in nickname_list:
                     ac = account(nick)
                     acct_no = ac['acct_no']
@@ -5553,7 +5553,7 @@ def callback_get(update, context) :
             elif data_selected.find("상승지속") != -1:
 
                 result_msgs = []
-                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong']
+                nickname_list = ['phills75', 'yh480825', 'phills13', 'phills15', 'phills2', 'chichipa', 'mamalong', 'honeylong']
                 for nick in nickname_list:
                     ac = account(nick)
                     acct_no = ac['acct_no']
