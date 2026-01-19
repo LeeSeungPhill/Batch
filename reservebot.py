@@ -196,6 +196,22 @@ def get_command(update, context) :
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
+def start(update, context) :
+    chat_id = update.effective_chat.id
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE \"stockAccount_stock_account\"
+        SET chat_id = %s
+        WHERE nick_name = %s
+    """, (chat_id, arguments))
+    conn.commit()
+    cur.close()
+
+    context.bot.send_message(
+        chat_id=chat_id,
+        text="텔레그램 chat_id 등록이 완료되었습니다."
+    )
+
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
 
@@ -1499,6 +1515,7 @@ def echo(update, context):
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
+dispatcher.add_handler(CommandHandler("start", start))
 
 # 텔레그램봇 polling
 updater.start_polling()
