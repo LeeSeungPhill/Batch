@@ -203,7 +203,7 @@ def start(update, context) :
         UPDATE \"stockAccount_stock_account\"
         SET chat_id = %s
         WHERE nick_name = %s
-    """, (chat_id, arguments))
+    """, (chat_id, arguments[1]))
     conn.commit()
     cur.close()
 
