@@ -110,8 +110,7 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
-# nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
-nickname_list = ['yh480825']
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
 
 for nick in nickname_list:
     try:
@@ -316,10 +315,10 @@ for nick in nickname_list:
         skipped_count = len(trading_trail_create_list) - inserted_count
         
         message = (
-            f"[{nick}] Insert trading_trail completed.\n"
-            f"(TOTAL : {len(trading_trail_create_list)} rows, "
-            f"INSERT : {inserted_count} row, "
-            f"SKIP : {skipped_count} row processed)"
+            f"[{today}-{nick}] trading_trail 생성 \n"
+            f"(전체 : {len(trading_trail_create_list)}건, "
+            f"생성 : {inserted_count}건, "
+            f"미생성 : {skipped_count}건)"
         )
         print(message)
         bot.send_message(
@@ -329,7 +328,7 @@ for nick in nickname_list:
 
     except Exception as e:
         error_msg = (
-            f"[{nick}] Error trading_trail Insert\n\n"
+            f"[{today}-{nick}] trading_trail 생성 에러\n\n"
             f"Error: {str(e)}\n\n"
             f"Traceback:\n{traceback.format_exc()}"
         )
