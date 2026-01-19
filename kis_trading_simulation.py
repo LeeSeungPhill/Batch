@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 import kis_api_resp as resp
 from psycopg2.extras import execute_values
+from telegram import Bot
+from telegram.ext import Updater
+import traceback
 
 # 기본 DB 연결 정보
 conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
@@ -107,10 +110,28 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
-nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
+# nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
+nickname_list = [' yh480825']
 
 for nick in nickname_list:
     try:
+        bot = None
+        cur001 = conn.cursor()
+        cur001.execute(" SELECT bot_token2, chat_id FROM \"stockAccount_stock_account\" WHERE nick_name = %s", (nick,))
+        row = cur001.fetchone()
+
+        if not row:
+            raise Exception(f"[{nick}] bot_token2 not found")
+        
+        token = row[0]
+        chat_id = row[1]
+        cur001.close()
+
+        # 텔레그램봇 updater(토큰, 입력값)
+        
+        updater = Updater(token=token, use_context=True)
+        bot = updater.bot
+
         ac = account(nick)
         acct_no = ac['acct_no']
         access_token = ac['access_token']
@@ -289,10 +310,34 @@ for nick in nickname_list:
         cur201.close()
 
         skipped_count = len(trading_trail_create_list) - inserted_count
-        print(f"[{nick}] Insert trading_trail completed. (TOTAL : {len(trading_trail_create_list)} rows, INSERT : {inserted_count} row, SKIP : {skipped_count} row processed)")
+        
+        message = (
+            f"[{nick}] Insert trading_trail completed.\n"
+            f"(TOTAL : {len(trading_trail_create_list)} rows, "
+            f"INSERT : {inserted_count} row, "
+            f"SKIP : {skipped_count} row processed)"
+        )
+        print(message)
+        bot.send_message(
+            chat_id=chat_id,
+            text=message
+        )
 
     except Exception as e:
-        print(f"[{nick}] Error trading_trail Insert : {e}")
+        error_msg = (
+            f"[{nick}] Error trading_trail Insert\n\n"
+            f"Error: {str(e)}\n\n"
+            f"Traceback:\n{traceback.format_exc()}"
+        )
+        print(error_msg)
+        try:
+            if bot is not None:
+                bot.send_message(
+                    chat_id=chat_id,
+                    text=error_msg[:4000]  # Telegram 메시지 길이 제한 대비
+                )
+        except Exception as te:
+            print(f"[{nick}] Telegram error send failed: {te}")
 
 # 연결 종료
 conn.close()
