@@ -116,16 +116,23 @@ nickname_list = [' yh480825']
 for nick in nickname_list:
     try:
         bot = None
+        chat_id = None
         cur001 = conn.cursor()
-        cur001.execute(" SELECT bot_token2, chat_id FROM \"stockAccount_stock_account\" WHERE nick_name = %s", (nick,))
+        cur001.execute(
+            """
+            SELECT bot_token2, chat_id
+            FROM "stockAccount_stock_account"
+            WHERE nick_name = %s
+            """,
+            (nick,)
+        )
         row = cur001.fetchone()
+        cur001.close()
 
         if not row:
             raise Exception(f"[{nick}] bot_token2 not found")
         
-        token = row[0]
-        chat_id = row[1]
-        cur001.close()
+        token, chat_id = row
 
         # 텔레그램봇 updater(토큰, 입력값)
         
