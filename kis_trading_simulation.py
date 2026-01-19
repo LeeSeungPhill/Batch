@@ -111,7 +111,7 @@ def get_previous_business_day(day):
     return result_one00[0][0]
 
 # nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
-nickname_list = [' yh480825']
+nickname_list = ['yh480825']
 
 for nick in nickname_list:
     try:
@@ -129,9 +129,6 @@ for nick in nickname_list:
         row = cur001.fetchone()
         cur001.close()
 
-        if not row:
-            raise Exception(f"[{nick}] bot_token2 not found")
-        
         token, chat_id = row
 
         # 텔레그램봇 updater(토큰, 입력값)
