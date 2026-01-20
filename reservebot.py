@@ -836,111 +836,112 @@ def callback_get(update, context) :
 
             cur199.close()
 
-            balance_sql = f"""
-            WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
-                VALUES %s
-            ),
-            sim AS (
-                SELECT *
-                FROM (
-                    SELECT
-                        A.acct_no,
-                        A.name,
-                        A.code,
-                        A.trade_day,
-                        A.trade_dtm,
-                        A.buy_price,
-                        A.buy_qty,
-                        COALESCE(B.stop_price, A.loss_price) AS loss_price,
-                        COALESCE(B.target_price, A.profit_price) AS profit_price,
-                        A.proc_yn,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY A.acct_no, A.code
-                            ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
-                        ) AS rn
-                    FROM tradng_simulation A
-                    LEFT JOIN trading_trail B
-                        ON B.acct_no = A.acct_no
-                        AND B.code = A.code
-                        AND B.trail_day = '{prev_date}'
-                        AND B.trail_dtm = A.trade_dtm
-                        AND B.trail_tp IN ('1','2','3','L')
-                    WHERE A.trade_tp = '1'
-                    AND A.acct_no = {acct_no}
-                    AND A.proc_yn IN ('N','C','L')
-                    AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
-                    AND A.trade_day <= replace('{business_day}', '-', '')
-                ) t
-                WHERE rn = 1
-            )
-            """
+            if len(balance_rows) > 0:
+                balance_sql = f"""
+                WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
+                    VALUES %s
+                ),
+                sim AS (
+                    SELECT *
+                    FROM (
+                        SELECT
+                            A.acct_no,
+                            A.name,
+                            A.code,
+                            A.trade_day,
+                            A.trade_dtm,
+                            A.buy_price,
+                            A.buy_qty,
+                            COALESCE(B.stop_price, A.loss_price) AS loss_price,
+                            COALESCE(B.target_price, A.profit_price) AS profit_price,
+                            A.proc_yn,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY A.acct_no, A.code
+                                ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
+                            ) AS rn
+                        FROM tradng_simulation A
+                        LEFT JOIN trading_trail B
+                            ON B.acct_no = A.acct_no
+                            AND B.code = A.code
+                            AND B.trail_day = '{prev_date}'
+                            AND B.trail_dtm = A.trade_dtm
+                            AND B.trail_tp IN ('1','2','3','L')
+                        WHERE A.trade_tp = '1'
+                        AND A.acct_no = {acct_no}
+                        AND A.proc_yn IN ('N','C','L')
+                        AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
+                        AND A.trade_day <= replace('{business_day}', '-', '')
+                    ) t
+                    WHERE rn = 1
+                )
+                """
 
-            insert_query = f"""
-            INSERT INTO trading_trail (
-                acct_no,
-                name,
-                code,
-                trail_day,
-                trail_dtm,
-                trail_tp,
-                basic_price,
-                basic_qty,
-                basic_amt,
-                stop_price,
-                target_price,
-                proc_min,
-                crt_dt,
-                mod_dt
-            )
-            SELECT
-                COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
-                COALESCE(S.name, BAL.name) AS name,
-                COALESCE(BAL.code, S.code) AS code,
-                '{trail_day}' AS trail_day,
-                CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
-                CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
-                COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
-                COALESCE(BAL.purchase_price, S.buy_price)*COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_amt,
-                COALESCE(S.loss_price, 0) AS stop_price,
-                COALESCE(S.profit_price, 0) AS target_price,
-                CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
-                now(),
-                now()
-            FROM balance BAL
-            FULL OUTER JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM trading_trail T
-                WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
-                AND T.code = COALESCE(BAL.code, S.code)
-                AND T.trail_day = '{trail_day}'
-                AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
-                AND T.trail_tp IN ('1','2','3','L')
-            );
-            """
+                insert_query = f"""
+                INSERT INTO trading_trail (
+                    acct_no,
+                    name,
+                    code,
+                    trail_day,
+                    trail_dtm,
+                    trail_tp,
+                    basic_price,
+                    basic_qty,
+                    basic_amt,
+                    stop_price,
+                    target_price,
+                    proc_min,
+                    crt_dt,
+                    mod_dt
+                )
+                SELECT
+                    COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
+                    COALESCE(S.name, BAL.name) AS name,
+                    COALESCE(BAL.code, S.code) AS code,
+                    '{trail_day}' AS trail_day,
+                    CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
+                    CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                    COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
+                    COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
+                    COALESCE(BAL.purchase_price, S.buy_price)*COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_amt,
+                    COALESCE(S.loss_price, 0) AS stop_price,
+                    COALESCE(S.profit_price, 0) AS target_price,
+                    CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
+                    now(),
+                    now()
+                FROM balance BAL
+                FULL OUTER JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM trading_trail T
+                    WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
+                    AND T.code = COALESCE(BAL.code, S.code)
+                    AND T.trail_day = '{trail_day}'
+                    AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                    AND T.trail_tp IN ('1','2','3','L')
+                );
+                """
 
-            cur200 = conn.cursor()
-            full_query = balance_sql + insert_query
+                cur200 = conn.cursor()
+                full_query = balance_sql + insert_query
 
-            execute_values(
-                cur200,
-                full_query,
-                balance_rows,
-                template="(%s, %s, %s, %s, %s)"
-            )
+                execute_values(
+                    cur200,
+                    full_query,
+                    balance_rows,
+                    template="(%s, %s, %s, %s, %s)"
+                )
 
-            countProc = cur200.rowcount
+                countProc = cur200.rowcount
 
-            conn.commit()
-            cur200.close()
+                conn.commit()
+                cur200.close()
 
-            if countProc >= 1:
-                msg = f"* [{trail_day}]-매도추적 등록 {countProc}건 처리"
-                result_msgs.append(msg)
-            else:
-                msg = f"* [{trail_day}]-매도추적 등록 미처리"
-                result_msgs.append(msg)
+                if countProc >= 1:
+                    msg = f"* [{trail_day}]-매도추적 등록 {countProc}건 처리"
+                    result_msgs.append(msg)
+                else:
+                    msg = f"* [{trail_day}]-매도추적 등록 미처리"
+                    result_msgs.append(msg)
 
             final_message = "\n".join(result_msgs) if result_msgs else "매도추적 등록 대상이 존재하지 않습니다."
 

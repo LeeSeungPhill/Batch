@@ -192,132 +192,133 @@ for nick in nickname_list:
 
         cur199.close()
 
-        balance_sql = f"""
-        WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
-            VALUES %s
-        ),
-        sim AS (
-            SELECT *
-            FROM (
-                SELECT
-                    A.acct_no,
-                    A.name,
-                    A.code,
-                    A.trade_day,
-                    A.trade_dtm,
-                    A.buy_price,
-                    A.buy_qty,
-                    COALESCE(B.stop_price, A.loss_price) AS loss_price,
-                    COALESCE(B.target_price, A.profit_price) AS profit_price,
-                    A.proc_yn,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY A.acct_no, A.code
-                        ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
-                    ) AS rn
-                FROM tradng_simulation A
-                LEFT JOIN trading_trail B
-                    ON B.acct_no = A.acct_no
-                    AND B.code = A.code
-                    AND B.trail_day = '{prev_date}'
-                    AND B.trail_dtm = A.trade_dtm
-                    AND B.trail_tp IN ('1','2','3','L')
-                WHERE A.trade_tp = '1'
-                AND A.acct_no = {acct_no}
-                AND A.proc_yn IN ('N','C','L')
-                AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
-                AND A.trade_day <= replace('{business_day}', '-', '')
-            ) t
-            WHERE rn = 1
-        )
-        SELECT
-            COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
-            COALESCE(S.name, BAL.name) AS name,
-            COALESCE(BAL.code, S.code) AS code,
-            '{trail_day}' AS trail_day,
-            CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
-            CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-            COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
-            COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
-            COALESCE(S.loss_price, 0) AS stop_price,
-            COALESCE(S.profit_price, 0) AS target_price,
-            CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
-            now(),
-            now()
-        FROM balance BAL
-        FULL OUTER JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM trading_trail T
-            WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
-            AND T.code = COALESCE(BAL.code, S.code)
-            AND T.trail_day = '{trail_day}'
-            AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
-            AND T.trail_tp IN ('1','2','3','L')
-        );
-        """
-        cur200 = conn.cursor()
-
-        execute_values(
-            cur200,
-            balance_sql,
-            balance_rows,
-            template="(%s, %s, %s, %s, %s)"
-        )
-
-        trading_trail_create_list = cur200.fetchall()
-        cur200.close()
-
-        inserted_count = 0
-        if not trading_trail_create_list or len(trading_trail_create_list) < 1:
-            print(f"[{nick}] No trading simulation data found.")
-        else:
-            insert_query1 = """
-                INSERT INTO trading_trail (
-                    acct_no,
-                    name,
-                    code,
-                    trail_day,
-                    trail_dtm,
-                    trail_tp,
-                    basic_price,
-                    basic_qty,
-                    basic_amt,
-                    stop_price,
-                    target_price,
-                    proc_min,
-                    crt_dt,
-                    mod_dt
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
+        if len(balance_rows) > 0:
+            balance_sql = f"""
+            WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
+                VALUES %s
+            ),
+            sim AS (
+                SELECT *
+                FROM (
+                    SELECT
+                        A.acct_no,
+                        A.name,
+                        A.code,
+                        A.trade_day,
+                        A.trade_dtm,
+                        A.buy_price,
+                        A.buy_qty,
+                        COALESCE(B.stop_price, A.loss_price) AS loss_price,
+                        COALESCE(B.target_price, A.profit_price) AS profit_price,
+                        A.proc_yn,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY A.acct_no, A.code
+                            ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
+                        ) AS rn
+                    FROM tradng_simulation A
+                    LEFT JOIN trading_trail B
+                        ON B.acct_no = A.acct_no
+                        AND B.code = A.code
+                        AND B.trail_day = '{prev_date}'
+                        AND B.trail_dtm = A.trade_dtm
+                        AND B.trail_tp IN ('1','2','3','L')
+                    WHERE A.trade_tp = '1'
+                    AND A.acct_no = {acct_no}
+                    AND A.proc_yn IN ('N','C','L')
+                    AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
+                    AND A.trade_day <= replace('{business_day}', '-', '')
+                ) t
+                WHERE rn = 1
+            )
+            SELECT
+                COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
+                COALESCE(S.name, BAL.name) AS name,
+                COALESCE(BAL.code, S.code) AS code,
+                '{trail_day}' AS trail_day,
+                CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
+                CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
+                COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
+                COALESCE(S.loss_price, 0) AS stop_price,
+                COALESCE(S.profit_price, 0) AS target_price,
+                CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
+                now(),
+                now()
+            FROM balance BAL
+            FULL OUTER JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM trading_trail T
+                WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
+                AND T.code = COALESCE(BAL.code, S.code)
+                AND T.trail_day = '{trail_day}'
+                AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                AND T.trail_tp IN ('1','2','3','L')
+            );
             """
+            cur200 = conn.cursor()
+
+            execute_values(
+                cur200,
+                balance_sql,
+                balance_rows,
+                template="(%s, %s, %s, %s, %s)"
+            )
+
+            trading_trail_create_list = cur200.fetchall()
+            cur200.close()
+
+            inserted_count = 0
+            if not trading_trail_create_list or len(trading_trail_create_list) < 1:
+                print(f"[{nick}] No trading simulation data found.")
+            else:
+                insert_query1 = """
+                    INSERT INTO trading_trail (
+                        acct_no,
+                        name,
+                        code,
+                        trail_day,
+                        trail_dtm,
+                        trail_tp,
+                        basic_price,
+                        basic_qty,
+                        basic_amt,
+                        stop_price,
+                        target_price,
+                        proc_min,
+                        crt_dt,
+                        mod_dt
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
+                """
+                
+                cur201 = conn.cursor()
+                for row in trading_trail_create_list:
+                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
+                    try:
+                        cur201.execute(insert_query1, (
+                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
+                        ))
+                        inserted_count += cur201.rowcount
+                    except Exception as e:
+                        print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
+
+                conn.commit()
+                cur201.close()
+
+            skipped_count = len(trading_trail_create_list) - inserted_count
             
-            cur201 = conn.cursor()
-            for row in trading_trail_create_list:
-                acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
-                try:
-                    cur201.execute(insert_query1, (
-                        acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
-                    ))
-                    inserted_count += cur201.rowcount
-                except Exception as e:
-                    print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
-
-            conn.commit()
-            cur201.close()
-
-        skipped_count = len(trading_trail_create_list) - inserted_count
-        
-        message = (
-            f"[{today}-{nick}] trading_trail 생성 \n"
-            f"(전체 : {len(trading_trail_create_list)}건, "
-            f"생성 : {inserted_count}건, "
-            f"미생성 : {skipped_count}건)"
-        )
-        print(message)
-        bot.send_message(
-            chat_id=chat_id,
-            text=message
-        )
+            message = (
+                f"[{today}-{nick}] trading_trail 생성 \n"
+                f"(전체 : {len(trading_trail_create_list)}건, "
+                f"생성 : {inserted_count}건, "
+                f"미생성 : {skipped_count}건)"
+            )
+            print(message)
+            bot.send_message(
+                chat_id=chat_id,
+                text=message
+            )
 
     except Exception as e:
         error_msg = (
