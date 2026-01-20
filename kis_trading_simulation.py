@@ -199,13 +199,14 @@ for nick in nickname_list:
                     acct_no,
                     c['pdno'][i],                   # code
                     c['prdt_name'][i],              # name
-                    float(c['pchs_avg_pric'][i])    # purchase_price
+                    float(c['pchs_avg_pric'][i]),   # purchase_price
+                    int(c['hldg_qty'][i])           # purchase_qty
                 ))
 
         cur199.close()
 
         balance_sql = f"""
-        WITH balance(acct_no, code, name, purchase_price) AS (
+        WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
             VALUES %s
         ),
         sim AS (
@@ -218,6 +219,7 @@ for nick in nickname_list:
                     A.trade_day,
                     A.trade_dtm,
                     A.buy_price,
+                    A.buy_qty,
                     COALESCE(B.stop_price, A.loss_price) AS loss_price,
                     COALESCE(B.target_price, A.profit_price) AS profit_price,
                     A.proc_yn,
@@ -248,6 +250,7 @@ for nick in nickname_list:
             CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
             CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
             COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
+            COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
             COALESCE(S.loss_price, 0) AS stop_price,
             COALESCE(S.profit_price, 0) AS target_price,
             CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
@@ -271,7 +274,7 @@ for nick in nickname_list:
             cur200,
             balance_sql,
             balance_rows,
-            template="(%s, %s, %s, %s)"
+            template="(%s, %s, %s, %s, %s)"
         )
 
         trading_trail_create_list = cur200.fetchall()
@@ -289,21 +292,23 @@ for nick in nickname_list:
                 trail_dtm,
                 trail_tp,
                 basic_price,
+                basic_qty,
+                basic_amt,
                 stop_price,
                 target_price,
                 proc_min,
                 crt_dt,
                 mod_dt
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
         """
         inserted_count = 0
         cur201 = conn.cursor()
         for row in trading_trail_create_list:
-            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt = row
+            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
             try:
                 cur201.execute(insert_query1, (
-                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, stop_price, target_price, proc_min, crt_dt, mod_dt
+                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
                 ))
                 inserted_count += cur201.rowcount
             except Exception as e:
