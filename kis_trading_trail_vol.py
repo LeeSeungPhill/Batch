@@ -593,7 +593,7 @@ def get_kis_1min_from_datetime(
                 if close_price < prev_low :
                     if verbose:
                         message = (
-                            f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 전일 저가 : {prev_low:,}원 이탈,원"
+                            f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 전일 저가 : {prev_low:,}원 이탈"
                         )
                         print(message)
                         bot.send_message(
@@ -711,7 +711,7 @@ def get_kis_1min_from_datetime(
                     if trail_tp == '1' and breakdown_check <= stop_price:
                         if verbose:
                             message = (
-                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 돌파 전 이탈가 : {stop_price:,}원 이탈"
                             )
                             print(message)
                             bot.send_message(
@@ -756,7 +756,7 @@ def get_kis_1min_from_datetime(
 
                         if verbose:
                             message = (
-                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
+                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
                             )
                             print(message)
                             bot.send_message(
@@ -786,8 +786,7 @@ def get_kis_1min_from_datetime(
                     if low_price < tenmin_state["base_low"]:
                         if verbose:
                             message = (
-                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] \n"
-                                f"목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
                             )
                             print(message)
                             bot.send_message(
@@ -834,8 +833,7 @@ def get_kis_1min_from_datetime(
                                 if verbose:
                                     reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
                                     message = (
-                                        f"[{completed_key.strftime('%Y%m%d %H:%M')}:{stock_name}-{stock_code}] \n"
-                                        f"기준봉 갱신 ({reason} 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
+                                        f"{completed_key.strftime('%Y%m%d %H:%M')}-{stock_name}[{stock_code}] 기준봉 갱신 ({reason} 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
                                     )
                                     print(message)
                                     bot.send_message(
