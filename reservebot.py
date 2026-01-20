@@ -231,9 +231,9 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname=None):
     cur01 = conn.cursor()
     if nickname is None:
-        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
     else:
-        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = '" + nickname + "'")        
+        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = '" + nickname + "'")        
     result_two = cur01.fetchone()
     cur01.close()
 
@@ -241,6 +241,9 @@ def account(nickname=None):
     access_token = result_two[1]
     app_key = result_two[2]
     app_secret = result_two[3]
+    bot_token1 = result_two[6]
+    bot_token2 = result_two[7]
+    chat_id = result_two[8] 
     today = datetime.now().strftime("%Y%m%d")
 
     YmdHMS = datetime.now()
@@ -261,7 +264,7 @@ def account(nickname=None):
         conn.commit()
         cur02.close()
 
-    account_rtn = {'acct_no':acct_no, 'access_token':access_token, 'app_key':app_key, 'app_secret':app_secret}
+    account_rtn = {'acct_no':acct_no, 'access_token':access_token, 'app_key':app_key, 'app_secret':app_secret, 'bot_token1':bot_token1, 'bot_token2':bot_token2, 'chat_id':chat_id}
 
     return account_rtn
 

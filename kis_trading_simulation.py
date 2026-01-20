@@ -30,14 +30,14 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no, access_token, app_key, app_secret, token_publ_date, token_day = result_two
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1, bot_token2, chat_id = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
     if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
@@ -55,7 +55,10 @@ def account(nickname):
         'acct_no': acct_no,
         'access_token': access_token,
         'app_key': app_key,
-        'app_secret': app_secret
+        'app_secret': app_secret,
+        'bot_token1': bot_token1,
+        'bot_token2': bot_token2,
+        'chat_id': chat_id
     }
 
 # 계좌잔고 조회
@@ -114,32 +117,16 @@ nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phi
 
 for nick in nickname_list:
     try:
-        bot = None
-        chat_id = None
-        cur001 = conn.cursor()
-        cur001.execute(
-            """
-            SELECT bot_token2, chat_id
-            FROM "stockAccount_stock_account"
-            WHERE nick_name = %s
-            """,
-            (nick,)
-        )
-        row = cur001.fetchone()
-        cur001.close()
-
-        token, chat_id = row
-
-        # 텔레그램봇 updater(토큰, 입력값)
-        
-        updater = Updater(token=token, use_context=True)
-        bot = updater.bot
-
         ac = account(nick)
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
+        token = ac['bot_token2']
+        chat_id = ac['chat_id']
+
+        updater = Updater(token=token, use_context=True)
+        bot = updater.bot
 
         business_day = datetime.now().strftime("%Y-%m-%d")
         trail_day = post_business_day_char(business_day)

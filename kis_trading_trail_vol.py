@@ -8,6 +8,9 @@ import json
 from datetime import time
 import sys
 import kis_api_resp as resp
+from telegram import Bot
+from telegram.ext import Updater
+import traceback
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -20,6 +23,9 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
+
+bot = None
+chat_id = None
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -39,14 +45,14 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token1, chat_id
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1 = result_two
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1, bot_token2, chat_id = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
     if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
@@ -65,7 +71,9 @@ def account(nickname):
         'access_token': access_token,
         'app_key': app_key,
         'app_secret': app_secret,
-        'bot_token1': bot_token1
+        'bot_token1': bot_token1,
+        'bot_token2': bot_token2,
+        'chat_id': chat_id
     }
 
 # 계좌잔고 조회
@@ -462,6 +470,8 @@ def get_kis_1min_from_datetime(
     breakdown_type: str = "low",        # low / close
     verbose: bool = True
 ):
+    updater = Updater(token=token, use_context=True)
+    bot = updater.bot
     start_dt = datetime.strptime(start_date + start_time, "%Y%m%d%H%M%S")
     # start_time 기준 다음 완성 10분봉 시각
     loop_start_dt = get_next_completed_10min_dt(start_dt)
@@ -582,9 +592,13 @@ def get_kis_1min_from_datetime(
             if current_time >= "151000" and prev_low is not None:
                 if close_price < prev_low :
                     if verbose:
-                        print(
-                            f"🚨 [{row['일자']} {row['시간']}] "
-                            f"15:10 이후 일봉 기준 전일 저가 {prev_low:,}원 이탈 → 종료"
+                        message = (
+                            f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 전일 저가 : {prev_low:,}원 이탈,원"
+                        )
+                        print(message)
+                        bot.send_message(
+                            chat_id=chat_id,
+                            text=message
                         )
 
                     update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
@@ -696,9 +710,13 @@ def get_kis_1min_from_datetime(
                     # 돌파 이전 이탈 → 즉시 종료
                     if trail_tp == '1' and breakdown_check <= stop_price:
                         if verbose:
-                            print(
-                                f"🚨 [{row['일자']} {row['시간']}] "
-                                f"돌파 전 이탈가 {stop_price:,}원 이탈 → 종료"
+                            message = (
+                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                            )
+                            print(message)
+                            bot.send_message(
+                                chat_id=chat_id,
+                                text=message
                             )
 
                         update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
@@ -737,10 +755,13 @@ def get_kis_1min_from_datetime(
                         })
 
                         if verbose:
-                            print(
-                                f"🔥 [{row['일자']} {row['시간']}] 목표가 {int(target_price):,}원 돌파 → 기준봉 설정 "
-                                f"(고가 {tenmin_state['base_high']:,}, "
-                                f"저가 {tenmin_state['base_low']:,})"
+                            message = (
+                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
+                            )
+                            print(message)
+                            bot.send_message(
+                                chat_id=chat_id,
+                                text=message
                             )
 
                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
@@ -764,9 +785,14 @@ def get_kis_1min_from_datetime(
                     # 기준봉 저가 이탈 → 즉시 종료
                     if low_price < tenmin_state["base_low"]:
                         if verbose:
-                            print(
-                                f"🔥 [{row['일자']} {row['시간']}] "
-                                f"목표가 돌파 후 10분 기준봉 저가 {tenmin_state['base_low']:,}원 이탈 → 종료"
+                            message = (
+                                f"[{row['일자']} {row['시간']}:{stock_name}-{stock_code}] \n"
+                                f"목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                            )
+                            print(message)
+                            bot.send_message(
+                                chat_id=chat_id,
+                                text=message
                             )
 
                         update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
@@ -807,10 +833,14 @@ def get_kis_1min_from_datetime(
 
                                 if verbose:
                                     reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
-                                    print(
-                                        f"🔁 기준봉 갱신 ({reason}) "
-                                        f"[{completed_key.strftime('%Y%m%d %H:%M')}] "
-                                        f"고가 {new_high:,}, 저가 {new_low:,}, 거래량 {new_vol:,}"
+                                    message = (
+                                        f"[{completed_key.strftime('%Y%m%d %H:%M')}:{stock_name}-{stock_code}] \n"
+                                        f"기준봉 갱신 ({reason} 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
+                                    )
+                                    print(message)
+                                    bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message
                                     )
                                 update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
@@ -820,13 +850,14 @@ def get_kis_1min_from_datetime(
 if __name__ == "__main__":
 
     if is_business_day(today):
-
+        
         ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
-        token = ac['bot_token1']
+        token = ac['bot_token2']
+        chat_id = ac['chat_id']
 
         # 계좌잔고 조회
         c = stock_balance(access_token, app_key, app_secret, acct_no, "")
@@ -901,7 +932,7 @@ if __name__ == "__main__":
                     access_token=ac['access_token'],
                     app_key=ac['app_key'],
                     app_secret=ac['app_secret'],
-                    breakout_type="high",   
+                    breakout_type="high",
                     verbose=True
                 )
 
