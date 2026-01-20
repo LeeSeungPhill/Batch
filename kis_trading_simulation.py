@@ -267,42 +267,43 @@ for nick in nickname_list:
         trading_trail_create_list = cur200.fetchall()
         cur200.close()
 
-        if not trading_trail_create_list:
-            print(f"[{nick}] No trading simulation data found.")
-
-        insert_query1 = """
-            INSERT INTO trading_trail (
-                acct_no,
-                name,
-                code,
-                trail_day,
-                trail_dtm,
-                trail_tp,
-                basic_price,
-                basic_qty,
-                basic_amt,
-                stop_price,
-                target_price,
-                proc_min,
-                crt_dt,
-                mod_dt
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
-        """
         inserted_count = 0
-        cur201 = conn.cursor()
-        for row in trading_trail_create_list:
-            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
-            try:
-                cur201.execute(insert_query1, (
-                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
-                ))
-                inserted_count += cur201.rowcount
-            except Exception as e:
-                print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
+        if not trading_trail_create_list or len(trading_trail_create_list) < 1:
+            print(f"[{nick}] No trading simulation data found.")
+        else:
+            insert_query1 = """
+                INSERT INTO trading_trail (
+                    acct_no,
+                    name,
+                    code,
+                    trail_day,
+                    trail_dtm,
+                    trail_tp,
+                    basic_price,
+                    basic_qty,
+                    basic_amt,
+                    stop_price,
+                    target_price,
+                    proc_min,
+                    crt_dt,
+                    mod_dt
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
+            """
+            
+            cur201 = conn.cursor()
+            for row in trading_trail_create_list:
+                acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
+                try:
+                    cur201.execute(insert_query1, (
+                        acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
+                    ))
+                    inserted_count += cur201.rowcount
+                except Exception as e:
+                    print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
 
-        conn.commit()
-        cur201.close()
+            conn.commit()
+            cur201.close()
 
         skipped_count = len(trading_trail_create_list) - inserted_count
         
