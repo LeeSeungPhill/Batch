@@ -297,7 +297,7 @@ for nick in nickname_list:
                     acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt = row
                     try:
                         cur201.execute(insert_query1, (
-                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
+                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, stop_price, target_price, proc_min, crt_dt, mod_dt
                         ))
                         inserted_count += cur201.rowcount
                     except Exception as e:
