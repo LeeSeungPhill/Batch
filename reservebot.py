@@ -742,7 +742,7 @@ def callback_get(update, context) :
     elif data_selected.find("매수등록") != -1:
         menuNum = "71"
 
-        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매수가, 이탈가를 입력하세요.",
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매수가, 이탈가, 매수금액을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)
 
@@ -1417,27 +1417,31 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=5)
+                commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS)
                 print("commandBot[3] : ", commandBot[3])    # 매수가
                 print("commandBot[4] : ", commandBot[4])    # 이탈가
+                print("commandBot[5] : ", commandBot[5])    # 매수금액
 
-            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 존재시
-            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
+            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가, 매수금액 존재시
+            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
                 year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
                 hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
                 buy_price = int(commandBot[3])                          # 매수가
                 loss_price = int(commandBot[4])                         # 이탈가
+                buy_amt = int(commandBot[5])                            # 매수금액
+                buy_qty = int(round(buy_amt/buy_price))                 # 매수량
+                
                 safe_margin_price = int(buy_price + buy_price * 0.05)   # 안전마진가
 
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()
                 insert_query = """
                     INSERT INTO tradng_simulation (
-                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, loss_price, profit_price, proc_yn, crt_dt, mod_dt
+                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
                     )
-                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1 FROM tradng_simulation
                         WHERE acct_no=%s AND code=%s AND trade_day=%s AND trade_dtm=%s AND trade_tp=%s 
@@ -1445,7 +1449,7 @@ def echo(update, context):
                     """
                 # insert 인자값 설정
                 cur500.execute(insert_query, (
-                    acct_no, company, code, year_day, hour_minute, "1", buy_price,  loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
+                    acct_no, company, code, year_day, hour_minute, "1", buy_price, buy_qty, buy_price*buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
                     , acct_no, code, year_day, hour_minute, "1"
                 ))
 
@@ -1489,7 +1493,14 @@ def echo(update, context):
                     if code == c['pdno'][i]:
                         hldg_qty = int(c['hldg_qty'][i])
 
-                sell_qty = int(hldg_qty * sell_rate * 0.01)   # 매도량
+                # 보유수량 조회
+                cur300 = conn.cursor()
+                cur300.execute("SELECT basic_qty FROM (SELECT COALESCE(basic_qty, 0) AS basic_qty, row_number() OVER (PARTITION BY acct_no, code ORDER BY mod_dt DESC) AS rn FROM public.trading_trail WHERE acct_no = '" + acct_no + "' AND trail_tp in ('1', '2', '3', 'L') AND trail_day = to_char(now(), 'YYYYMMDD') AND code = '" + code + "') T WHERE rn = 1")
+                result_300 = cur300.fetchone()
+                cur300.close()
+
+                # 매도량
+                sell_qty = int(hldg_qty * sell_rate * 0.01) if hldg_qty > 0 else int(result_300 * sell_rate * 0.01)  
 
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()

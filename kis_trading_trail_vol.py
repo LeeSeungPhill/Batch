@@ -45,7 +45,7 @@ def auth(APP_KEY, APP_SECRET):
 def account(nickname):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token1, chat_id
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
@@ -322,11 +322,16 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
     conn.commit()
     cur03.close()
 
-def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+    
+    trail_qty = trail_rate * 0.01
+    
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
             trail_price = %s
+            , trail_qty = %s
+            , trail_amt = %s      
             , trail_rate = %s      
             , trail_plan = %s
             , trail_tp = %s
@@ -337,15 +342,17 @@ def update_trading_daily_close(trail_price, trail_rate, trail_plan, acct_no, cod
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp = 'L'                  
-    """, (trail_price, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
-def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
             trail_price = %s
+            , trail_qty = %s
+            , trail_amt = %s 
             , trail_rate = %s      
             , trail_plan = %s
             , trail_tp = %s
@@ -356,7 +363,7 @@ def update_trading_close(trail_price, trail_rate, trail_plan, acct_no, code, tra
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'                  
-    """, (trail_price, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
@@ -462,6 +469,7 @@ def get_kis_1min_from_datetime(
     target_price: int,
     stop_price: int, 
     basic_price: int,
+    basic_qty:int,
     trail_tp: str,
     access_token: str,
     app_key: str,
@@ -593,19 +601,23 @@ def get_kis_1min_from_datetime(
                 if close_price < prev_low :
                     if verbose:
                         message = (
-                            f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 전일 저가 : {prev_low:,}원 이탈"
+                            f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈"
                         )
                         print(message)
                         bot.send_message(
                             chat_id=chat_id,
-                            text=message
+                            text=message,
+                            parse_mode='HTML'
                         )
 
                     update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                    trail_plan = "100"
+                    trail_qty = basic_qty * int(trail_plan) * 0.01
+                    trail_amt = close_price * trail_qty
 
-                    update_trading_daily_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                    update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -711,19 +723,23 @@ def get_kis_1min_from_datetime(
                     if trail_tp == '1' and breakdown_check <= stop_price:
                         if verbose:
                             message = (
-                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
                             )
                             print(message)
                             bot.send_message(
                                 chat_id=chat_id,
-                                text=message
+                                text=message,
+                                parse_mode='HTML'
                             )
 
                         update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                        trail_plan = "100"
+                        trail_qty = basic_qty * int(trail_plan) * 0.01
+                        trail_amt = close_price * trail_qty
 
-                        update_trading_close(close_price, trail_rate, "100", acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -756,12 +772,13 @@ def get_kis_1min_from_datetime(
 
                         if verbose:
                             message = (
-                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
+                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
                             )
                             print(message)
                             bot.send_message(
                                 chat_id=chat_id,
-                                text=message
+                                text=message,
+                                parse_mode='HTML'
                             )
 
                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
@@ -786,19 +803,23 @@ def get_kis_1min_from_datetime(
                     if low_price < tenmin_state["base_low"]:
                         if verbose:
                             message = (
-                                f"{row['일자']} {row['시간']}-{stock_name}[{stock_code}] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
                             )
                             print(message)
                             bot.send_message(
                                 chat_id=chat_id,
-                                text=message
+                                text=message,
+                                parse_mode='HTML'
                             )
 
                         update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                         
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                        trail_plan = "50"
+                        trail_qty = basic_qty * int(trail_plan) * 0.01
+                        trail_amt = close_price * trail_qty
 
-                        update_trading_close(close_price, trail_rate, "50", acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BASE_10MIN_LOW_BREAK",
@@ -833,12 +854,13 @@ def get_kis_1min_from_datetime(
                                 if verbose:
                                     reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
                                     message = (
-                                        f"{completed_key.strftime('%Y%m%d %H:%M')}-{stock_name}[{stock_code}] 기준봉 갱신 ({reason} 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
+                                        f"[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
                                     )
                                     print(message)
                                     bot.send_message(
                                         chat_id=chat_id,
-                                        text=message
+                                        text=message,
+                                        parse_mode='HTML'
                                     )
                                 update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
@@ -910,7 +932,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
@@ -926,7 +948,8 @@ if __name__ == "__main__":
                     target_price=int(i[4]),
                     stop_price=int(i[5]),
                     basic_price=int(i[6]),
-                    trail_tp=i[7],
+                    basic_qty=int(i[7]),
+                    trail_tp=i[8],
                     access_token=ac['access_token'],
                     app_key=ac['app_key'],
                     app_secret=ac['app_secret'],
