@@ -1502,6 +1502,21 @@ def echo(update, context):
                 # 매도량
                 sell_qty = int(hldg_qty * sell_rate * 0.01) if hldg_qty > 0 else int(result_300 * sell_rate * 0.01)  
 
+                # 매매추적 update
+                cur400 = conn.cursor()
+                update_query = """
+                    UPDATE tradng_trail SET
+                        target_price = %s, trail_plan = %s, mod_dt = %s
+                    WHERE acct_no = %s 
+                    AND code = %s
+                    AND trail_tp in ('1', '2', '3', 'L') 
+                    AND trail_day = to_char(now(), 'YYYYMMDD') 
+                    """
+                # update 인자값 설정
+                cur400.execute(update_query, (sell_price, str(sell_rate),  datetime.now(), acct_no, code))
+                conn.commit()
+                cur400.close()
+
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()
                 insert_query = """

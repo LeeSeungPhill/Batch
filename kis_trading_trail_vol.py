@@ -471,6 +471,7 @@ def get_kis_1min_from_datetime(
     basic_price: int,
     basic_qty:int,
     trail_tp: str,
+    trail_plan: str,
     access_token: str,
     app_key: str,
     app_secret: str,
@@ -613,11 +614,11 @@ def get_kis_1min_from_datetime(
                     update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                     
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                    trail_plan = "100"
-                    trail_qty = basic_qty * int(trail_plan) * 0.01
+                    i_trail_plan = trail_plan if trail_plan is not None else "100"
+                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
                     trail_amt = close_price * trail_qty
 
-                    update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                    update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -735,11 +736,11 @@ def get_kis_1min_from_datetime(
                         update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                        trail_plan = "100"
-                        trail_qty = basic_qty * int(trail_plan) * 0.01
+                        i_trail_plan = trail_plan if trail_plan is not None else "100"
+                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
                         trail_amt = close_price * trail_qty
 
-                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -815,11 +816,11 @@ def get_kis_1min_from_datetime(
                         update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                         
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                        trail_plan = "50"
-                        trail_qty = basic_qty * int(trail_plan) * 0.01
+                        i_trail_plan = trail_plan if trail_plan is not None else "50"
+                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
                         trail_amt = close_price * trail_qty
 
-                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BASE_10MIN_LOW_BREAK",
@@ -932,7 +933,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', '3', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and trail_plan is null order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
@@ -950,6 +951,7 @@ if __name__ == "__main__":
                     basic_price=int(i[6]),
                     basic_qty=int(i[7]),
                     trail_tp=i[8],
+                    trail_plan=i[9],
                     access_token=ac['access_token'],
                     app_key=ac['app_key'],
                     app_secret=ac['app_secret'],
