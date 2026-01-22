@@ -322,7 +322,7 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
     conn.commit()
     cur03.close()
 
-def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     
     trail_qty = trail_rate * 0.01
     
@@ -336,17 +336,19 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
             , trail_plan = %s
             , trail_tp = %s
             , proc_min = %s
+            , basic_qty = %s
+            , basic_amt = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp = 'L'                  
-    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
-def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
@@ -357,13 +359,15 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
             , trail_plan = %s
             , trail_tp = %s
             , proc_min = %s
+            , basic_qty = %s
+            , basic_amt = %s
             , mod_dt = %s
         WHERE acct_no = %s
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'                  
-    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
@@ -617,8 +621,10 @@ def get_kis_1min_from_datetime(
                     i_trail_plan = trail_plan if trail_plan is not None else "100"
                     trail_qty = basic_qty * int(i_trail_plan) * 0.01
                     trail_amt = close_price * trail_qty
+                    u_basic_qty = basic_qty - trail_qty
+                    u_basic_amt = basic_price * u_basic_qty
 
-                    update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                    update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                     signals.append({
                         "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -739,8 +745,10 @@ def get_kis_1min_from_datetime(
                         i_trail_plan = trail_plan if trail_plan is not None else "100"
                         trail_qty = basic_qty * int(i_trail_plan) * 0.01
                         trail_amt = close_price * trail_qty
+                        u_basic_qty = basic_qty - trail_qty
+                        u_basic_amt = basic_price * u_basic_qty
 
-                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -813,14 +821,19 @@ def get_kis_1min_from_datetime(
                                 parse_mode='HTML'
                             )
 
-                        update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                        
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                         i_trail_plan = trail_plan if trail_plan is not None else "50"
                         trail_qty = basic_qty * int(i_trail_plan) * 0.01
                         trail_amt = close_price * trail_qty
+                        u_basic_qty = basic_qty - trail_qty
+                        u_basic_amt = basic_price * u_basic_qty
 
-                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                        if basic_qty == trail_qty:
+                            update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        else:    
+                            update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "BASE_10MIN_LOW_BREAK",
@@ -858,11 +871,11 @@ def get_kis_1min_from_datetime(
                                         f"[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
                                     )
                                     print(message)
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode='HTML'
-                                    )
+                                    # bot.send_message(
+                                    #     chat_id=chat_id,
+                                    #     text=message,
+                                    #     parse_mode='HTML'
+                                    # )
                                 update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
@@ -887,47 +900,51 @@ if __name__ == "__main__":
 
         # 일별 매매 잔고 현행화
         for i in range(len(c)):
-            if int(c['hldg_qty'][i]) >  0:
-
-                insert_query199 = """
-                    INSERT INTO dly_trading_balance (
-                        acct_no,
-                        code,
-                        name,
-                        balance_day,
-                        balance_price,
-                        balance_qty,
-                        balance_amt,
-                        value_rate,
-                        value_amt,
-                        mod_dt
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (acct_no, code, balance_day)
-                    DO UPDATE SET
-                        balance_price = EXCLUDED.balance_price,
-                        balance_qty   = EXCLUDED.balance_qty,
-                        balance_amt   = EXCLUDED.balance_amt,
-                        value_rate    = EXCLUDED.value_rate,
-                        value_amt     = EXCLUDED.value_amt,
-                        mod_dt        = EXCLUDED.mod_dt;
-                """
-                record_to_insert199 = (
+            insert_query199 = """
+                INSERT INTO dly_trading_balance (
                     acct_no,
-                    c['pdno'][i],
-                    c['prdt_name'][i],
-                    today,
-                    float(c['pchs_avg_pric'][i]),
-                    int(c['hldg_qty'][i]),
-                    int(c['pchs_amt'][i]),
-                    float(c['evlu_pfls_rt'][i]),
-                    int(c['evlu_pfls_amt'][i]),
-                    datetime.now()
+                    code,
+                    name,
+                    balance_day,
+                    balance_price,
+                    balance_qty,
+                    balance_amt,
+                    value_rate,
+                    value_amt,
+                    buy_qty,
+                    sell_qty,
+                    mod_dt
                 )
-                cur199.execute(insert_query199, record_to_insert199)
-                conn.commit()
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (acct_no, code, balance_day)
+                DO UPDATE SET
+                    balance_price = EXCLUDED.balance_price,
+                    balance_qty   = EXCLUDED.balance_qty,
+                    balance_amt   = EXCLUDED.balance_amt,
+                    value_rate    = EXCLUDED.value_rate,
+                    value_amt     = EXCLUDED.value_amt,
+                    buy_qty       = EXCLUDED.buy_qty,
+                    sell_qty      = EXCLUDED.sell_qty,
+                    mod_dt        = EXCLUDED.mod_dt;
+            """
+            record_to_insert199 = (
+                acct_no,
+                c['pdno'][i],
+                c['prdt_name'][i],
+                today,
+                float(c['pchs_avg_pric'][i]),
+                int(c['hldg_qty'][i]),
+                int(c['pchs_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                float(c['evlu_pfls_rt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                int(c['evlu_pfls_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                int(c['thdt_buyqty'][i]) if int(c['thdt_buyqty'][i]) > 0 else 0,
+                int(c['thdt_sll_qty'][i]) if int(c['thdt_sll_qty'][i]) > 0 else 0,
+                datetime.now()
+            )
+            cur199.execute(insert_query199, record_to_insert199)
+            conn.commit()
 
         cur199.close()        
 

@@ -784,48 +784,53 @@ def callback_get(update, context) :
             
             #  일별 매매 잔고 현행화
             for i in range(len(c)):
-                if int(c['hldg_qty'][i]) >  0:
-
-                    insert_query199 = """
-                        INSERT INTO dly_trading_balance (
-                            acct_no,
-                            code,
-                            name,
-                            balance_day,
-                            balance_price,
-                            balance_qty,
-                            balance_amt,
-                            value_rate,
-                            value_amt,
-                            mod_dt
-                        )
-                        VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                        )
-                        ON CONFLICT (acct_no, code, balance_day)
-                        DO UPDATE SET
-                            balance_price = EXCLUDED.balance_price,
-                            balance_qty   = EXCLUDED.balance_qty,
-                            balance_amt   = EXCLUDED.balance_amt,
-                            value_rate    = EXCLUDED.value_rate,
-                            value_amt     = EXCLUDED.value_amt,
-                            mod_dt        = EXCLUDED.mod_dt;
-                    """
-                    record_to_insert199 = (
+                insert_query199 = """
+                    INSERT INTO dly_trading_balance (
                         acct_no,
-                        c['pdno'][i],
-                        c['prdt_name'][i],
-                        business_day.replace('-', ''),
-                        float(c['pchs_avg_pric'][i]),
-                        int(c['hldg_qty'][i]),
-                        int(c['pchs_amt'][i]),
-                        float(c['evlu_pfls_rt'][i]),
-                        int(c['evlu_pfls_amt'][i]),
-                        datetime.now()
+                        code,
+                        name,
+                        balance_day,
+                        balance_price,
+                        balance_qty,
+                        balance_amt,
+                        value_rate,
+                        value_amt,
+                        buy_qty,
+                        sell_qty,
+                        mod_dt
                     )
-                    cur199.execute(insert_query199, record_to_insert199)
-                    conn.commit()
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (acct_no, code, balance_day)
+                    DO UPDATE SET
+                        balance_price = EXCLUDED.balance_price,
+                        balance_qty   = EXCLUDED.balance_qty,
+                        balance_amt   = EXCLUDED.balance_amt,
+                        value_rate    = EXCLUDED.value_rate,
+                        value_amt     = EXCLUDED.value_amt,
+                        buy_qty       = EXCLUDED.buy_qty,
+                        sell_qty      = EXCLUDED.sell_qty,
+                        mod_dt        = EXCLUDED.mod_dt;
+                """
+                record_to_insert199 = (
+                    acct_no,
+                    c['pdno'][i],
+                    c['prdt_name'][i],
+                    business_day.replace('-', ''),
+                    float(c['pchs_avg_pric'][i]),
+                    int(c['hldg_qty'][i]),
+                    int(c['pchs_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    float(c['evlu_pfls_rt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    int(c['evlu_pfls_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    int(c['thdt_buyqty'][i]) if int(c['thdt_buyqty'][i]) > 0 else 0,
+                    int(c['thdt_sll_qty'][i]) if int(c['thdt_sll_qty'][i]) > 0 else 0,
+                    datetime.now()
+                )
+                cur199.execute(insert_query199, record_to_insert199)
+                conn.commit()
 
+                if int(c['hldg_qty'][i]) > 0:
                     balance_rows.append((
                         acct_no,
                         c['pdno'][i],                   # code
@@ -929,6 +934,103 @@ def callback_get(update, context) :
                     balance_rows,
                     template="(%s, %s, %s, %s, %s)"
                 )
+
+                countProc = cur200.rowcount
+
+                conn.commit()
+                cur200.close()
+
+                if countProc >= 1:
+                    msg = f"* [{trail_day}]-매도추적 등록 {countProc}건 처리"
+                    result_msgs.append(msg)
+                else:
+                    msg = f"* [{trail_day}]-매도추적 등록 미처리"
+                    result_msgs.append(msg)
+            
+            else:
+
+                balance_sql = f"""
+                WITH sim AS (
+                    SELECT *
+                    FROM (
+                        SELECT
+                            A.acct_no,
+                            A.name,
+                            A.code,
+                            A.trade_day,
+                            A.trade_dtm,
+                            A.buy_price,
+                            A.buy_qty,
+                            COALESCE(B.stop_price, A.loss_price) AS loss_price,
+                            COALESCE(B.target_price, A.profit_price) AS profit_price,
+                            A.proc_yn,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY A.acct_no, A.code
+                                ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
+                            ) AS rn
+                        FROM tradng_simulation A
+                        LEFT JOIN trading_trail B
+                            ON B.acct_no = A.acct_no
+                            AND B.code = A.code
+                            AND B.trail_day = '{prev_date}'
+                            AND B.trail_dtm = A.trade_dtm
+                            AND B.trail_tp IN ('1','2','3','L')
+                        WHERE A.trade_tp = '1'
+                        AND A.acct_no = {acct_no}
+                        AND A.proc_yn IN ('N','C','L')
+                        AND SUBSTR(COALESCE(A.proc_dtm,'{prev_date}'), 1, 8) < '{trail_day}'
+                        AND A.trade_day <= replace('{business_day}', '-', '')
+                    ) t
+                    WHERE rn = 1
+                )
+                """
+
+                insert_query = f"""
+                INSERT INTO trading_trail (
+                    acct_no,
+                    name,
+                    code,
+                    trail_day,
+                    trail_dtm,
+                    trail_tp,
+                    basic_price,
+                    basic_qty,
+                    basic_amt,
+                    stop_price,
+                    target_price,
+                    proc_min,
+                    crt_dt,
+                    mod_dt
+                )
+                SELECT
+                    S.acct_no,
+                    S.name,
+                    S.code,
+                    '{trail_day}' AS trail_day,
+                    CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
+                    CASE WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                    S.buy_price,
+                    S.buy_qty,
+                    S.buy_price*S.buy_qty AS basic_amt,
+                    COALESCE(S.loss_price, 0) AS stop_price,
+                    COALESCE(S.profit_price, 0) AS target_price,
+                    CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
+                    now(),
+                    now()
+                FROM sim S
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM trading_trail T
+                    WHERE T.acct_no = S.acct_no
+                    AND T.code = S.code
+                    AND T.trail_day = '{trail_day}'
+                    AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                );
+                """
+
+                cur200 = conn.cursor()
+                full_query = balance_sql + insert_query
+                cur200.execute(full_query)
 
                 countProc = cur200.rowcount
 
