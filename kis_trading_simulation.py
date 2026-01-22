@@ -313,7 +313,7 @@ for nick in nickname_list:
             skipped_count = len(trading_trail_create_list) - inserted_count
             
             message = (
-                f"[{today}-{nick}] trading_trail 생성 \n"
+                f"[{today}-{nick}] 매도추적 등록 \n"
                 f"(전체 : {len(trading_trail_create_list)}건, "
                 f"생성 : {inserted_count}건, "
                 f"미생성 : {skipped_count}건)"
@@ -431,7 +431,7 @@ for nick in nickname_list:
             skipped_count = len(trading_trail_create_list) - inserted_count
             
             message = (
-                f"[{today}-{nick}] trading_trail 생성 \n"
+                f"[{today}-{nick}] 매도추적 등록 \n"
                 f"(전체 : {len(trading_trail_create_list)}건, "
                 f"생성 : {inserted_count}건, "
                 f"미생성 : {skipped_count}건)"
@@ -444,7 +444,7 @@ for nick in nickname_list:
 
     except Exception as e:
         error_msg = (
-            f"[{today}-{nick}] trading_trail 생성 에러\n\n"
+            f"[{today}-{nick}] 매도추적 등록 에러\n\n"
             f"Error: {str(e)}\n\n"
             f"Traceback:\n{traceback.format_exc()}"
         )
