@@ -237,13 +237,13 @@ for nick in nickname_list:
             )
             SELECT
                 COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
-                COALESCE(S.name, BAL.name) AS name,
+                COALESCE(BAL.name, S.name) AS name,
                 COALESCE(BAL.code, S.code) AS code,
                 '{trail_day}' AS trail_day,
                 CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
                 CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
-                COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
+                CASE WHEN BAL.purchase_qty > 0 THEN BAL.purchase_price ELSE S.buy_price END AS basic_price,
+                CASE WHEN BAL.purchase_qty > 0 THEN BAL.purchase_qty ELSE S.buy_qty END AS basic_qty,
                 COALESCE(S.loss_price, 0) AS stop_price,
                 COALESCE(S.profit_price, 0) AS target_price,
                 CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,

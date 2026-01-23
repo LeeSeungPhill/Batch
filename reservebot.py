@@ -900,14 +900,14 @@ def callback_get(update, context) :
                 )
                 SELECT
                     COALESCE(BAL.acct_no, S.acct_no) AS acct_no,
-                    COALESCE(S.name, BAL.name) AS name,
+                    COALESCE(BAL.name, S.name) AS name,
                     COALESCE(BAL.code, S.code) AS code,
                     '{trail_day}' AS trail_day,
                     CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS trail_dtm,
                     CASE WHEN BAL.acct_no IS NOT NULL AND S.acct_no IS NULL THEN 'L' WHEN S.proc_yn = 'L' THEN 'L' ELSE '1' END AS trail_tp,
-                    COALESCE(BAL.purchase_price, S.buy_price) AS basic_price,
-                    COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_qty,
-                    COALESCE(BAL.purchase_price, S.buy_price)*COALESCE(BAL.purchase_qty, S.buy_qty) AS basic_amt,
+                    CASE WHEN BAL.purchase_qty > 0 THEN BAL.purchase_price ELSE S.buy_price END AS basic_price,
+                    CASE WHEN BAL.purchase_qty > 0 THEN BAL.purchase_qty ELSE S.buy_qty END AS basic_qty,
+                    CASE WHEN BAL.purchase_qty > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.buy_price*S.buy_qty END AS basic_amt,
                     COALESCE(S.loss_price, 0) AS stop_price,
                     COALESCE(S.profit_price, 0) AS target_price,
                     CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
@@ -1596,7 +1596,24 @@ def echo(update, context):
 
                 # 보유수량 조회
                 cur300 = conn.cursor()
-                cur300.execute("SELECT basic_qty FROM (SELECT COALESCE(basic_qty, 0) AS basic_qty, row_number() OVER (PARTITION BY acct_no, code ORDER BY mod_dt DESC) AS rn FROM public.trading_trail WHERE acct_no = " + int(acct_no) + " AND trail_tp in ('1', '2', '3', 'L') AND trail_day = to_char(now(), 'YYYYMMDD') AND code = '" + code + "') T WHERE rn = 1")
+                select_query = """
+                    SELECT basic_qty
+                    FROM (
+                        SELECT
+                            COALESCE(basic_qty, 0) AS basic_qty,
+                            row_number() OVER (
+                                PARTITION BY acct_no, code
+                                ORDER BY mod_dt DESC
+                            ) AS rn
+                        FROM public.trading_trail
+                        WHERE acct_no = %s
+                        AND trail_tp IN ('1', '2', '3', 'L')
+                        AND trail_day = to_char(now(), 'YYYYMMDD')
+                        AND code = %s
+                    ) T
+                    WHERE rn = 1
+                    """
+                cur300.execute(select_query, (acct_no, code))
                 result_300 = cur300.fetchone()
                 cur300.close()
 
