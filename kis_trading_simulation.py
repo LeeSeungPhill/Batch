@@ -226,6 +226,7 @@ for nick in nickname_list:
                         AND B.code = A.code
                         AND B.trail_day = '{prev_date}'
                         AND B.trail_dtm = A.trade_dtm
+                        AND B.trail_dtm = CASE WHEN A.trade_day = '{prev_date}' THEN A.trade_dtm ELSE '090000' END
                         AND B.trail_tp IN ('1','2','3','L')
                     WHERE A.trade_tp = '1'
                     AND A.acct_no = {acct_no}
@@ -350,7 +351,7 @@ for nick in nickname_list:
                         ON B.acct_no = A.acct_no
                         AND B.code = A.code
                         AND B.trail_day = '{prev_date}'
-                        AND B.trail_dtm = A.trade_dtm
+                        AND B.trail_dtm = CASE WHEN A.trade_day = '{prev_date}' THEN A.trade_dtm ELSE '090000' END
                         AND B.trail_tp IN ('1','2','3','L')
                     WHERE A.trade_tp = '1'
                     AND A.acct_no = {acct_no}
