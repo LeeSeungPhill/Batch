@@ -1625,7 +1625,7 @@ def echo(update, context):
                 # 매매추적 update
                 cur400 = conn.cursor()
                 update_query = """
-                    UPDATE tradng_trail SET
+                    UPDATE trading_trail SET
                         target_price = %s, trail_plan = %s, mod_dt = %s
                     WHERE acct_no = %s 
                     AND code = %s
