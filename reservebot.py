@@ -1614,11 +1614,13 @@ def echo(update, context):
                     WHERE rn = 1
                     """
                 cur300.execute(select_query, (acct_no, code))
-                result_300 = cur300.fetchone()
+                row = cur300.fetchone()
                 cur300.close()
 
+                basic_qty = int(row[0]) if row else 0
+                base_qty = hldg_qty if hldg_qty > 0 else basic_qty
                 # 매도량
-                sell_qty = int(hldg_qty * sell_rate * 0.01) if hldg_qty > 0 else int(result_300 * sell_rate * 0.01)  
+                sell_qty = int(base_qty * sell_rate * 0.01)
 
                 # 매매추적 update
                 cur400 = conn.cursor()
