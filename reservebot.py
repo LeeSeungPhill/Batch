@@ -1596,7 +1596,7 @@ def echo(update, context):
 
                 # 보유수량 조회
                 cur300 = conn.cursor()
-                cur300.execute("SELECT basic_qty FROM (SELECT COALESCE(basic_qty, 0) AS basic_qty, row_number() OVER (PARTITION BY acct_no, code ORDER BY mod_dt DESC) AS rn FROM public.trading_trail WHERE acct_no = " + acct_no + " AND trail_tp in ('1', '2', '3', 'L') AND trail_day = to_char(now(), 'YYYYMMDD') AND code = '" + code + "') T WHERE rn = 1")
+                cur300.execute("SELECT basic_qty FROM (SELECT COALESCE(basic_qty, 0) AS basic_qty, row_number() OVER (PARTITION BY acct_no, code ORDER BY mod_dt DESC) AS rn FROM public.trading_trail WHERE acct_no = " + int(acct_no) + " AND trail_tp in ('1', '2', '3', 'L') AND trail_day = to_char(now(), 'YYYYMMDD') AND code = '" + code + "') T WHERE rn = 1")
                 result_300 = cur300.fetchone()
                 cur300.close()
 
