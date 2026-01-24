@@ -1802,7 +1802,7 @@ def echo(update, context):
                     cur400.close()
 
                     if was_updated:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "%, 잔량 : " + format(u_basic_qty, ',d') + "주 매매추적 처리", parse_mode='HTML')
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "%, 잔량 : " + format(base_qty-sell_qty, ',d') + "주 매매추적 처리", parse_mode='HTML')
 
                         # 매매시뮬레이션 insert
                         cur500 = conn.cursor()
