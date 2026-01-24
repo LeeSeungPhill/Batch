@@ -1658,7 +1658,7 @@ def echo(update, context):
                 # merge 인자값 설정
                 cur400.execute(merge_query, (
                         hour_minute, "1", loss_price, safe_margin_price, avg_base_price, sum_base_qty, avg_base_price * sum_base_qty, hour_minute, datetime.now(), acct_no, code, year_day,
-                        acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price, sum_base_qty, avg_base_price * sum_base_qty, hour_minute, datetime.now(), datetime.now()
+                        acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price if base_price > 0 else buy_price, sum_base_qty if base_qty > 0 else buy_qty, avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, hour_minute, datetime.now(), datetime.now()
                 ))
 
                 was_updated = cur400.fetchone() is not None
@@ -1667,9 +1667,9 @@ def echo(update, context):
                 cur400.close()
 
                 if was_updated:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price, ',d') + "원, 총보유량 : " + format(sum_base_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price * sum_base_qty, ',d') + "주, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 생성/수정", parse_mode='HTML')
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else buy_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
                 else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매매추적 생성/수정 미처리")       
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매매추적 미처리")       
 
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()
@@ -1687,7 +1687,6 @@ def echo(update, context):
                 # insert 인자값 설정
                 cur500.execute(insert_query, (
                     acct_no, company, code, year_day, hour_minute, "1", buy_price, buy_qty, buy_price*buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
-                    , acct_no, code, year_day, hour_minute, "1"
                 ))
 
                 was_inserted = cur500.fetchone() is not None
