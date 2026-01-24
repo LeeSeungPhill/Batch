@@ -742,14 +742,14 @@ def callback_get(update, context) :
     elif data_selected.find("매수등록") != -1:
         menuNum = "71"
 
-        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매수가, 이탈가, 매수금액을 입력하세요.",
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가, 이탈가, 매수금액을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)
 
     elif data_selected.find("매도등록") != -1:
         menuNum = "81"
 
-        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리), 시간(6자리), 매도가, 비중(%)을 입력하세요.",
+        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가, 비중(%)을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)        
     
@@ -1519,16 +1519,16 @@ def echo(update, context):
             if len(user_text.split(",")) > 0:
                 
                 commandBot = user_text.split(sep=',', maxsplit=6)
-                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
-                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS)
+                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
+                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매수가
                 print("commandBot[4] : ", commandBot[4])    # 이탈가
                 print("commandBot[5] : ", commandBot[5])    # 매수금액
 
-            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가, 매수금액 존재시
-            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
-                year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
-                hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가, 이탈가, 매수금액 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
+                year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
+                hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 buy_price = int(commandBot[3])                          # 매수가
                 loss_price = int(commandBot[4])                         # 이탈가
                 buy_amt = int(commandBot[5])                            # 매수금액
@@ -1708,15 +1708,15 @@ def echo(update, context):
             if len(user_text.split(",")) > 0:
                 
                 commandBot = user_text.split(sep=',', maxsplit=5)
-                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD)
-                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS)
+                print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
+                print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매도가
                 print("commandBot[4] : ", commandBot[4])    # 비중(%)
 
-            # 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 존재시
-            if len(commandBot[1]) == 8 and commandBot[1].isdigit() and len(commandBot[2]) == 6 and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
-                year_day = commandBot[1]                                # 날짜-8자리(YYYYMMDD)
-                hour_minute = commandBot[2]                             # 시간-6자리(HHMMSS)
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가, 비중(%) 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
+                year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
+                hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 sell_price = int(commandBot[3])                         # 매도가
                 sell_rate = int(commandBot[4])                          # 비중(%)
 
