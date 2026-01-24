@@ -1627,27 +1627,33 @@ def echo(update, context):
                         AND tt.code     = sub.code
                         AND tt.trail_day = sub.trail_day
                         AND sub.rn = 1
-                        RETURNING 1
+                        RETURNING 1 AS flag
+                    ),
+                    ins AS (
+                        INSERT INTO trading_trail (
+                            acct_no,
+                            code,
+                            name,
+                            trail_day,
+                            trail_dtm,
+                            trail_tp,
+                            stop_price,
+                            target_price,
+                            basic_price,
+                            basic_qty,
+                            basic_amt,
+                            proc_min,
+                            crt_dt,
+                            mod_dt
+                        )
+                        SELECT
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        WHERE NOT EXISTS (SELECT 1 FROM upd)
+                        RETURNING 1 AS flas
                     )
-                    INSERT INTO trading_trail (
-                        acct_no,
-                        code,
-                        name,
-                        trail_day,
-                        trail_dtm,
-                        trail_tp,
-                        stop_price,
-                        target_price,
-                        basic_price,
-                        basic_qty,
-                        basic_amt,
-                        proc_min,
-                        crt_dt,
-                        mod_dt
-                    )
-                    SELECT
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    WHERE NOT EXISTS (SELECT 1 FROM upd);
+                    SELECT flag FROM upd
+                    UNION ALL 
+                    SELECT flag FROM ins;
                     """
                 # merge 인자값 설정
                 cur400.execute(merge_query, (
