@@ -1794,7 +1794,7 @@ def echo(update, context):
                         RETURNING 1;
                         """
                     # update 인자값 설정
-                    cur400.execute(update_query, ("1", str(sell_rate), stck_lwpr, sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
+                    cur400.execute(update_query, ("1", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
                     was_updated = cur400.fetchone() is not None
 
@@ -1802,7 +1802,7 @@ def echo(update, context):
                     cur400.close()
 
                     if was_updated:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "%, 잔량 : " + format(base_qty-sell_qty, ',d') + "주 매매추적 처리", parse_mode='HTML')
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
 
                         # 매매시뮬레이션 insert
                         cur500 = conn.cursor()
