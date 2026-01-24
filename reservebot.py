@@ -1649,7 +1649,7 @@ def echo(update, context):
                         SELECT
                             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         WHERE NOT EXISTS (SELECT 1 FROM upd)
-                        RETURNING 1 AS flas
+                        RETURNING 1 AS flag
                     )
                     SELECT flag FROM upd
                     UNION ALL 
