@@ -1557,7 +1557,7 @@ def echo(update, context):
                     SELECT 
                         basic_price,
                         basic_qty,
-                        basic_amt,
+                        basic_amt
                     FROM (
                         SELECT
                             COALESCE(basic_price, 0) AS basic_price,
