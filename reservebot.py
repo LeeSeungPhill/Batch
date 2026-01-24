@@ -1771,7 +1771,7 @@ def echo(update, context):
                     cur400 = conn.cursor()
                     update_query = """
                         UPDATE trading_trail tt SET
-                            trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
+                            trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
                         FROM (
                             SELECT
                                 acct_no,
@@ -1794,7 +1794,7 @@ def echo(update, context):
                         RETURNING 1;
                         """
                     # update 인자값 설정
-                    cur400.execute(update_query, ("1", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
+                    cur400.execute(update_query, (hour_minute, "1", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
                     was_updated = cur400.fetchone() is not None
 
