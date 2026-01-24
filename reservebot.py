@@ -1767,24 +1767,11 @@ def echo(update, context):
 
                 if sell_qty > 0:
 
-                    # 매도량과 보유량이 동일한 경우
-                    if sell_qty == base_qty:
-                        trail_tp = "4"
-                    else:
-
-                        if prev_trail_tp in ("1", "2"):
-                            trail_tp == "3"
-                        else:    
-                            trail_tp = prev_trail_tp
-
-                    u_basic_qty = base_qty - sell_qty
-                    u_basic_amt = basic_price * u_basic_qty
-
                     # 매매추적 update
                     cur400 = conn.cursor()
                     update_query = """
                         UPDATE trading_trail tt SET
-                            trail_tp = %s, trail_plan = %s, basic_qty = %s, basic_amt = %s, mod_dt = %s
+                            trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
                         FROM (
                             SELECT
                                 acct_no,
@@ -1807,7 +1794,7 @@ def echo(update, context):
                         RETURNING 1;
                         """
                     # update 인자값 설정
-                    cur400.execute(update_query, (trail_tp, str(sell_rate), u_basic_qty, u_basic_amt, datetime.now(), acct_no, code, year_day))
+                    cur400.execute(update_query, ("1", str(sell_rate), stck_lwpr, sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
                     was_updated = cur400.fetchone() is not None
 
@@ -1815,7 +1802,7 @@ def echo(update, context):
                     cur400.close()
 
                     if was_updated:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "%, 잔량 : " + format(u_basic_qty, ',d') + "주 매매추적 수정", parse_mode='HTML')
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "%, 잔량 : " + format(u_basic_qty, ',d') + "주 매매추적 처리", parse_mode='HTML')
 
                         # 매매시뮬레이션 insert
                         cur500 = conn.cursor()
@@ -1846,7 +1833,7 @@ def echo(update, context):
                             context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")
 
                     else:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 수정 미처리")   
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")   
 
                 else:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도량 부족 미처리")                                
