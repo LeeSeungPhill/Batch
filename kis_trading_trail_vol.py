@@ -301,7 +301,7 @@ def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
         AND code = %s
         AND trade_tp = %s
         AND trade_day <= %s
-        AND proc_yn = 'N'
+        AND proc_yn != 'Y'
     """, (udt_proc_yn, proc_dtm, datetime.now(), acct_no, code, trade_tp, start_date))
     conn.commit()
     cur03.close()
@@ -727,38 +727,39 @@ def get_kis_1min_from_datetime(
             if high_price > low_price:
                 if not breakout_done:
                     # 돌파 이전 이탈 → 즉시 종료
-                    if trail_tp == '1' and breakdown_check <= stop_price:
-                        if verbose:
-                            message = (
-                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
-                            )
-                            print(message)
-                            bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode='HTML'
-                            )
+                    if breakdown_check <= stop_price:
+                        if trail_tp == '1' or (trail_tp == '2' and trail_plan is not None):
+                            if verbose:
+                                message = (
+                                    f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                )
+                                print(message)
+                                bot.send_message(
+                                    chat_id=chat_id,
+                                    text=message,
+                                    parse_mode='HTML'
+                                )
 
-                        update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                        trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                        i_trail_plan = trail_plan if trail_plan is not None else "100"
-                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                        trail_amt = close_price * trail_qty
-                        u_basic_qty = basic_qty - trail_qty
-                        u_basic_amt = basic_price * u_basic_qty
+                            trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                            i_trail_plan = trail_plan if trail_plan is not None else "100"
+                            trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                            trail_amt = close_price * trail_qty
+                            u_basic_qty = basic_qty - trail_qty
+                            u_basic_amt = basic_price * u_basic_qty
 
-                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
-                        signals.append({
-                            "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
-                            "종목명": stock_name,
-                            "종목코드": stock_code,
-                            "발생일자": row["일자"],
-                            "발생시간": row["시간"],
-                            "이탈가격": breakdown_check
-                        })
-                        return signals
+                            signals.append({
+                                "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                                "종목명": stock_name,
+                                "종목코드": stock_code,
+                                "발생일자": row["일자"],
+                                "발생시간": row["시간"],
+                                "이탈가격": breakdown_check
+                            })
+                            return signals
 
                     # 목표가 돌파
                     if breakout_check >= target_price:
@@ -950,7 +951,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '10 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '1 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
