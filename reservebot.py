@@ -921,7 +921,7 @@ def callback_get(update, context) :
                     WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
                     AND T.code = COALESCE(BAL.code, S.code)
                     AND T.trail_day = '{trail_day}'
-                    AND T.trail_dtm = CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                    AND T.trail_dtm >= CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
                 );
                 """
 
