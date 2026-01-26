@@ -322,6 +322,24 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
     conn.commit()
     cur03.close()
 
+def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade_tp, start_date, proc_dtm):
+    cur03 = conn.cursor()
+    cur03.execute("""
+        UPDATE public.tradng_simulation SET 
+            loss_price = %s
+            , profit_price = %s
+            , proc_dtm = %s 
+            , mod_dt = %s
+        WHERE acct_no = %s
+        AND code = %s
+        AND trade_tp = %s
+        AND trade_day <= %s
+        AND proc_yn != 'Y'
+    """, (loss_price, profit_price, proc_dtm, datetime.now(), acct_no, code, trade_tp, start_date))
+    conn.commit()
+    cur03.close()
+
+
 def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     
     trail_qty = trail_rate * 0.01
@@ -795,7 +813,11 @@ def get_kis_1min_from_datetime(
                                     parse_mode='HTML'
                                 )
 
-                            update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            if trail_plan is not None:
+                                update_stop_price_trading_mng(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            else:
+                                update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            
                             update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
                             signals.append({
@@ -881,7 +903,12 @@ def get_kis_1min_from_datetime(
                                         #     text=message,
                                         #     parse_mode='HTML'
                                         # )
-                                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    
+                                    if trail_plan is not None:
+                                        update_stop_price_trading_mng(int(new_low), int(new_high), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    else:
+                                        update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
                                     update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
@@ -955,7 +982,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '1 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
