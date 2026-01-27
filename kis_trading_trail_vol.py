@@ -507,19 +507,16 @@ def get_kis_1min_from_datetime(
     start_dt = datetime.strptime(start_date + start_time, "%Y%m%d%H%M%S")
     # start_time 기준 다음 완성 10분봉 시각
     loop_start_dt = get_next_completed_10min_dt(start_dt)
-    current = start_dt.date()
+    trade_date = start_dt.strftime("%Y%m%d")
     signals = []
 
     tenmin_state = {
-        "active": False,          # 목표가 돌파 후 활성화
         "base_key": None,
         "base_low": None,         # 기준봉 저가
         "base_high": None,        # 기준봉 고가
         "base_vol": None,         # 기준봉 거래량
         "base_end_dt": None,      # 기준봉 종료시각 (dt)
     }
-
-    trade_date = current.strftime("%Y%m%d")
 
     if verbose:
         print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
@@ -565,48 +562,6 @@ def get_kis_1min_from_datetime(
                 # 09:10 이전 미처리
                 # ===============================
                 if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
-                    continue
-
-                # ===============================
-                # 시가 갭 하락 → 기준봉 무효화
-                # ===============================
-                if (row["시간"] == "09:00" and int(row["시가"]) < stop_price):
-                    if verbose:
-                        print(
-                            f"🚫 [{row['일자']} 09:00] "
-                            f"시가 {int(row['시가']):,} < 기준봉 저가 {stop_price:,} "
-                            f"→ 기준봉 무효화"
-                        )
-
-                    tenmin_state.update({
-                        "active": False,
-                        "base_key": None,
-                        "base_low": None,
-                        "base_high": None,
-                        "base_vol": None,
-                        "base_end_dt": None,
-                    })
-                    continue
-
-                # ===============================
-                # 시가 갭 상승 → 기준봉 무효화
-                # ===============================
-                if (row["시간"] == "09:00" and int(row["시가"]) > target_price):
-                    if verbose:
-                        print(
-                            f"🚫 [{row['일자']} 09:00] "
-                            f"시가 {int(row['시가']):,} > 기준봉 고가 {target_price:,} "
-                            f"→ 기준봉 무효화"
-                        )
-
-                    tenmin_state.update({
-                        "active": False,
-                        "base_key": None,
-                        "base_low": None,
-                        "base_high": None,
-                        "base_vol": None,
-                        "base_end_dt": None,
-                    })
                     continue
 
                 high_price = int(row["고가"])
@@ -668,8 +623,6 @@ def get_kis_1min_from_datetime(
             verbose=False
         )
 
-        breakout_done = False
-
         # 입력 시간 기준 10분 이후부터만 허용
         df = df[df["dt"] >= loop_start_dt]
 
@@ -695,50 +648,6 @@ def get_kis_1min_from_datetime(
                 if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
                     continue
 
-                # ===============================
-                # 시가 갭 하락 → 기준봉 무효화
-                # ===============================
-                if (row["시간"] == "09:00" and int(row["시가"]) < stop_price):
-                    if verbose:
-                        print(
-                            f"🚫 [{row['일자']} 09:00] "
-                            f"시가 {int(row['시가']):,} < 기준봉 저가 {stop_price:,} "
-                            f"→ 기준봉 무효화"
-                        )
-
-                    tenmin_state.update({
-                        "active": False,
-                        "base_key": None,
-                        "base_low": None,
-                        "base_high": None,
-                        "base_vol": None,
-                        "base_end_dt": None,
-                    })
-                    breakout_done = False
-                    continue
-
-                # ===============================
-                # 시가 갭 상승 → 기준봉 무효화
-                # ===============================
-                if (row["시간"] == "09:00" and int(row["시가"]) > target_price):
-                    if verbose:
-                        print(
-                            f"🚫 [{row['일자']} 09:00] "
-                            f"시가 {int(row['시가']):,} > 기준봉 고가 {target_price:,} "
-                            f"→ 기준봉 무효화"
-                        )
-
-                    tenmin_state.update({
-                        "active": False,
-                        "base_key": None,
-                        "base_low": None,
-                        "base_high": None,
-                        "base_vol": None,
-                        "base_end_dt": None,
-                    })
-                    breakout_done = False
-                    continue
-
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
@@ -747,7 +656,10 @@ def get_kis_1min_from_datetime(
                 breakdown_check = low_price if breakdown_type == "low" else close_price
 
                 if high_price > low_price:
-                    if not breakout_done:
+                    # ===============================
+                    # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성
+                    # ===============================
+                    if tenmin_state["base_low"] is None:
                         # 돌파 이전 이탈 → 즉시 종료
                         if breakdown_check <= stop_price:
                             if trail_tp == '1' or (trail_tp == '2' and trail_plan is not None):
@@ -785,8 +697,6 @@ def get_kis_1min_from_datetime(
 
                         # 목표가 돌파
                         if breakout_check >= target_price:
-                            breakout_done = True
-
                             base_key = get_completed_10min_key(row["dt"])
                             base_10min = df[df["dt"].apply(get_10min_key) == base_key]
 
@@ -794,7 +704,6 @@ def get_kis_1min_from_datetime(
                                 continue
 
                             tenmin_state.update({
-                                "active": True,
                                 "base_key": base_key,
                                 "base_low": base_10min["저가"].astype(int).min(),
                                 "base_high": base_10min["고가"].astype(int).max(),
@@ -832,9 +741,9 @@ def get_kis_1min_from_datetime(
                             continue
 
                     # ===============================
-                    # 돌파 이후
+                    # 기준봉 존재 → 저가 이탈 체크
                     # ===============================
-                    if breakout_done and tenmin_state["active"]:
+                    if tenmin_state["base_low"] is not None:
                         # 기준봉 저가 이탈 → 즉시 종료
                         if low_price < tenmin_state["base_low"]:
                             if verbose:
@@ -873,7 +782,9 @@ def get_kis_1min_from_datetime(
                             })
                             return signals
 
+                        # ===============================
                         # 10분봉 완성 시 기준봉 갱신
+                        # ===============================
                         completed_key = get_completed_10min_key(row["dt"])
                         tenmin_df = df[df["dt"].apply(get_completed_10min_key) == completed_key]
 
