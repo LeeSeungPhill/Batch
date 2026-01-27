@@ -742,14 +742,14 @@ def callback_get(update, context) :
     elif data_selected.find("매수등록") != -1:
         menuNum = "71"
 
-        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가, 이탈가, 매수금액을 입력하세요.",
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(시장가:0), 이탈가, 매수금액을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)
 
     elif data_selected.find("매도등록") != -1:
         menuNum = "81"
 
-        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가, 비중(%)을 입력하세요.",
+        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(시장가:0), 비중(%)을 입력하세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id)        
     
@@ -1521,15 +1521,15 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
-                print("commandBot[3] : ", commandBot[3])    # 매수가
+                print("commandBot[3] : ", commandBot[3])    # 매수가(시장가:0)
                 print("commandBot[4] : ", commandBot[4])    # 이탈가
                 print("commandBot[5] : ", commandBot[5])    # 매수금액
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가, 이탈가, 매수금액 존재시
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(시장가:0), 이탈가, 매수금액 존재시
             if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
-                buy_price = int(commandBot[3])                          # 매수가
+                buy_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                  # 매수가(시장가:0)
                 loss_price = int(commandBot[4])                         # 이탈가
                 buy_amt = int(commandBot[5])                            # 매수금액
                 buy_qty = int(round(buy_amt/buy_price))                 # 매수량
@@ -1700,8 +1700,8 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록 미처리")
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가, 이탈가 미존재 또는 부적합")         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가 미존재 또는 부적합")         
 
         elif menuNum == '81':
             initMenuNum()
@@ -1710,14 +1710,14 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=5)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
-                print("commandBot[3] : ", commandBot[3])    # 매도가
+                print("commandBot[3] : ", commandBot[3])    # 매도가(시장가:0)
                 print("commandBot[4] : ", commandBot[4])    # 비중(%)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가, 비중(%) 존재시
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가(시장가:0), 비중(%) 존재시
             if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
-                sell_price = int(commandBot[3])                         # 매도가
+                sell_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                 # 매도가(시장가:0)
                 sell_rate = int(commandBot[4])                          # 비중(%)
 
                 # 계좌잔고 조회
@@ -1839,8 +1839,8 @@ def echo(update, context):
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도량 부족 미처리")                                
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가, 비중(%) 미존재 또는 부적합")                         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%) 미존재 또는 부적합")                         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
