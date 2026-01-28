@@ -8,6 +8,7 @@ from psycopg2.extras import execute_values
 from telegram import Bot
 from telegram.ext import Updater
 import traceback
+import time
 
 # 기본 DB 연결 정보
 conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
@@ -440,7 +441,9 @@ for nick in nickname_list:
             bot.send_message(
                 chat_id=chat_id,
                 text=message
-            )    
+            )  
+
+        time.sleep(3)                                              
 
     except Exception as e:
         error_msg = (
