@@ -558,12 +558,6 @@ def get_kis_1min_from_datetime(
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
-                # ===============================
-                # 09:10 이전 미처리
-                # ===============================
-                if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
-                    continue
-
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
@@ -641,13 +635,6 @@ def get_kis_1min_from_datetime(
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
-
-                # ===============================
-                # 09:10 이전 미처리
-                # ===============================
-                if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
-                    continue
-
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
@@ -656,6 +643,12 @@ def get_kis_1min_from_datetime(
                 breakdown_check = low_price if breakdown_type == "low" else close_price
 
                 if high_price > low_price:
+                    # ===============================
+                    # 09:10 이전 미처리
+                    # ===============================
+                    if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
+                        continue
+                    
                     # ===============================
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성
                     # ===============================
