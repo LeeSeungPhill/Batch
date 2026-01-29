@@ -11,6 +11,7 @@ import kis_api_resp as resp
 from telegram import Bot
 from telegram.ext import Updater
 import traceback
+import time
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -484,6 +485,7 @@ def get_kis_1min_full_day(
     )
 
 def get_kis_1min_from_datetime(
+    tenmin_state: dict, 
     stock_code: str,
     stock_name: str,
     start_date: str,
@@ -509,14 +511,6 @@ def get_kis_1min_from_datetime(
     loop_start_dt = get_next_completed_10min_dt(start_dt)
     trade_date = start_dt.strftime("%Y%m%d")
     signals = []
-
-    tenmin_state = {
-        "base_key": None,
-        "base_low": None,         # 기준봉 저가
-        "base_high": None,        # 기준봉 고가
-        "base_vol": None,         # 기준봉 거래량
-        "base_end_dt": None,      # 기준봉 종료시각 (dt)
-    }
 
     if verbose:
         print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
@@ -824,6 +818,60 @@ def get_kis_1min_from_datetime(
 
     return signals
 
+def run_trading_once(tenmin_state):
+
+    # 매매추적 조회
+    cur200 = conn.cursor()
+    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+    result_two00 = cur200.fetchall()
+    cur200.close()
+
+    if len(result_two00) > 0:
+    
+        for row in result_two00:
+
+            (
+                code, name, trail_day, trail_dtm,
+                target_price, stop_price, basic_price,
+                basic_qty, trail_tp, trail_plan, proc_min
+            ) = row
+
+            # 종목별 상태 초기화
+            if code not in tenmin_state:
+                tenmin_state[code] = {
+                    "base_key": None,
+                    "base_low": None,
+                    "base_high": None,
+                    "base_vol": None,
+                    "base_end_dt": None,
+                }
+
+            signal = get_kis_1min_from_datetime(
+                tenmin_state=tenmin_state[code],
+                stock_code=code,
+                stock_name=name, 
+                start_date=trail_day,
+                start_time=trail_dtm,
+                target_price=int(target_price),
+                stop_price=int(stop_price),
+                basic_price=int(basic_price),
+                basic_qty=int(basic_qty),
+                trail_tp=trail_tp,
+                trail_plan=trail_plan,
+                proc_min=proc_min,
+                access_token=access_token,
+                app_key=app_key,
+                app_secret=app_secret,
+                breakout_type="high",
+                verbose=True
+            )
+
+            if signal:
+                print("\n📌 신호 결과")
+                print(signal)
+            else:
+                print("\n📌 아직 신호 없음")
+
 if __name__ == "__main__":
 
     if is_business_day(today):
@@ -891,38 +939,15 @@ if __name__ == "__main__":
 
         cur199.close()        
 
-        # 매매추적 조회
-        cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
-        result_two00 = cur200.fetchall()
-        cur200.close()
+        tenmin_state = {}
+        
+        while True:
 
-        if len(result_two00) > 0:
-            
-            for i in result_two00:
+            now = datetime.now()
 
-                signal = get_kis_1min_from_datetime(
-                    stock_code=i[0],
-                    stock_name=i[1], 
-                    start_date=i[2],
-                    start_time=i[3],
-                    target_price=int(i[4]),
-                    stop_price=int(i[5]),
-                    basic_price=int(i[6]),
-                    basic_qty=int(i[7]),
-                    trail_tp=i[8],
-                    trail_plan=i[9],
-                    proc_min=i[10],
-                    access_token=ac['access_token'],
-                    app_key=ac['app_key'],
-                    app_secret=ac['app_secret'],
-                    breakout_type="high",
-                    verbose=True
-                )
+            # 장 시간만 실행
+            if is_business_day(today) and time(9, 0) <= now.time() <= time(15, 30):
 
-                if signal:
-                    print("\n📌 신호 결과")
-                    print(signal)
-                else:
-                    print("\n📌 아직 신호 없음")
-                    
+                run_trading_once(tenmin_state)
+
+            time.sleep(60)
