@@ -389,12 +389,13 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
     conn.commit()
     cur04.close()    
 
-def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_trail(stop_price, target_price, volumn, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
             stop_price = %s      
             , target_price = %s
+            , volumn = %s      
             , trail_tp = %s
             , proc_min = %s
             , mod_dt = %s
@@ -403,7 +404,7 @@ def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, tra
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'
-    """, (stop_price, target_price, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (stop_price, target_price, volumn, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
@@ -495,6 +496,7 @@ def get_kis_1min_from_datetime(
     trail_tp: str,
     trail_plan: str,
     proc_min: str,
+    volumn: int,
     access_token: str,
     app_key: str,
     app_secret: str,
@@ -509,14 +511,6 @@ def get_kis_1min_from_datetime(
     loop_start_dt = get_next_completed_10min_dt(start_dt)
     trade_date = start_dt.strftime("%Y%m%d")
     signals = []
-
-    tenmin_state = {
-        "base_key": None,
-        "base_low": None,         # 기준봉 저가
-        "base_high": None,        # 기준봉 고가
-        "base_vol": None,         # 기준봉 거래량
-        "base_end_dt": None,      # 기준봉 종료시각 (dt)
-    }
 
     if verbose:
         print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
@@ -613,6 +607,19 @@ def get_kis_1min_from_datetime(
 
     else:
 
+        if trail_tp == '2':
+            tenmin_state = {
+                "base_low": int(stop_price) if stop_price else 0,
+                "base_high": int(target_price) if target_price else 0,
+                "base_vol": int(volumn) if volumn else 0,
+            }
+        else:
+            tenmin_state = {
+                "base_low": None,         # 기준봉 저가
+                "base_high": None,        # 기준봉 고가
+                "base_vol": None          # 기준봉 거래량
+            }
+
         df = get_kis_1min_full_day(
             stock_code=stock_code,
             trade_date=trade_date,
@@ -661,7 +668,7 @@ def get_kis_1min_from_datetime(
                     if tenmin_state["base_low"] is None:
                         # 돌파 이전 이탈 → 즉시 종료
                         if breakdown_check <= stop_price:
-                            if trail_tp == '1' or (trail_tp == '2' and trail_plan is not None):
+                            if trail_tp == '1':
                                 if verbose:
                                     message = (
                                         f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
@@ -704,11 +711,9 @@ def get_kis_1min_from_datetime(
                                     continue
 
                                 tenmin_state.update({
-                                    "base_key": base_key,
                                     "base_low": base_10min["저가"].astype(int).min(),
                                     "base_high": base_10min["고가"].astype(int).max(),
-                                    "base_vol": base_10min["거래량"].astype(int).sum(),
-                                    "base_end_dt": base_key + timedelta(minutes=10),
+                                    "base_vol": base_10min["거래량"].astype(int).sum()
                                 })
 
                                 if verbose:
@@ -722,12 +727,9 @@ def get_kis_1min_from_datetime(
                                         parse_mode='HTML'
                                     )
 
-                                if trail_plan is not None:
-                                    update_stop_price_trading_mng(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                else:
-                                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
-                                update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                                update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), int(tenmin_state['base_vol']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
                                 signals.append({
                                     "signal_type": "BREAKOUT",
@@ -743,7 +745,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 기준봉 존재 → 저가 이탈 체크
                     # ===============================
-                    if tenmin_state["base_low"] is not None:
+                    else:
                         # 기준봉 저가 이탈 → 즉시 종료
                         if low_price < tenmin_state["base_low"]:
                             if verbose:
@@ -796,11 +798,9 @@ def get_kis_1min_from_datetime(
                             if new_high > new_low:
                                 if new_high > tenmin_state["base_high"] or new_vol > tenmin_state["base_vol"]:
                                     tenmin_state.update({
-                                        "base_key": completed_key,
                                         "base_low": new_low,
                                         "base_high": new_high,
-                                        "base_vol": new_vol,
-                                        "base_end_dt": completed_key
+                                        "base_vol": new_vol
                                     })
 
                                     if verbose:
@@ -820,7 +820,7 @@ def get_kis_1min_from_datetime(
                                     else:
                                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                                    update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                                    update_trading_trail(int(new_low), int(new_high), int(new_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
 
@@ -893,7 +893,7 @@ if __name__ == "__main__":
 
         # 매매추적 조회
         cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
 
@@ -913,6 +913,7 @@ if __name__ == "__main__":
                     trail_tp=i[8],
                     trail_plan=i[9],
                     proc_min=i[10],
+                    volumn=i[11],
                     access_token=ac['access_token'],
                     app_key=ac['app_key'],
                     app_secret=ac['app_secret'],

@@ -1769,7 +1769,7 @@ def echo(update, context):
 
                     # 매매추적 update
                     cur400 = conn.cursor()
-                    update_query = """
+                    update_query1 = """
                         UPDATE trading_trail tt SET
                             trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
                         FROM (
@@ -1794,14 +1794,35 @@ def echo(update, context):
                         RETURNING 1;
                         """
                     # update 인자값 설정
-                    cur400.execute(update_query, (hour_minute, "1", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
+                    cur400.execute(update_query1, (hour_minute, "2", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
-                    was_updated = cur400.fetchone() is not None
+                    was_updated1 = cur400.fetchone() is not None
+
+                    # 매매시뮬레이션 update
+                    cur401 = conn.cursor()
+                    update_query2 = """
+                        UPDATE public.tradng_simulation SET 
+                            loss_price = %s
+                            , profit_price = %s
+                            , proc_dtm = %s 
+                            , proc_yn = %s      
+                            , mod_dt = %s
+                        WHERE acct_no = %s
+                        AND code = %s
+                        AND trade_tp = %s
+                        AND trade_day <= %s
+                        AND proc_yn != 'Y'
+                        """
+                    # update 인자값 설정
+                    cur401.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), acct_no, code, "1", year_day))
+                    
+                    was_updated2 = cur401.fetchone() is not None
 
                     conn.commit()
                     cur400.close()
+                    cur401.close()
 
-                    if was_updated:
+                    if was_updated1 and was_updated2:
                         context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
 
                         # 매매시뮬레이션 insert
