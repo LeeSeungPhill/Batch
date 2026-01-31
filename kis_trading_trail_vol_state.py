@@ -11,7 +11,6 @@ import kis_api_resp as resp
 from telegram import Bot
 from telegram.ext import Updater
 import traceback
-import time
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -76,6 +75,155 @@ def account(nickname):
         'bot_token2': bot_token2,
         'chat_id': chat_id
     }
+
+# 일별주문체결조회
+def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC0081R",                            # (3개월이내) TTTC0081R, (3개월이전) CTSC9215R
+               "custtype": "P"}
+    params = {
+            'CANO': acct_no,                                    # 종합계좌번호 계좌번호 체계(8-2)의 앞 8자리
+            'ACNT_PRDT_CD':"01",                                # 계좌상품코드 계좌번호 체계(8-2)의 뒤 2자리
+            'SORT_DVSN': "01",                                  # 00: 최근 순, 01: 과거 순, 02: 최근 순
+            'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),  # 조회시작일(8자리) 
+            'INQR_END_DT': datetime.now().strftime('%Y%m%d'),   # 조회종료일(8자리)
+            # 'INQR_STRT_DT': "20250522",  # 조회시작일(8자리) 
+            # 'INQR_END_DT': "20250522",   # 조회종료일(8자리)
+            'SLL_BUY_DVSN_CD': "00",                            # 매도매수구분코드 00 : 전체 / 01 : 매도 / 02 : 매수
+            'PDNO': code,                                       # 종목번호(6자리) ""공란입력 시, 전체
+            'ORD_GNO_BRNO': "",                                 # 주문채번지점번호 ""공란입력 시, 전체
+            'ODNO': order_no,                                   # 주문번호 ""공란입력 시, 전체
+            'CCLD_DVSN': "00",                                  # 체결구분 00 전체, 01 체결, 02 미체결
+            'INQR_DVSN': "01",                                  # 조회구분 00 역순, 01 정순
+            'INQR_DVSN_1': "",                                  # 조회구분1 없음: 전체, 1: ELW, 2: 프리보드
+            'INQR_DVSN_3': "00",                                # 조회구분3 00 전체, 01 현금, 02 신용, 03 담보, 04 대주, 05 대여, 06 자기융자신규/상환, 07 유통융자신규/상환
+            'EXCG_ID_DVSN_CD': "ALL",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT, SOR (Smart Order Routing) : SOR, ALL : 전체
+            'CTX_AREA_NK100': "",
+            'CTX_AREA_FK100': "" 
+    }
+    PATH = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+    URL = f"{BASE_URL}/{PATH}"
+
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False)
+        ar = resp.APIResp(res)
+
+        # 응답에 output1이 있는지 확인
+        body = ar.getBody()
+        return body.output1 if hasattr(body, 'output1') else []
+
+    except Exception as e:
+        print("일별주문체결조회 중 오류 발생:", e)
+        return []
+
+# 주식주문(정정취소)
+def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC0013U",            # TTTC0013U[실전투자], VTTC0013U[모의투자]
+               "custtype": "P"
+    }
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "KRX_FWDG_ORD_ORGNO": "06010",
+               "ORGN_ODNO": order_no,
+               "ORD_DVSN": "00" if int(order_price) > 0 else "01",  # 지정가 : 00, 시장가 : 01
+               "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
+               "ORD_QTY": str(order_qty),
+               "ORD_UNPR": str(order_price),
+               "QTY_ALL_ORD_YN": "Y"            # 전량 : Y, 일부 : N
+    }
+    PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
+    URL = f"{BASE_URL}/{PATH}"
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
+
+# 매도 주문정보 존재시 취소 처리
+def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
+    
+    result_msgs = []
+
+    try:
+        # 일별주문체결 조회
+        output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, '')
+
+        if len(output1) > 0:
+        
+            tdf = pd.DataFrame(output1)
+            tdf.set_index('odno')
+            d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+            order_no = 0
+
+            for i, name in enumerate(d.index):
+
+                # 매도주문 잔여수량 존재시
+                if d['sll_buy_dvsn_cd'][i] == "01": 
+                    
+                    if int(d['rmn_qty'][i]) > 0: 
+                        order_no = int(d['odno'][i])
+
+                        # 주문취소
+                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
+                        if c['ODNO'] != "":
+                            print("매도주문취소 완료")
+
+                        else:
+                            print("매도주문취소 실패")
+                            msg = f"[{d['prdt_name'][i]}] 매도주문취소 실패"
+                            result_msgs.append(msg)
+            
+    except Exception as e:
+        print('매도주문취소 오류.', e)
+        msg = f"[{code}] 매도주문취소 오류 - {str(e)}"
+        result_msgs.append(msg)
+
+    final_message = result_msgs if result_msgs else "success"
+    
+    return final_message   
+
+# 주식주문(현금)
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
+
+    if buy_flag:
+        tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
+    else:
+        tr_id = "TTTC0011U"                     #sell : TTTC0011U[실전투자], VTTC0011U[모의투자]
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": tr_id,
+               "custtype": "P"
+    }
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "PDNO": stock_code,
+               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
+               "ORD_QTY": order_qty,
+               "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
+    }
+    # 스톱지정가일 때만 조건가격 추가
+    if ord_dvsn == "22":
+        params["CNDT_PRIC"] = str(cndt_price)
+
+    PATH = "uapi/domestic-stock/v1/trading/order-cash"
+    URL = f"{BASE_URL}/{PATH}"
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
 
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
@@ -341,7 +489,7 @@ def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade
     cur03.close()
 
 
-def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     
     trail_qty = trail_rate * 0.01
     
@@ -365,9 +513,58 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
         AND trail_tp = 'L'                  
     """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
-    cur04.close()    
+    cur04.close()
 
-def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+    # 매도 주문정보 존재시 취소 처리
+    if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
+
+        result_msgs = []
+        try:
+            # 매도 : 지정가 주문
+            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+
+            if c['ODNO'] != "":
+                # 일별주문체결 조회
+                output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                tdf = pd.DataFrame(output1)
+                tdf.set_index('odno')
+                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                for k, name in enumerate(d.index):
+                    d_order_no = int(d['odno'][k])
+                    d_order_type = d['sll_buy_dvsn_cd_name'][k]
+                    d_order_dt = d['ord_dt'][k]
+                    d_order_tmd = d['ord_tmd'][k]
+                    d_name = d['prdt_name'][k]
+                    d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                    d_order_amount = d['ord_qty'][k]
+                    d_total_complete_qty = d['tot_ccld_qty'][k]
+                    d_remain_qty = d['rmn_qty'][k]
+                    d_total_complete_amt = d['tot_ccld_amt'][k]
+
+                    print("매도주문 완료")
+                    msg = f"[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                    result_msgs.append(msg)
+
+            else:
+                print("매도주문 실패")
+                msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+                result_msgs.append(msg)
+
+        except Exception as e:
+            print('매도주문 오류.', e)
+            msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
+            result_msgs.append(msg)
+
+        message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
+        print(message)
+        bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='HTML'
+        )       
+
+def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
@@ -388,14 +585,64 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
         AND trail_tp <> 'L'                  
     """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
-    cur04.close()    
+    cur04.close()
 
-def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
+    # 매도 주문정보 존재시 취소 처리
+    if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
+
+        result_msgs = []
+        try:
+            # 매도 : 지정가 주문
+            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+
+            if c['ODNO'] != "":
+                # 일별주문체결 조회
+                output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                tdf = pd.DataFrame(output1)
+                tdf.set_index('odno')
+                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                for k, name in enumerate(d.index):
+                    d_order_no = int(d['odno'][k])
+                    d_order_type = d['sll_buy_dvsn_cd_name'][k]
+                    d_order_dt = d['ord_dt'][k]
+                    d_order_tmd = d['ord_tmd'][k]
+                    d_name = d['prdt_name'][k]
+                    d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                    d_order_amount = d['ord_qty'][k]
+                    d_total_complete_qty = d['tot_ccld_qty'][k]
+                    d_remain_qty = d['rmn_qty'][k]
+                    d_total_complete_amt = d['tot_ccld_amt'][k]
+
+                    print("매도주문 완료")
+                    msg = f"[이탈가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                    result_msgs.append(msg)
+
+            else:
+                print("매도주문 실패")
+                msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+                result_msgs.append(msg)
+
+        except Exception as e:
+            print('매도주문 오류.', e)
+            msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
+            result_msgs.append(msg)
+
+        message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
+        print(message)
+        bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='HTML'
+        )        
+
+def update_trading_trail(stop_price, target_price, volumn, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
     cur04.execute("""
         UPDATE public.trading_trail SET 
             stop_price = %s      
             , target_price = %s
+            , volumn = %s      
             , trail_tp = %s
             , proc_min = %s
             , mod_dt = %s
@@ -404,7 +651,7 @@ def update_trading_trail(stop_price, target_price, acct_no, code, trail_day, tra
         AND trail_day = %s
         AND trail_dtm = %s
         AND trail_tp <> 'L'
-    """, (stop_price, target_price, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
+    """, (stop_price, target_price, volumn, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
 
@@ -485,7 +732,6 @@ def get_kis_1min_full_day(
     )
 
 def get_kis_1min_from_datetime(
-    tenmin_state: dict, 
     stock_code: str,
     stock_name: str,
     start_date: str,
@@ -497,6 +743,7 @@ def get_kis_1min_from_datetime(
     trail_tp: str,
     trail_plan: str,
     proc_min: str,
+    volumn: int,
     access_token: str,
     app_key: str,
     app_secret: str,
@@ -593,7 +840,7 @@ def get_kis_1min_from_datetime(
                         u_basic_qty = basic_qty - trail_qty
                         u_basic_amt = basic_price * u_basic_qty
 
-                        update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                         signals.append({
                             "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -606,6 +853,19 @@ def get_kis_1min_from_datetime(
                         return signals
 
     else:
+
+        if trail_tp == '2':
+            tenmin_state = {
+                "base_low": int(stop_price) if stop_price else 0,
+                "base_high": int(target_price) if target_price else 0,
+                "base_vol": int(volumn) if volumn else 0,
+            }
+        else:
+            tenmin_state = {
+                "base_low": None,         # 기준봉 저가
+                "base_high": None,        # 기준봉 고가
+                "base_vol": None          # 기준봉 거래량
+            }
 
         df = get_kis_1min_full_day(
             stock_code=stock_code,
@@ -655,7 +915,7 @@ def get_kis_1min_from_datetime(
                     if tenmin_state["base_low"] is None:
                         # 돌파 이전 이탈 → 즉시 종료
                         if breakdown_check <= stop_price:
-                            if trail_tp == '1' or (trail_tp == '2' and trail_plan is not None):
+                            if trail_tp == '1':
                                 if verbose:
                                     message = (
                                         f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
@@ -676,7 +936,7 @@ def get_kis_1min_from_datetime(
                                 u_basic_qty = basic_qty - trail_qty
                                 u_basic_amt = basic_price * u_basic_qty
 
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
 
                                 signals.append({
                                     "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -698,11 +958,9 @@ def get_kis_1min_from_datetime(
                                     continue
 
                                 tenmin_state.update({
-                                    "base_key": base_key,
                                     "base_low": base_10min["저가"].astype(int).min(),
                                     "base_high": base_10min["고가"].astype(int).max(),
-                                    "base_vol": base_10min["거래량"].astype(int).sum(),
-                                    "base_end_dt": base_key + timedelta(minutes=10),
+                                    "base_vol": base_10min["거래량"].astype(int).sum()
                                 })
 
                                 if verbose:
@@ -716,12 +974,9 @@ def get_kis_1min_from_datetime(
                                         parse_mode='HTML'
                                     )
 
-                                if trail_plan is not None:
-                                    update_stop_price_trading_mng(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                else:
-                                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
-                                update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                                update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), int(tenmin_state['base_vol']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
                                 signals.append({
                                     "signal_type": "BREAKOUT",
@@ -737,7 +992,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 기준봉 존재 → 저가 이탈 체크
                     # ===============================
-                    if tenmin_state["base_low"] is not None:
+                    else:
                         # 기준봉 저가 이탈 → 즉시 종료
                         if low_price < tenmin_state["base_low"]:
                             if verbose:
@@ -760,10 +1015,10 @@ def get_kis_1min_from_datetime(
 
                             if basic_qty == trail_qty:
                                 update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                             else:    
                                 update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
 
                             signals.append({
                                 "signal_type": "BASE_10MIN_LOW_BREAK",
@@ -790,11 +1045,9 @@ def get_kis_1min_from_datetime(
                             if new_high > new_low:
                                 if new_high > tenmin_state["base_high"] or new_vol > tenmin_state["base_vol"]:
                                     tenmin_state.update({
-                                        "base_key": completed_key,
                                         "base_low": new_low,
                                         "base_high": new_high,
-                                        "base_vol": new_vol,
-                                        "base_end_dt": completed_key
+                                        "base_vol": new_vol
                                     })
 
                                     if verbose:
@@ -814,63 +1067,9 @@ def get_kis_1min_from_datetime(
                                     else:
                                         update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                                    update_trading_trail(int(new_low), int(new_high), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
+                                    update_trading_trail(int(new_low), int(new_high), int(new_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
     return signals
-
-def run_trading_once(tenmin_state):
-
-    # 매매추적 조회
-    cur200 = conn.cursor()
-    cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
-    result_two00 = cur200.fetchall()
-    cur200.close()
-
-    if len(result_two00) > 0:
-    
-        for row in result_two00:
-
-            (
-                code, name, trail_day, trail_dtm,
-                target_price, stop_price, basic_price,
-                basic_qty, trail_tp, trail_plan, proc_min
-            ) = row
-
-            # 종목별 상태 초기화
-            if code not in tenmin_state:
-                tenmin_state[code] = {
-                    "base_key": None,
-                    "base_low": None,
-                    "base_high": None,
-                    "base_vol": None,
-                    "base_end_dt": None,
-                }
-
-            signal = get_kis_1min_from_datetime(
-                tenmin_state=tenmin_state[code],
-                stock_code=code,
-                stock_name=name, 
-                start_date=trail_day,
-                start_time=trail_dtm,
-                target_price=int(target_price),
-                stop_price=int(stop_price),
-                basic_price=int(basic_price),
-                basic_qty=int(basic_qty),
-                trail_tp=trail_tp,
-                trail_plan=trail_plan,
-                proc_min=proc_min,
-                access_token=access_token,
-                app_key=app_key,
-                app_secret=app_secret,
-                breakout_type="high",
-                verbose=True
-            )
-
-            if signal:
-                print("\n📌 신호 결과")
-                print(signal)
-            else:
-                print("\n📌 아직 신호 없음")
 
 if __name__ == "__main__":
 
@@ -939,15 +1138,39 @@ if __name__ == "__main__":
 
         cur199.close()        
 
-        tenmin_state = {}
-        
-        while True:
+        # 매매추적 조회
+        cur200 = conn.cursor()
+        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+        result_two00 = cur200.fetchall()
+        cur200.close()
 
-            now = datetime.now()
+        if len(result_two00) > 0:
+            
+            for i in result_two00:
 
-            # 장 시간만 실행
-            if is_business_day(today) and time(9, 0) <= now.time() <= time(15, 30):
+                signal = get_kis_1min_from_datetime(
+                    stock_code=i[0],
+                    stock_name=i[1], 
+                    start_date=i[2],
+                    start_time=i[3],
+                    target_price=int(i[4]),
+                    stop_price=int(i[5]),
+                    basic_price=int(i[6]),
+                    basic_qty=int(i[7]),
+                    trail_tp=i[8],
+                    trail_plan=i[9],
+                    proc_min=i[10],
+                    volumn=i[11],
+                    access_token=ac['access_token'],
+                    app_key=ac['app_key'],
+                    app_secret=ac['app_secret'],
+                    breakout_type="high",
+                    verbose=True
+                )
 
-                run_trading_once(tenmin_state)
-
-            time.sleep(60)
+                if signal:
+                    print("\n📌 신호 결과")
+                    print(signal)
+                else:
+                    print("\n📌 아직 신호 없음")
+                    
