@@ -331,6 +331,40 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
 
     return ar.getBody().output['nrcvb_buy_amt']
 
+# 주식주문(현금)
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
+
+    if buy_flag:
+        tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
+    else:
+        tr_id = "TTTC0011U"                     #sell : TTTC0011U[실전투자], VTTC0011U[모의투자]
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": tr_id,
+               "custtype": "P"
+    }
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "PDNO": stock_code,
+               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
+               "ORD_QTY": order_qty,
+               "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
+    }
+    # 스톱지정가일 때만 조건가격 추가
+    if ord_dvsn == "22":
+        params["CNDT_PRIC"] = str(cndt_price)
+
+    PATH = "uapi/domestic-stock/v1/trading/order-cash"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    ar = resp.APIResp(res)
+    #ar.printAll()
+    return ar.getBody().output
+
 # 일별주문체결 조회
 def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no):
 
@@ -1696,6 +1730,56 @@ def echo(update, context):
 
                 if was_inserted:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록", parse_mode='HTML')
+
+                    # 매수예정금액
+                    buy_expect_sum = buy_price * buy_qty
+                    print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
+                    # 매수 가능(현금) 조회
+                    b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                    print("매수 가능(현금) : " + format(int(b), ',d'));
+                
+                    if int(b) > int(buy_expect_sum):  # 매수가능(현금)이 매수예정금액보다 큰 경우
+
+                        ord_dvsn = "00"    
+
+                        try:
+                            # 매수
+                            c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(buy_qty), str(buy_price))
+                        
+                            if c['ODNO'] != "":
+
+                                # 일별주문체결 조회
+                                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                                tdf = pd.DataFrame(output1)
+                                tdf.set_index('odno')
+                                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                for i, name in enumerate(d.index):
+                                    d_order_no = int(d['odno'][i])
+                                    d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                    d_order_dt = d['ord_dt'][i]
+                                    d_order_tmd = d['ord_tmd'][i]
+                                    d_name = d['prdt_name'][i]
+                                    d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                    d_order_amount = d['ord_qty'][i]
+                                    d_total_complete_qty = d['tot_ccld_qty'][i]
+                                    d_remain_qty = d['rmn_qty'][i]
+                                    d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                    print("매수주문 완료")
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + d_order_no + "</code>", parse_mode='HTML')
+
+                            else:
+                                print("매수주문 실패")
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
+
+                        except Exception as e:
+                            print('매수주문 오류.', e)
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 [매수주문 오류] - " + str(e), parse_mode='HTML')
+                        
+                    else:
+                        print("매수 가능(현금) 부족")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') +"원 부족")
                 else:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록 미처리")
 
