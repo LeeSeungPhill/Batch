@@ -493,148 +493,172 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
     
     trail_qty = trail_rate * 0.01
     
-    cur04 = conn.cursor()
-    cur04.execute("""
-        UPDATE public.trading_trail SET 
-            trail_price = %s
-            , trail_qty = %s
-            , trail_amt = %s      
-            , trail_rate = %s      
-            , trail_plan = %s
-            , trail_tp = %s
-            , proc_min = %s
-            , basic_qty = %s
-            , basic_amt = %s
-            , mod_dt = %s
-        WHERE acct_no = %s
-        AND code = %s
-        AND trail_day = %s
-        AND trail_dtm = %s
-        AND trail_tp = 'L'                  
-    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
-    conn.commit()
-    cur04.close()
+    try:
+        cur04 = conn.cursor()
+        cur04.execute("""
+            UPDATE public.trading_trail SET 
+                trail_price = %s
+                , trail_qty = %s
+                , trail_amt = %s      
+                , trail_rate = %s      
+                , trail_plan = %s
+                , trail_tp = %s
+                , proc_min = %s
+                , basic_qty = %s
+                , basic_amt = %s
+                , mod_dt = %s
+            WHERE acct_no = %s
+            AND code = %s
+            AND trail_day = %s
+            AND trail_dtm = %s
+            AND trail_tp = 'L'                  
+        """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+        conn.commit()
+        cur04.close()
 
-    # 매도 주문정보 존재시 취소 처리
-    if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
+        # 매도 주문정보 존재시 취소 처리
+        if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
 
-        result_msgs = []
-        try:
-            # 매도 : 지정가 주문
-            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+            result_msgs = []
+            try:
+                # 매도 : 지정가 주문
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
 
-            if c['ODNO'] != "":
-                # 일별주문체결 조회
-                output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                tdf = pd.DataFrame(output1)
-                tdf.set_index('odno')
-                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                if c['ODNO'] != "":
+                    # 일별주문체결 조회
+                    output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                for k, name in enumerate(d.index):
-                    d_order_no = int(d['odno'][k])
-                    d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    d_order_dt = d['ord_dt'][k]
-                    d_order_tmd = d['ord_tmd'][k]
-                    d_name = d['prdt_name'][k]
-                    d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    d_order_amount = d['ord_qty'][k]
-                    d_total_complete_qty = d['tot_ccld_qty'][k]
-                    d_remain_qty = d['rmn_qty'][k]
-                    d_total_complete_amt = d['tot_ccld_amt'][k]
+                    for k, name in enumerate(d.index):
+                        d_order_no = int(d['odno'][k])
+                        d_order_type = d['sll_buy_dvsn_cd_name'][k]
+                        d_order_dt = d['ord_dt'][k]
+                        d_order_tmd = d['ord_tmd'][k]
+                        d_name = d['prdt_name'][k]
+                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                        d_order_amount = d['ord_qty'][k]
+                        d_total_complete_qty = d['tot_ccld_qty'][k]
+                        d_remain_qty = d['rmn_qty'][k]
+                        d_total_complete_amt = d['tot_ccld_amt'][k]
 
-                    print("매도주문 완료")
-                    msg = f"[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        print("매도주문 완료")
+                        msg = f"[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        result_msgs.append(msg)
+
+                else:
+                    print("매도주문 실패")
+                    msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
                     result_msgs.append(msg)
 
-            else:
-                print("매도주문 실패")
-                msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+            except Exception as e:
+                print('매도주문 오류.', e)
+                msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
                 result_msgs.append(msg)
 
-        except Exception as e:
-            print('매도주문 오류.', e)
-            msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
-            result_msgs.append(msg)
+            try:
+                message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
+                print(message)
+                bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode='HTML'
+                )
+            except Exception as te:
+                print(f"텔레그램 발송 실패: {te}")
+                   
+    except Exception as total_e:
+        # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘
+        print(f"CRITICAL: update_trading_close 함수 전체 에러: {total_e}")
+        # 에러가 나도 상위로 raise 하지 않고 리턴함
+        return False 
 
-        message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
-        print(message)
-        bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode='HTML'
-        )       
+    return True          
 
 def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
-    cur04 = conn.cursor()
-    cur04.execute("""
-        UPDATE public.trading_trail SET 
-            trail_price = %s
-            , trail_qty = %s
-            , trail_amt = %s 
-            , trail_rate = %s      
-            , trail_plan = %s
-            , trail_tp = %s
-            , proc_min = %s
-            , basic_qty = %s
-            , basic_amt = %s
-            , mod_dt = %s
-        WHERE acct_no = %s
-        AND code = %s
-        AND trail_day = %s
-        AND trail_dtm = %s
-        AND trail_tp <> 'L'                  
-    """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
-    conn.commit()
-    cur04.close()
+    try:
+        cur04 = conn.cursor()
+        cur04.execute("""
+            UPDATE public.trading_trail SET 
+                trail_price = %s
+                , trail_qty = %s
+                , trail_amt = %s 
+                , trail_rate = %s      
+                , trail_plan = %s
+                , trail_tp = %s
+                , proc_min = %s
+                , basic_qty = %s
+                , basic_amt = %s
+                , mod_dt = %s
+            WHERE acct_no = %s
+            AND code = %s
+            AND trail_day = %s
+            AND trail_dtm = %s
+            AND trail_tp <> 'L'                  
+        """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+        conn.commit()
+        cur04.close()
 
-    # 매도 주문정보 존재시 취소 처리
-    if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
+        # 매도 주문정보 존재시 취소 처리
+        if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
 
-        result_msgs = []
-        try:
-            # 매도 : 지정가 주문
-            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+            result_msgs = []
+            try:
+                # 매도 : 지정가 주문
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
 
-            if c['ODNO'] != "":
-                # 일별주문체결 조회
-                output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                tdf = pd.DataFrame(output1)
-                tdf.set_index('odno')
-                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                if c['ODNO'] != "":
+                    # 일별주문체결 조회
+                    output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
 
-                for k, name in enumerate(d.index):
-                    d_order_no = int(d['odno'][k])
-                    d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    d_order_dt = d['ord_dt'][k]
-                    d_order_tmd = d['ord_tmd'][k]
-                    d_name = d['prdt_name'][k]
-                    d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    d_order_amount = d['ord_qty'][k]
-                    d_total_complete_qty = d['tot_ccld_qty'][k]
-                    d_remain_qty = d['rmn_qty'][k]
-                    d_total_complete_amt = d['tot_ccld_amt'][k]
+                    for k, name in enumerate(d.index):
+                        d_order_no = int(d['odno'][k])
+                        d_order_type = d['sll_buy_dvsn_cd_name'][k]
+                        d_order_dt = d['ord_dt'][k]
+                        d_order_tmd = d['ord_tmd'][k]
+                        d_name = d['prdt_name'][k]
+                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                        d_order_amount = d['ord_qty'][k]
+                        d_total_complete_qty = d['tot_ccld_qty'][k]
+                        d_remain_qty = d['rmn_qty'][k]
+                        d_total_complete_amt = d['tot_ccld_amt'][k]
 
-                    print("매도주문 완료")
-                    msg = f"[이탈가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        print("매도주문 완료")
+                        msg = f"[이탈가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        result_msgs.append(msg)
+
+                else:
+                    print("매도주문 실패")
+                    msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
                     result_msgs.append(msg)
 
-            else:
-                print("매도주문 실패")
-                msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+            except Exception as e:
+                print('매도주문 오류.', e)
+                msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
                 result_msgs.append(msg)
 
-        except Exception as e:
-            print('매도주문 오류.', e)
-            msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
-            result_msgs.append(msg)
+            try:
+                message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
+                print(message)
+                bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode='HTML'
+                )
+            except Exception as te:
+                print(f"텔레그램 발송 실패: {te}")
 
-        message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다." 
-        print(message)
-        bot.send_message(
-            chat_id=chat_id,
-            text=message,
-            parse_mode='HTML'
-        )        
+    except Exception as total_e:
+        # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘
+        print(f"CRITICAL: update_trading_close 함수 전체 에러: {total_e}")
+        # 에러가 나도 상위로 raise 하지 않고 리턴함
+        return False 
+
+    return True          
 
 def update_trading_trail(stop_price, target_price, volumn, acct_no, code, trail_day, trail_dtm, trail_tp, proc_min):
     cur04 = conn.cursor()
@@ -840,7 +864,10 @@ def get_kis_1min_from_datetime(
                         u_basic_qty = basic_qty - trail_qty
                         u_basic_amt = basic_price * u_basic_qty
 
-                        update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        try:
+                            update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                        except Exception as e:
+                            print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                            
 
                         signals.append({
                             "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -936,7 +963,10 @@ def get_kis_1min_from_datetime(
                                 u_basic_qty = basic_qty - trail_qty
                                 u_basic_amt = basic_price * u_basic_qty
 
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                try:
+                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
                                 signals.append({
                                     "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
@@ -1015,10 +1045,19 @@ def get_kis_1min_from_datetime(
 
                             if basic_qty == trail_qty:
                                 update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                               
+                                try:
+                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")    
+
                             else:    
                                 update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                
+                                try:
+                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                                    
 
                             signals.append({
                                 "signal_type": "BASE_10MIN_LOW_BREAK",
