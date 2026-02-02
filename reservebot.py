@@ -13,6 +13,7 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from dateutil.relativedelta import relativedelta
 from psycopg2.extras import execute_values
+import time
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -1747,7 +1748,7 @@ def echo(update, context):
                             c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(buy_qty), str(buy_price))
                         
                             if c['ODNO'] != "":
-
+                                time.sleep(0.5) # 주문 등록 대기
                                 # 일별주문체결 조회
                                 output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                                 tdf = pd.DataFrame(output1)
@@ -1767,7 +1768,7 @@ def echo(update, context):
                                     d_total_complete_amt = d['tot_ccld_amt'][i]
 
                                     print("매수주문 완료")
-                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + d_order_no + "</code>", parse_mode='HTML')
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
 
                             else:
                                 print("매수주문 실패")
@@ -1851,94 +1852,94 @@ def echo(update, context):
 
                 if sell_qty > 0:
 
-                    # 매매추적 update
-                    cur400 = conn.cursor()
-                    update_query1 = """
-                        UPDATE trading_trail tt SET
-                            trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
-                        FROM (
-                            SELECT
-                                acct_no,
-                                code,
-                                trail_day,
-                                row_number() OVER (
-                                    PARTITION BY acct_no, code
-                                    ORDER BY trail_dtm DESC
-                                ) AS rn
-                            FROM public.trading_trail
-                            WHERE acct_no = %s
-                            AND code = %s
-                            AND trail_day = %s
-                            AND trail_tp IN ('1', '2', '3', 'L')
-                        ) sub
-                        WHERE tt.acct_no = sub.acct_no
-                        AND tt.code = sub.code
-                        AND tt.trail_day = sub.trail_day
-                        AND sub.rn = 1
-                        RETURNING 1;
-                        """
-                    # update 인자값 설정
-                    cur400.execute(update_query1, (hour_minute, "2", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
+                    try:
+                        with conn.cursor() as cur:
+                            # 매매추적 update
+                            update_query1 = """
+                                UPDATE trading_trail tt SET
+                                    trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
+                                FROM (
+                                    SELECT
+                                        acct_no,
+                                        code,
+                                        trail_day,
+                                        row_number() OVER (
+                                            PARTITION BY acct_no, code
+                                            ORDER BY trail_dtm DESC
+                                        ) AS rn
+                                    FROM public.trading_trail
+                                    WHERE acct_no = %s
+                                    AND code = %s
+                                    AND trail_day = %s
+                                    AND trail_tp IN ('1', '2', '3', 'L')
+                                ) sub
+                                WHERE tt.acct_no = sub.acct_no
+                                AND tt.code = sub.code
+                                AND tt.trail_day = sub.trail_day
+                                AND sub.rn = 1
+                                RETURNING 1;
+                                """
+                            # update 인자값 설정
+                            cur.execute(update_query1, (hour_minute, "2", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
-                    was_updated1 = cur400.fetchone() is not None
+                            was_updated1 = cur.fetchone() is not None
 
-                    # 매매시뮬레이션 update
-                    cur401 = conn.cursor()
-                    update_query2 = """
-                        UPDATE public.tradng_simulation SET 
-                            loss_price = %s
-                            , profit_price = %s
-                            , proc_dtm = %s 
-                            , proc_yn = %s      
-                            , mod_dt = %s
-                        WHERE acct_no = %s
-                        AND code = %s
-                        AND trade_tp = %s
-                        AND trade_day <= %s
-                        AND proc_yn != 'Y'
-                        """
-                    # update 인자값 설정
-                    cur401.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), acct_no, code, "1", year_day))
-                    
-                    was_updated2 = cur401.fetchone() is not None
+                            # 매매시뮬레이션 update
+                            update_query2 = """
+                                UPDATE public.tradng_simulation SET 
+                                    loss_price = %s
+                                    , profit_price = %s
+                                    , proc_dtm = %s 
+                                    , proc_yn = %s      
+                                    , mod_dt = %s
+                                WHERE acct_no = %s
+                                AND code = %s
+                                AND trade_tp = %s
+                                AND trade_day <= %s
+                                AND proc_yn != 'Y'
+                                RETURNING 1;
+                                """
+                            # update 인자값 설정
+                            cur.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), acct_no, code, "1", year_day))
+                            
+                            was_updated2 = cur.fetchone() is not None
 
-                    conn.commit()
-                    cur400.close()
-                    cur401.close()
+                            if was_updated1 and was_updated2:
+                                conn.commit()
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
 
-                    if was_updated1 and was_updated2:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
+                                # 매매시뮬레이션 insert
+                                insert_query = """
+                                    INSERT INTO tradng_simulation (
+                                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
+                                    )
+                                    VALUES (
+                                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                    )
+                                    ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
+                                    DO NOTHING
+                                    RETURNING 1;
+                                    """
+                                # insert 인자값 설정
+                                cur.execute(insert_query, (
+                                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
+                                ))
 
-                        # 매매시뮬레이션 insert
-                        cur500 = conn.cursor()
-                        insert_query = """
-                            INSERT INTO tradng_simulation (
-                                acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
-                            )
-                            VALUES (
-                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                            )
-                            ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
-                            DO NOTHING
-                            RETURNING 1;
-                            """
-                        # insert 인자값 설정
-                        cur500.execute(insert_query, (
-                            acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
-                        ))
+                                was_inserted = cur.fetchone() is not None
+                                conn.commit()
 
-                        was_inserted = cur500.fetchone() is not None
+                                if was_inserted:
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록", parse_mode='HTML')
+                                else:
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")
 
-                        conn.commit()
-                        cur500.close()
+                            else:
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")   
 
-                        if was_inserted:
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록", parse_mode='HTML')
-                        else:
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")
-
-                    else:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")   
+                    except Exception as e:
+                        conn.rollback()
+                        print(f"Error 발생: {e}")
+                        context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다: {e}")                            
 
                 else:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도량 부족 미처리")                                
