@@ -262,8 +262,11 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "매매신호", "매매추적", "취소"])
-    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 5))
+    main_buttons = build_button(["보유종목", "전체주문", "전체예약", "예약주문",
+                                  "예약정정", "예약철회", "매수등록", "매도등록", 
+                                  "매도추적", "추적삭제", "매매신호", "매매추적"])
+    cancel_button = build_button(["취소"])
+    show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -1253,22 +1256,21 @@ def callback_get(update, context) :
                     # 각 값이 None이면 0으로, 아니면 원래 값 유지
                     r = [val if val is not None else 0 for val in row]
                     # 각 컬럼을 변수에 할당 (언패킹)
-                    (code, name, trade_day, trade_dtm, trade_tp, 
-                    buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, 
-                    loss_price, profit_price, proc_yn, proc_dtm) = r
-                    
-                    if buy_price is None:
-                        msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
-                            f"매도: {sell_price:,}원({sell_qty:,}주) | 매도금액: {sell_price*sell_qty:,}원 | "
-                            f"손절가: {loss_price:,}원 | 목표가: {profit_price:,}원 | 처리일시 {proc_dtm} | 상태: {proc_yn}")
-                    elif sell_price is None:
-                        msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
-                        f"매수: {buy_price:,}원({buy_qty:,}주) | 매수금액: {buy_price*buy_qty:,}원 | "
-                        f"손절가: {loss_price:,}원 | 목표가: {profit_price:,}원 | 처리일시 {proc_dtm} | 상태: {proc_yn}")    
-                    
+                    (code, name, t_day, t_dtm, t_tp, buy_p, buy_q, buy_a, sell_p, sell_q, sell_a, loss_p, profit_p, p_yn, p_dtm) = r
+
+                    # t_tp(매수/매도 구분) 값에 따라 메시지 구성
+                    if t_tp == '매도':
+                        msg = (f"[<code>{code}</code>] {name} | 일자: {t_day} {t_dtm} | 구분: {t_tp} | "
+                            f"매도: {sell_p:,}원({sell_q:,}주) | 매도금액: {sell_p*sell_q:,}원 | "
+                            f"손절가: {loss_p:,}원 | 목표가: {profit_p:,}원 | 처리일시: {p_dtm} | 상태: {p_yn}")
+                    else: # '매수'인 경우
+                        msg = (f"[<code>{code}</code>] {name} | 일자: {t_day} {t_dtm} | 구분: {t_tp} | "
+                            f"매수: {buy_p:,}원({buy_q:,}주) | 매수금액: {buy_p*buy_q:,}원 | "
+                            f"손절가: {loss_p:,}원 | 목표가: {profit_p:,}원 | 처리일시: {p_dtm} | 상태: {p_yn}")
+                        
                     result_msgs.append(msg)
 
-            final_message = "\n".join(result_msgs) if result_msgs else "매매 신호 대상이 존재하지 않습니다."
+            final_message = "\n".join(result_msgs) if result_msgs else "매매 신호 대상이 존재하지 않습니다."    
 
             context.bot.edit_message_text(
                 text=final_message,
