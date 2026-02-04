@@ -263,7 +263,7 @@ def build_button(text_list, callback_header = "") : # make button list
 
 def get_command(update, context) :
     button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "매매신호", "매매추적", "취소"])
-    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 5))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
