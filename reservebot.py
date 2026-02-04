@@ -172,6 +172,76 @@ def build_date_buttons2(days=7):
 
     return InlineKeyboardMarkup(build_menu(buttons, 2))
 
+def build_date_buttons3(days=7):
+    today = datetime.now().date()
+
+    cur00 = conn.cursor()
+    cur00.execute("SELECT holiday FROM stock_holiday")
+    holidays = {row[0] for row in cur00.fetchall()}
+    cur00.close()
+
+    buttons = []
+    cnt = 0
+    offset = 0
+
+    while cnt < days:
+        d = today - timedelta(days=offset)
+        date_str = d.strftime("%Y%m%d")
+        offset += 1
+
+        # 주말 제외
+        if d.weekday() >= 5:
+            continue
+
+        # 휴장일 제외
+        if date_str in holidays:
+            continue
+
+        buttons.append(
+            InlineKeyboardButton(
+                text=d.strftime("%Y-%m-%d"),
+                callback_data=f"trading_trail_date:{d.strftime('%Y-%m-%d')}"
+            )
+        )
+        cnt += 1
+
+    return InlineKeyboardMarkup(build_menu(buttons, 2))
+
+def build_date_buttons4(days=7):
+    today = datetime.now().date()
+
+    cur00 = conn.cursor()
+    cur00.execute("SELECT holiday FROM stock_holiday")
+    holidays = {row[0] for row in cur00.fetchall()}
+    cur00.close()
+
+    buttons = []
+    cnt = 0
+    offset = 0
+
+    while cnt < days:
+        d = today - timedelta(days=offset)
+        date_str = d.strftime("%Y%m%d")
+        offset += 1
+
+        # 주말 제외
+        if d.weekday() >= 5:
+            continue
+
+        # 휴장일 제외
+        if date_str in holidays:
+            continue
+
+        buttons.append(
+            InlineKeyboardButton(
+                text=d.strftime("%Y-%m-%d"),
+                callback_data=f"trading_signal_date:{d.strftime('%Y-%m-%d')}"
+            )
+        )
+        cnt += 1
+
+    return InlineKeyboardMarkup(build_menu(buttons, 2))
+
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
     if header_buttons:
@@ -192,8 +262,8 @@ def build_button(text_list, callback_header = "") : # make button list
     return button_list
 
 def get_command(update, context) :
-    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "취소"])
-    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 6))
+    button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "매매신호", "매매추적", "취소"])
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 7))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -1146,7 +1216,129 @@ def callback_get(update, context) :
             print('추적 삭제 오류.', e)
             context.bot.edit_message_text(text="[추적 삭제] 오류 : "+str(e),
                                             chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)           
+                                            message_id=update.callback_query.message.message_id)          
+
+    elif data_selected.find("매매신호") != -1:
+        update.callback_query.edit_message_text(
+            text="📅 매매 신호 시작일을 선택하세요",
+            reply_markup=build_date_buttons3(50)  # 최근 50일
+        )
+            
+    elif data_selected.startswith("tading_signal_date:"):            
+        ac = account()
+        acct_no = ac['acct_no']
+
+        try:
+            context.bot.edit_message_text(text="[매매신호]",
+                                chat_id=update.callback_query.message.chat_id,
+                                message_id=update.callback_query.message.message_id)
+            
+            business_day = data_selected.split(":")[1]
+            trade_day = post_business_day_char(business_day)
+            result_msgs = []
+        
+            # 매매신호 select
+            cur200 = conn.cursor()
+            select_query = """
+                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM tradng_simulation WHERE acct_no = %s AND trade_day = %s
+                """
+            # select 인자값 설정
+            cur200.execute(select_query, (acct_no, trade_day))
+            result_two00 = cur200.fetchall()
+            cur200.close()
+
+            if len(result_two00) > 0:
+            
+                for row in result_two00:
+                    # 각 컬럼을 변수에 할당 (언패킹)
+                    (code, name, trade_day, trade_dtm, trade_tp, 
+                    buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, 
+                    loss_price, profit_price, proc_yn, proc_dtm) = row
+                    
+                    if buy_price is None:
+                        msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
+                            f"매도: {sell_price:,}원({sell_qty:,}주) | 매도금액: {sell_price*sell_qty:,}원 | "
+                            f"손절가: {loss_price} | 목표가: {profit_price} | 처리일시 {proc_dtm} | 상태: {proc_yn}")
+                    elif sell_price is None:
+                        msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
+                        f"매수: {buy_price:,}원({buy_qty:,}주) | 매수금액: {buy_price*buy_qty:,}원 | "
+                        f"손절가: {loss_price} | 목표가: {profit_price} | 처리일시 {proc_dtm} | 상태: {proc_yn}")    
+                    
+                    result_msgs.append(msg)
+
+            final_message = "\n".join(result_msgs) if result_msgs else "매매 신호 대상이 존재하지 않습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )                
+
+        except Exception as e:
+            print('매매 신호 오류.', e)
+            context.bot.edit_message_text(text="[매매 신호] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)     
+
+    elif data_selected.find("매매추적") != -1:
+        update.callback_query.edit_message_text(
+            text="📅 매매 추적 시작일을 선택하세요",
+            reply_markup=build_date_buttons4(50)  # 최근 50일
+        )
+            
+    elif data_selected.startswith("trading_trail_date:"):            
+        ac = account()
+        acct_no = ac['acct_no']
+
+        try:
+            context.bot.edit_message_text(text="[매매추적]",
+                                chat_id=update.callback_query.message.chat_id,
+                                message_id=update.callback_query.message.message_id)
+            
+            business_day = data_selected.split(":")[1]
+            trail_day = post_business_day_char(business_day)
+            result_msgs = []
+        
+            # 매매추적 select
+            cur200 = conn.cursor()
+            select_query = """
+                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min FROM trading_trail WHERE acct_no = %s AND trail_day = %s
+                """
+            # select 인자값 설정
+            cur200.execute(select_query, (acct_no, trail_day))
+            result_two00 = cur200.fetchall()
+            cur200.close()
+
+            if len(result_two00) > 0:
+            
+                for row in result_two00:
+                    # 각 컬럼을 변수에 할당 (언패킹)
+                    (code, name, trail_day, trail_dtm, trail_tp, 
+                    trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, 
+                    stop_price, target_price, proc_min) = row
+                    
+                    msg = (f"[<code>{code}</code>] {name} | 일자: {trail_day} {trail_dtm} | 처리일시: {proc_min} | "
+                        f"보유가: {basic_price:,}원({basic_qty:,}주) | 보유금액: {basic_price*basic_qty:,}원 | "
+                        f"추적가: {trail_price:,}원({trail_qty:,}주) | 추적금액: {trail_price*trail_qty:,}원 | "
+                        f"손절가: {stop_price} | 목표가: {target_price} | 처리일시 {proc_dtm}")
+                    
+                    result_msgs.append(msg)
+
+            final_message = "\n".join(result_msgs) if result_msgs else "매매 추적 대상이 존재하지 않습니다."
+
+            context.bot.edit_message_text(
+                text=final_message,
+                parse_mode='HTML',
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id
+            )              
+
+        except Exception as e:
+            print('매매 추적 오류.', e)
+            context.bot.edit_message_text(text="[매매 추적] 오류 : "+str(e),
+                                            chat_id=update.callback_query.message.chat_id,
+                                            message_id=update.callback_query.message.message_id)                                                             
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
