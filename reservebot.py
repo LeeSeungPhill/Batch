@@ -263,7 +263,7 @@ def build_button(text_list, callback_header = "") : # make button list
 
 def get_command(update, context) :
     button_list = build_button(["보유종목", "전체주문", "전체예약", "예약주문", "예약정정", "예약철회", "매수등록", "매도등록", "매도추적", "추적삭제", "매매신호", "매매추적", "취소"])
-    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 7))
+    show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 4))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
 
@@ -1250,19 +1250,21 @@ def callback_get(update, context) :
             if len(result_two00) > 0:
             
                 for row in result_two00:
+                    # 각 값이 None이면 0으로, 아니면 원래 값 유지
+                    r = [val if val is not None else 0 for val in row]
                     # 각 컬럼을 변수에 할당 (언패킹)
                     (code, name, trade_day, trade_dtm, trade_tp, 
                     buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, 
-                    loss_price, profit_price, proc_yn, proc_dtm) = row
+                    loss_price, profit_price, proc_yn, proc_dtm) = r
                     
                     if buy_price is None:
                         msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
                             f"매도: {sell_price:,}원({sell_qty:,}주) | 매도금액: {sell_price*sell_qty:,}원 | "
-                            f"손절가: {loss_price} | 목표가: {profit_price} | 처리일시 {proc_dtm} | 상태: {proc_yn}")
+                            f"손절가: {loss_price:,}원 | 목표가: {profit_price:,}원 | 처리일시 {proc_dtm} | 상태: {proc_yn}")
                     elif sell_price is None:
                         msg = (f"[<code>{code}</code>] {name} | 일자: {trade_day} {trade_dtm} | 구분: {trade_tp} | "
                         f"매수: {buy_price:,}원({buy_qty:,}주) | 매수금액: {buy_price*buy_qty:,}원 | "
-                        f"손절가: {loss_price} | 목표가: {profit_price} | 처리일시 {proc_dtm} | 상태: {proc_yn}")    
+                        f"손절가: {loss_price:,}원 | 목표가: {profit_price:,}원 | 처리일시 {proc_dtm} | 상태: {proc_yn}")    
                     
                     result_msgs.append(msg)
 
@@ -1313,15 +1315,17 @@ def callback_get(update, context) :
             if len(result_two00) > 0:
             
                 for row in result_two00:
+                    # 각 값이 None이면 0으로, 아니면 원래 값 유지
+                    r = [val if val is not None else 0 for val in row]
                     # 각 컬럼을 변수에 할당 (언패킹)
                     (code, name, trail_day, trail_dtm, trail_tp, 
                     trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, 
-                    stop_price, target_price, proc_min) = row
+                    stop_price, target_price, proc_min) = r
                     
                     msg = (f"[<code>{code}</code>] {name} | 일자: {trail_day} {trail_dtm} | 처리일시: {proc_min} | "
                         f"보유가: {basic_price:,}원({basic_qty:,}주) | 보유금액: {basic_price*basic_qty:,}원 | "
                         f"추적가: {trail_price:,}원({trail_qty:,}주) | 추적금액: {trail_price*trail_qty:,}원 | "
-                        f"손절가: {stop_price} | 목표가: {target_price} | 처리일시 {proc_dtm}")
+                        f"손절가: {stop_price:,}원 | 목표가: {target_price:,}원 | 처리일시 {proc_dtm}")
                     
                     result_msgs.append(msg)
 
