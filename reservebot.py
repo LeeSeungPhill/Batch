@@ -1325,15 +1325,19 @@ def callback_get(update, context) :
                     # 각 컬럼을 변수에 할당 (언패킹)
                     (code, name, t_day, t_dtm, t_tp, buy_p, buy_q, buy_a, sell_p, sell_q, sell_a, loss_p, profit_p, p_yn, p_dtm) = r
 
+                    if p_dtm == 0:
+                        last_val = "상태: "+p_yn
+                    else:
+                        last_val = "상태: "+p_yn+" ["+p_dtm[:8]+"-"+p_dtm[8:2]+":"+p_dtm[10:2]+"]"
+
                     # t_tp(매수/매도 구분) 값에 따라 메시지 구성
                     if t_tp == '매도':
-                        msg = (f"{t_day} {t_dtm}[<code>{code}</code>]{name} : {t_tp} | "
-                            f"매도가:{sell_p:,}원({sell_q:,}주) | 매도금액:{sell_p*sell_q:,}원 | "
-                            f"손절가:{loss_p:,}원 | 목표가:{profit_p:,}원 | 상태:{p_yn} | 처리일시:{p_dtm}")
+                        msg = (f"[{t_day}-{t_dtm[:2]}:{t_dtm[2:4]}]{name}[<code>{code}</code>] "
+                            f"매도가:{sell_p:,}원({sell_q:,}주), 매도금액:{sell_p*sell_q:,}원")
                     else: # '매수'인 경우
-                        msg = (f"{t_day} {t_dtm}[<code>{code}</code>]{name} : {t_tp} | "
-                            f"매수가:{buy_p:,}원({buy_q:,}주) | 매수금액:{buy_p*buy_q:,}원 | "
-                            f"손절가:{loss_p:,}원 | 목표가:{profit_p:,}원 | 상태:{p_yn} | 처리일시:{p_dtm}")
+                        msg = (f"[{t_day}-{t_dtm[:2]}:{t_dtm[2:4]}]{name}[<code>{code}</code>] "
+                            f"매수가:{buy_p:,}원({buy_q:,}주), 매수금액:{buy_p*buy_q:,}원 | "
+                            f"손절가:{loss_p:,}원, 목표가:{profit_p:,}원, {last_val}")
                         
                     result_msgs.append(msg)
 
@@ -1382,6 +1386,8 @@ def callback_get(update, context) :
     elif command.startswith("trading_trail_date:"):            
         ac = account()
         acct_no = ac['acct_no']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
 
         try:
             context.bot.edit_message_text(text="[매매추적]",
@@ -1395,7 +1401,7 @@ def callback_get(update, context) :
             # 매매추적 select
             cur200 = conn.cursor()
             select_query = """
-                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min FROM trading_trail WHERE acct_no = %s AND trail_day = %s ORDER BY trail_tp, proc_min DESC 
+                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min FROM trading_trail WHERE acct_no = %s AND trail_day = %s ORDER BY trail_tp, proc_min DESC 
                 """
             # select 인자값 설정
             cur200.execute(select_query, (acct_no, trail_day))
@@ -1409,13 +1415,21 @@ def callback_get(update, context) :
                     r = [val if val is not None else 0 for val in row]
                     # 각 컬럼을 변수에 할당 (언패킹)
                     (code, name, trail_day, trail_dtm, trail_tp, 
-                    trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, 
+                    trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, 
                     stop_price, target_price, proc_min) = r
                     
-                    msg = (f"{trail_day} {trail_dtm}[<code>{code}</code>]{name} : {trail_tp} | "
-                        f"보유가:{basic_price:,}원({basic_qty:,}주) | 보유금액:{basic_price*basic_qty:,}원 | "
-                        f"추적가:{trail_price:,}원({trail_qty:,}주) | 추적금액:{trail_price*trail_qty:,}원 | "
-                        f"손절가:{stop_price:,}원 | 목표가:{target_price:,}원 | 처리일시:{proc_min}")
+                    a = inquire_price(access_token, app_key, app_secret, code)
+                    stck_prpr = int(a['stck_prpr'])                             # 현재가
+                    stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2)   # 수익률
+                    trail = ""
+                    if trail_price > 0:
+                        trail_qty = int(round(trail_amt/trail_price)) if trail_qty == 0 else trail_qty  # 추적수량
+                        basic_qty = trail_qty if basic_qty == 0 else basic_qty
+                        trail = (f"추적가:{trail_price:,}원({trail_qty:,}주), 추적금액:{trail_amt:,}원, 추적율:{trail_rate}%")
+
+                    msg = (f"[{trail_day}-{proc_min[:2]}:{proc_min[2:4]}]{name}[<code>{code}</code>] : {trail_tp} "
+                        f"보유가:{basic_price:,}원({basic_qty:,}주), 보유금액:{basic_price*basic_qty:,}원, 현재가:{stck_prpr:,}원, "
+                        f"수익율:{str(stck_rate)}%, 손절가:{stop_price:,}원, 목표가:{target_price:,}원 | {trail}")
                     
                     result_msgs.append(msg)
 
