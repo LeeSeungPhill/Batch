@@ -200,7 +200,7 @@ def build_date_buttons3(days=7):
         buttons.append(
             InlineKeyboardButton(
                 text=d.strftime("%Y-%m-%d"),
-                callback_data=f"trading_trail_date:{d.strftime('%Y-%m-%d')}"
+                callback_data=f"trading_signal_date:{d.strftime('%Y-%m-%d')}"
             )
         )
         cnt += 1
@@ -235,7 +235,7 @@ def build_date_buttons4(days=7):
         buttons.append(
             InlineKeyboardButton(
                 text=d.strftime("%Y-%m-%d"),
-                callback_data=f"trading_signal_date:{d.strftime('%Y-%m-%d')}"
+                callback_data=f"trading_trail_date:{d.strftime('%Y-%m-%d')}"
             )
         )
         cnt += 1
