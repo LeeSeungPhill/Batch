@@ -264,8 +264,9 @@ def build_button(text_list, callback_header = "") : # make button list
 def get_command(update, context) :
     main_buttons = build_button(["보유종목", "전체주문", "전체예약", "예약주문",
                                   "예약정정", "예약철회", "매수등록", "매도등록", 
-                                  "매도추적", "추적삭제", "매매신호", "매매추적"])
-    cancel_button = build_button(["취소"])
+                                  "매도추적", "추적삭제", "매매신호", "매매추적"],
+                                  callback_header="menu")
+    cancel_button = build_button(["취소"], callback_header="menu")
     show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
     update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
@@ -634,18 +635,20 @@ def get_previous_business_day(day):
 
 def callback_get(update, context) :
     data_selected = update.callback_query.data
+    query = update.callback_query
+
     global menuNum
     global g_order_no
     global g_remain_qty
 
-    print("callback0 : ", data_selected)
-    if data_selected.find("취소") != -1:
+    print("data_selected : ", data_selected)
+    if data_selected == "취소":
         context.bot.edit_message_text(text="취소하였습니다.",
-                                      chat_id=update.callback_query.message.chat_id,
-                                      message_id=update.callback_query.message.message_id)
+                                      chat_id=query.message.chat_id,
+                                      message_id=query.message.message_id)
         return
 
-    elif data_selected.find("보유종목") != -1:
+    elif data_selected == "보유종목":
 
         ac = account()
         acct_no = ac['acct_no']
@@ -655,8 +658,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[보유종목 조회]",
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
         
@@ -682,18 +685,18 @@ def callback_get(update, context) :
             context.bot.edit_message_text(
                 text=final_message,
                 parse_mode='HTML',
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
             )
 
 
         except Exception as e:
             print('보유종목 조회 오류.', e)
             context.bot.edit_message_text(text="[보유종목 조회] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
                 
-    elif data_selected.find("전체주문") != -1:
+    elif data_selected == "전체주문":
 
         ac = account()
         acct_no = ac['acct_no']
@@ -703,8 +706,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[일별주문체결 조회]",
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
             # 일별주문체결 조회
             output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '')
@@ -735,22 +738,22 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(
                     text=final_message,
                     parse_mode='HTML',
-                    chat_id=update.callback_query.message.chat_id,
-                    message_id=update.callback_query.message.message_id
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
                 )
 
             else:
                 context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
         except Exception as e:
             print('일별주문체결 조회 오류.', e)
             context.bot.edit_message_text(text="[일별주문체결 조회] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
-    elif data_selected.find("전체예약") != -1:
+    elif data_selected == "전체예약":
     
         ac = account()
         acct_no = ac['acct_no']
@@ -760,8 +763,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[전체예약 조회]",
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
             
             reserve_strt_dt = datetime.now().strftime("%Y%m%d")
@@ -811,58 +814,58 @@ def callback_get(update, context) :
                 context.bot.edit_message_text(
                     text=final_message,
                     parse_mode='HTML',
-                    chat_id=update.callback_query.message.chat_id,
-                    message_id=update.callback_query.message.message_id
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
                 )
 
             else:
                 context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
         except Exception as e:
             print('전체예약 조회 오류.', e)
             context.bot.edit_message_text(text="[전체예약 조회] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
 
-    elif data_selected.find("예약주문") != -1:
+    elif data_selected == "예약주문":
         menuNum = "61"
 
         context.bot.edit_message_text(text="예약주문할 종목코드(종목명), 매매구분(매수:1 매도:2), 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+                                        chat_id=query.message.chat_id,
+                                        message_id=query.message.message_id)
     
-    elif data_selected.find("예약정정") != -1:
+    elif data_selected == "예약정정":
         menuNum = "62"
 
         context.bot.edit_message_text(text="예약정정할 종목코드(종목명), 예약주문번호, 정정가(시장가:0), 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+                                        chat_id=query.message.chat_id,
+                                        message_id=query.message.message_id)
     
-    elif data_selected.find("예약철회") != -1:
+    elif data_selected == "예약철회":
         menuNum = "63"
 
         context.bot.edit_message_text(text="예약취소할 종목코드(종목명), 예약주문번호를 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+                                        chat_id=query.message.chat_id,
+                                        message_id=query.message.message_id)
         
-    elif data_selected.find("매수등록") != -1:
+    elif data_selected == "매수등록":
         menuNum = "71"
 
         context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(시장가:0), 이탈가, 매수금액을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+                                        chat_id=query.message.chat_id,
+                                        message_id=query.message.message_id)
 
-    elif data_selected.find("매도등록") != -1:
+    elif data_selected == "매도등록":
         menuNum = "81"
 
         context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(시장가:0), 비중(%)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)        
+                                        chat_id=query.message.chat_id,
+                                        message_id=query.message.message_id)        
     
-    elif data_selected.find("매도추적") != -1:
-        update.callback_query.edit_message_text(
+    elif data_selected == "매도추적":
+        query.edit_message_text(
             text="📅 매도 추적 시작일을 선택하세요",
             reply_markup=build_date_buttons1(50)  # 최근 50일
         )
@@ -876,8 +879,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[매도추적 등록]",
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)
             
             business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
@@ -1157,18 +1160,18 @@ def callback_get(update, context) :
             context.bot.edit_message_text(
                 text=final_message,
                 parse_mode='HTML',
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
             )
 
         except Exception as e:
             print('매도추적 등록 오류.', e)
             context.bot.edit_message_text(text="[매도추적 등록] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)   
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)   
 
-    elif data_selected.find("추적삭제") != -1:
-        update.callback_query.edit_message_text(
+    elif data_selected == "추적삭제":
+        query.edit_message_text(
             text="📅 추적 삭제 시작일을 선택하세요",
             reply_markup=build_date_buttons2(50)  # 최근 50일
         )
@@ -1179,8 +1182,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[추적삭제]",
-                                chat_id=update.callback_query.message.chat_id,
-                                message_id=update.callback_query.message.message_id)
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id)
             
             business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
@@ -1211,18 +1214,18 @@ def callback_get(update, context) :
             context.bot.edit_message_text(
                 text=final_message,
                 parse_mode='HTML',
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
             )                
 
         except Exception as e:
             print('추적 삭제 오류.', e)
             context.bot.edit_message_text(text="[추적 삭제] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)          
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)          
 
-    elif data_selected.find("매매신호") != -1:
-        update.callback_query.edit_message_text(
+    elif data_selected == "매매신호":
+        query.edit_message_text(
             text="📅 매매 신호 시작일을 선택하세요",
             reply_markup=build_date_buttons3(50)  # 최근 50일
         )
@@ -1233,8 +1236,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[매매신호]",
-                                chat_id=update.callback_query.message.chat_id,
-                                message_id=update.callback_query.message.message_id)
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id)
             
             business_day = data_selected.split(":")[1]
             trade_day = post_business_day_char(business_day)
@@ -1275,18 +1278,18 @@ def callback_get(update, context) :
             context.bot.edit_message_text(
                 text=final_message,
                 parse_mode='HTML',
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
             )                
 
         except Exception as e:
             print('매매 신호 오류.', e)
             context.bot.edit_message_text(text="[매매 신호] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)     
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)     
 
-    elif data_selected.find("매매추적") != -1:
-        update.callback_query.edit_message_text(
+    elif data_selected == "매매추적":
+        query.edit_message_text(
             text="📅 매매 추적 시작일을 선택하세요",
             reply_markup=build_date_buttons4(50)  # 최근 50일
         )
@@ -1297,8 +1300,8 @@ def callback_get(update, context) :
 
         try:
             context.bot.edit_message_text(text="[매매추적]",
-                                chat_id=update.callback_query.message.chat_id,
-                                message_id=update.callback_query.message.message_id)
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id)
             
             business_day = data_selected.split(":")[1]
             trail_day = post_business_day_char(business_day)
@@ -1327,7 +1330,7 @@ def callback_get(update, context) :
                     msg = (f"[<code>{code}</code>] {name} | 일자: {trail_day} {trail_dtm} | 처리일시: {proc_min} | "
                         f"보유가: {basic_price:,}원({basic_qty:,}주) | 보유금액: {basic_price*basic_qty:,}원 | "
                         f"추적가: {trail_price:,}원({trail_qty:,}주) | 추적금액: {trail_price*trail_qty:,}원 | "
-                        f"손절가: {stop_price:,}원 | 목표가: {target_price:,}원 | 처리일시 {proc_dtm}")
+                        f"손절가: {stop_price:,}원 | 목표가: {target_price:,}원 | 처리일시 {proc_min}")
                     
                     result_msgs.append(msg)
 
@@ -1336,15 +1339,15 @@ def callback_get(update, context) :
             context.bot.edit_message_text(
                 text=final_message,
                 parse_mode='HTML',
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id
+                chat_id=query.message.chat_id,
+                message_id=query.message.message_id
             )              
 
         except Exception as e:
             print('매매 추적 오류.', e)
             context.bot.edit_message_text(text="[매매 추적] 오류 : "+str(e),
-                                            chat_id=update.callback_query.message.chat_id,
-                                            message_id=update.callback_query.message.message_id)                                                             
+                                            chat_id=query.message.chat_id,
+                                            message_id=query.message.message_id)                                                             
             
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
