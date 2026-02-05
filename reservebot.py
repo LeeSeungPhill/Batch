@@ -1328,7 +1328,7 @@ def callback_get(update, context) :
                     if p_dtm == 0:
                         last_val = "상태: "+p_yn
                     else:
-                        last_val = "상태: "+p_yn+" ["+p_dtm[:8]+"-"+p_dtm[8:2]+":"+p_dtm[10:2]+"]"
+                        last_val = "상태: "+p_yn+" ["+p_dtm[:8]+"-"+p_dtm[8:10]+":"+p_dtm[10:12]+"]"
 
                     # t_tp(매수/매도 구분) 값에 따라 메시지 구성
                     if t_tp == '매도':
@@ -1336,7 +1336,7 @@ def callback_get(update, context) :
                             f"매도가:{sell_p:,}원({sell_q:,}주), 매도금액:{sell_p*sell_q:,}원")
                     else: # '매수'인 경우
                         msg = (f"[{t_day}-{t_dtm[:2]}:{t_dtm[2:4]}]{name}[<code>{code}</code>] "
-                            f"매수가:{buy_p:,}원({buy_q:,}주), 매수금액:{buy_p*buy_q:,}원 | "
+                            f"매수가:{buy_p:,}원({buy_q:,}주), 매수금액:{buy_p*buy_q:,}원, "
                             f"손절가:{loss_p:,}원, 목표가:{profit_p:,}원, {last_val}")
                         
                     result_msgs.append(msg)
@@ -1386,6 +1386,7 @@ def callback_get(update, context) :
     elif command.startswith("trading_trail_date:"):            
         ac = account()
         acct_no = ac['acct_no']
+        access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
 
