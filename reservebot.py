@@ -1232,7 +1232,7 @@ def callback_get(update, context) :
             reply_markup=build_date_buttons3(50)  # 최근 50일
         )
             
-    elif command.startswith("tading_signal_date:"):            
+    elif command.startswith("trading_signal_date:"):            
         ac = account()
         acct_no = ac['acct_no']
 
