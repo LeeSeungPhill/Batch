@@ -1426,11 +1426,11 @@ def callback_get(update, context) :
                     if trail_price > 0:
                         trail_qty = int(round(trail_amt/trail_price)) if trail_qty == 0 else trail_qty  # 추적수량
                         basic_qty = trail_qty if basic_qty == 0 else basic_qty
-                        trail = (f"추적가:{trail_price:,}원({trail_qty:,}주), 추적금액:{trail_amt:,}원, 추적율:{trail_rate}%")
+                        trail = (f", 추적가:{trail_price:,}원({trail_qty:,}주), 추적율:{trail_rate}%, 추적금액:{trail_amt:,}원")
 
-                    msg = (f"[{trail_day}-{proc_min[:2]}:{proc_min[2:4]}]{name}[<code>{code}</code>] : {trail_tp} "
+                    msg = (f"[{trail_day}-{proc_min[:2]}:{proc_min[2:4]}]{name}[<code>{code}</code>] -{trail_tp}- "
                         f"보유가:{basic_price:,}원({basic_qty:,}주), 보유금액:{basic_price*basic_qty:,}원, 현재가:{stck_prpr:,}원, "
-                        f"수익율:{str(stck_rate)}%, 손절가:{stop_price:,}원, 목표가:{target_price:,}원 | {trail}")
+                        f"수익율:{str(stck_rate)}%, 손절가:{stop_price:,}원, 목표가:{target_price:,}원{trail}")
                     
                     result_msgs.append(msg)
 
