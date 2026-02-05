@@ -1310,7 +1310,7 @@ def callback_get(update, context) :
             # 매매신호 select
             cur200 = conn.cursor()
             select_query = """
-                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM tradng_simulation WHERE acct_no = %s AND trade_day = %s
+                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM tradng_simulation WHERE acct_no = %s AND trade_day = %s ORDER BY proc_yn, trade_dtm DESC
                 """
             # select 인자값 설정
             cur200.execute(select_query, (acct_no, trade_day))
@@ -1395,7 +1395,7 @@ def callback_get(update, context) :
             # 매매추적 select
             cur200 = conn.cursor()
             select_query = """
-                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min FROM trading_trail WHERE acct_no = %s AND trail_day = %s
+                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min FROM trading_trail WHERE acct_no = %s AND trail_day = %s ORDER BY trail_tp, proc_min DESC 
                 """
             # select 인자값 설정
             cur200.execute(select_query, (acct_no, trail_day))
