@@ -682,15 +682,35 @@ def callback_get(update, context) :
                 msg = f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원"
                 result_msgs.append(msg)
 
-            final_message = "\n".join(result_msgs) if result_msgs else "보유종목 조회 대상이 존재하지 않습니다."
+            if result_msgs:
+                # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
+                chunk_size = 10
+                chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
 
-            context.bot.edit_message_text(
-                text=final_message,
-                parse_mode='HTML',
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id
-            )
-
+                for idx, chunk in enumerate(chunks):
+                    final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
+                    
+                    if idx == 0:
+                        # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
+                        context.bot.edit_message_text(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id,
+                            message_id=query.message.message_id
+                        )
+                    else:
+                        # 두 번째 묶음부터는 새로운 메시지로 전송
+                        context.bot.send_message(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id
+                        )
+            else:
+                context.bot.edit_message_text(
+                    text="보유종목 조회 대상이 존재하지 않습니다.",
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )  
 
         except Exception as e:
             print('보유종목 조회 오류.', e)
@@ -735,14 +755,35 @@ def callback_get(update, context) :
                     msg = f"* [{d_name} - {d_order_tmd[:2]}:{d_order_tmd[2:4]}:{d_order_tmd[4:]}] 주문번호:<code>{str(d_order_no)}</code>, {d_order_type}가:{format(int(d_order_price), ',d')}원, {d_order_type}량:{format(int(d_order_amount), ',d')}주, 체결량:{format(int(d_total_complete_qty), ',d')}주, 잔량:{format(int(d_remain_qty), ',d')}주, 체결금:{format(int(d_total_complete_amt), ',d')}원"
                     result_msgs.append(msg)
 
-                final_message = "\n".join(result_msgs) if result_msgs else "일별주문체결 조회 대상이 존재하지 않습니다."
+                if result_msgs:
+                    # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
+                    chunk_size = 10
+                    chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
 
-                context.bot.edit_message_text(
-                    text=final_message,
-                    parse_mode='HTML',
-                    chat_id=query.message.chat_id,
-                    message_id=query.message.message_id
-                )
+                    for idx, chunk in enumerate(chunks):
+                        final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
+                        
+                        if idx == 0:
+                            # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
+                            context.bot.edit_message_text(
+                                text=final_message,
+                                parse_mode='HTML',
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id
+                            )
+                        else:
+                            # 두 번째 묶음부터는 새로운 메시지로 전송
+                            context.bot.send_message(
+                                text=final_message,
+                                parse_mode='HTML',
+                                chat_id=query.message.chat_id
+                            )
+                else:
+                    context.bot.edit_message_text(
+                        text="일별주문체결 조회 대상이 존재하지 않습니다.",
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )                                
 
             else:
                 context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
@@ -811,14 +852,35 @@ def callback_get(update, context) :
                         msg3 = f", 주문번호:<code>{str(d_order_no)}</code>, 체결수량:{format(d_tot_ccld_qty, ',d')}주, 체결금액:{format(d_tot_ccld_amt, ',d')}원"
                         result_msgs.append(msg3)
 
-                final_message = "\n".join(result_msgs) if result_msgs else "전체예약 조회 대상이 존재하지 않습니다."
+                if result_msgs:
+                    # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
+                    chunk_size = 10
+                    chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
 
-                context.bot.edit_message_text(
-                    text=final_message,
-                    parse_mode='HTML',
-                    chat_id=query.message.chat_id,
-                    message_id=query.message.message_id
-                )
+                    for idx, chunk in enumerate(chunks):
+                        final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
+                        
+                        if idx == 0:
+                            # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
+                            context.bot.edit_message_text(
+                                text=final_message,
+                                parse_mode='HTML',
+                                chat_id=query.message.chat_id,
+                                message_id=query.message.message_id
+                            )
+                        else:
+                            # 두 번째 묶음부터는 새로운 메시지로 전송
+                            context.bot.send_message(
+                                text=final_message,
+                                parse_mode='HTML',
+                                chat_id=query.message.chat_id
+                            )
+                else:
+                    context.bot.edit_message_text(
+                        text="전체예약 조회 대상이 존재하지 않습니다.",
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )                
 
             else:
                 context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
@@ -1265,24 +1327,45 @@ def callback_get(update, context) :
 
                     # t_tp(매수/매도 구분) 값에 따라 메시지 구성
                     if t_tp == '매도':
-                        msg = (f"[<code>{code}</code>] {name} | 일자: {t_day} {t_dtm} | 구분: {t_tp} | "
-                            f"매도: {sell_p:,}원({sell_q:,}주) | 매도금액: {sell_p*sell_q:,}원 | "
-                            f"손절가: {loss_p:,}원 | 목표가: {profit_p:,}원 | 처리일시: {p_dtm} | 상태: {p_yn}")
+                        msg = (f"{t_day} {t_dtm}[<code>{code}</code>]{name} : {t_tp} | "
+                            f"매도가:{sell_p:,}원({sell_q:,}주) | 매도금액:{sell_p*sell_q:,}원 | "
+                            f"손절가:{loss_p:,}원 | 목표가:{profit_p:,}원 | 상태:{p_yn} | 처리일시:{p_dtm}")
                     else: # '매수'인 경우
-                        msg = (f"[<code>{code}</code>] {name} | 일자: {t_day} {t_dtm} | 구분: {t_tp} | "
-                            f"매수: {buy_p:,}원({buy_q:,}주) | 매수금액: {buy_p*buy_q:,}원 | "
-                            f"손절가: {loss_p:,}원 | 목표가: {profit_p:,}원 | 처리일시: {p_dtm} | 상태: {p_yn}")
+                        msg = (f"{t_day} {t_dtm}[<code>{code}</code>]{name} : {t_tp} | "
+                            f"매수가:{buy_p:,}원({buy_q:,}주) | 매수금액:{buy_p*buy_q:,}원 | "
+                            f"손절가:{loss_p:,}원 | 목표가:{profit_p:,}원 | 상태:{p_yn} | 처리일시:{p_dtm}")
                         
                     result_msgs.append(msg)
 
-            final_message = "\n".join(result_msgs) if result_msgs else "매매 신호 대상이 존재하지 않습니다."    
+            if result_msgs:
+                # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
+                chunk_size = 10
+                chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
 
-            context.bot.edit_message_text(
-                text=final_message,
-                parse_mode='HTML',
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id
-            )                
+                for idx, chunk in enumerate(chunks):
+                    final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
+                    
+                    if idx == 0:
+                        # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
+                        context.bot.edit_message_text(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id,
+                            message_id=query.message.message_id
+                        )
+                    else:
+                        # 두 번째 묶음부터는 새로운 메시지로 전송
+                        context.bot.send_message(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id
+                        )
+            else:
+                context.bot.edit_message_text(
+                    text="매매 신호 대상이 존재하지 않습니다.",
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
 
         except Exception as e:
             print('매매 신호 오류.', e)
@@ -1329,22 +1412,43 @@ def callback_get(update, context) :
                     trail_price, trail_qty, trail_amt, basic_price, basic_qty, basic_amt, 
                     stop_price, target_price, proc_min) = r
                     
-                    msg = (f"[<code>{code}</code>] {name} | 일자: {trail_day} {trail_dtm} | 처리일시: {proc_min} | "
-                        f"보유가: {basic_price:,}원({basic_qty:,}주) | 보유금액: {basic_price*basic_qty:,}원 | "
-                        f"추적가: {trail_price:,}원({trail_qty:,}주) | 추적금액: {trail_price*trail_qty:,}원 | "
-                        f"손절가: {stop_price:,}원 | 목표가: {target_price:,}원 | 처리일시 {proc_min}")
+                    msg = (f"{trail_day} {trail_dtm}[<code>{code}</code>]{name} : {trail_tp} | "
+                        f"보유가:{basic_price:,}원({basic_qty:,}주) | 보유금액:{basic_price*basic_qty:,}원 | "
+                        f"추적가:{trail_price:,}원({trail_qty:,}주) | 추적금액:{trail_price*trail_qty:,}원 | "
+                        f"손절가:{stop_price:,}원 | 목표가:{target_price:,}원 | 처리일시:{proc_min}")
                     
                     result_msgs.append(msg)
 
-            final_message = "\n".join(result_msgs) if result_msgs else "매매 추적 대상이 존재하지 않습니다."
+            if result_msgs:
+                # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
+                chunk_size = 10
+                chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
 
-            context.bot.edit_message_text(
-                text=final_message,
-                parse_mode='HTML',
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id
-            )              
-
+                for idx, chunk in enumerate(chunks):
+                    final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
+                    
+                    if idx == 0:
+                        # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
+                        context.bot.edit_message_text(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id,
+                            message_id=query.message.message_id
+                        )
+                    else:
+                        # 두 번째 묶음부터는 새로운 메시지로 전송
+                        context.bot.send_message(
+                            text=final_message,
+                            parse_mode='HTML',
+                            chat_id=query.message.chat_id
+                        )
+            else:
+                context.bot.edit_message_text(
+                    text="매매 추적 대상이 존재하지 않습니다.",
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+            
         except Exception as e:
             print('매매 추적 오류.', e)
             context.bot.edit_message_text(text="[매매 추적] 오류 : "+str(e),
