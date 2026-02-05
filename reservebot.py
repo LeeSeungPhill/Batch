@@ -637,18 +637,20 @@ def callback_get(update, context) :
     data_selected = update.callback_query.data
     query = update.callback_query
 
+    command = data_selected.split(",")[-1] if "," in data_selected else data_selected
+
     global menuNum
     global g_order_no
     global g_remain_qty
 
-    print("data_selected : ", data_selected)
-    if data_selected == "취소":
+    print("command : ", command)
+    if command == "취소":
         context.bot.edit_message_text(text="취소하였습니다.",
                                       chat_id=query.message.chat_id,
                                       message_id=query.message.message_id)
         return
 
-    elif data_selected == "보유종목":
+    elif command == "보유종목":
 
         ac = account()
         acct_no = ac['acct_no']
@@ -696,7 +698,7 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
                 
-    elif data_selected == "전체주문":
+    elif command == "전체주문":
 
         ac = account()
         acct_no = ac['acct_no']
@@ -753,7 +755,7 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
 
-    elif data_selected == "전체예약":
+    elif command == "전체예약":
     
         ac = account()
         acct_no = ac['acct_no']
@@ -829,48 +831,48 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
 
-    elif data_selected == "예약주문":
+    elif command == "예약주문":
         menuNum = "61"
 
         context.bot.edit_message_text(text="예약주문할 종목코드(종목명), 매매구분(매수:1 매도:2), 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
     
-    elif data_selected == "예약정정":
+    elif command == "예약정정":
         menuNum = "62"
 
         context.bot.edit_message_text(text="예약정정할 종목코드(종목명), 예약주문번호, 정정가(시장가:0), 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
     
-    elif data_selected == "예약철회":
+    elif command == "예약철회":
         menuNum = "63"
 
         context.bot.edit_message_text(text="예약취소할 종목코드(종목명), 예약주문번호를 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
         
-    elif data_selected == "매수등록":
+    elif command == "매수등록":
         menuNum = "71"
 
         context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(시장가:0), 이탈가, 매수금액을 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
 
-    elif data_selected == "매도등록":
+    elif command == "매도등록":
         menuNum = "81"
 
         context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(시장가:0), 비중(%)을 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)        
     
-    elif data_selected == "매도추적":
+    elif command == "매도추적":
         query.edit_message_text(
             text="📅 매도 추적 시작일을 선택하세요",
             reply_markup=build_date_buttons1(50)  # 최근 50일
         )
 
-    elif data_selected.startswith("sell_trace_date:"):
+    elif command.startswith("sell_trace_date:"):
         ac = account()
         acct_no = ac['acct_no']
         access_token = ac['access_token']
@@ -882,7 +884,7 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
             
-            business_day = data_selected.split(":")[1]
+            business_day = command.split(":")[1]
             trail_day = post_business_day_char(business_day)
             prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
             result_msgs = []
@@ -1170,13 +1172,13 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)   
 
-    elif data_selected == "추적삭제":
+    elif command == "추적삭제":
         query.edit_message_text(
             text="📅 추적 삭제 시작일을 선택하세요",
             reply_markup=build_date_buttons2(50)  # 최근 50일
         )
             
-    elif data_selected.startswith("trace_delete_date:"):            
+    elif command.startswith("trace_delete_date:"):            
         ac = account()
         acct_no = ac['acct_no']
 
@@ -1185,7 +1187,7 @@ def callback_get(update, context) :
                                 chat_id=query.message.chat_id,
                                 message_id=query.message.message_id)
             
-            business_day = data_selected.split(":")[1]
+            business_day = command.split(":")[1]
             trail_day = post_business_day_char(business_day)
             result_msgs = []
         
@@ -1224,13 +1226,13 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)          
 
-    elif data_selected == "매매신호":
+    elif command == "매매신호":
         query.edit_message_text(
             text="📅 매매 신호 시작일을 선택하세요",
             reply_markup=build_date_buttons3(50)  # 최근 50일
         )
             
-    elif data_selected.startswith("tading_signal_date:"):            
+    elif command.startswith("tading_signal_date:"):            
         ac = account()
         acct_no = ac['acct_no']
 
@@ -1239,7 +1241,7 @@ def callback_get(update, context) :
                                 chat_id=query.message.chat_id,
                                 message_id=query.message.message_id)
             
-            business_day = data_selected.split(":")[1]
+            business_day = command.split(":")[1]
             trade_day = post_business_day_char(business_day)
             result_msgs = []
         
@@ -1288,13 +1290,13 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)     
 
-    elif data_selected == "매매추적":
+    elif command == "매매추적":
         query.edit_message_text(
             text="📅 매매 추적 시작일을 선택하세요",
             reply_markup=build_date_buttons4(50)  # 최근 50일
         )
             
-    elif data_selected.startswith("trading_trail_date:"):            
+    elif command.startswith("trading_trail_date:"):            
         ac = account()
         acct_no = ac['acct_no']
 
@@ -1303,7 +1305,7 @@ def callback_get(update, context) :
                                 chat_id=query.message.chat_id,
                                 message_id=query.message.message_id)
             
-            business_day = data_selected.split(":")[1]
+            business_day = command.split(":")[1]
             trail_day = post_business_day_char(business_day)
             result_msgs = []
         
