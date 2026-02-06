@@ -362,6 +362,59 @@ def inquire_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output
 
+# 주식현재가 일자별
+def get_kis_daily_chart(
+        stock_code: str,
+        trade_date: str,
+        access_token: str,
+        app_key: str,
+        app_secret: str,
+        market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
+        period: str = "D",                # D:최근30거래일, W:최근30주, M:최근30개월
+        adjust_price: str = "1",          # 0:수정주가미반영, 1:수정주가반영
+        verbose: bool = True              # 출력 제어 옵션
+    ):
+    url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
+
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appkey": app_key,
+        "appsecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P"
+    }
+
+    params = {
+        "FID_COND_MRKT_DIV_CODE": market_code,
+        "FID_INPUT_ISCD": stock_code,
+        "FID_PERIOD_DIV_CODE": period,
+        "FID_ORG_ADJ_PRC": adjust_price,
+    }
+
+    res = requests.get(url, headers=headers, params=params)
+    data = res.json()
+
+    if "output" not in data or not data["output"]:
+        if verbose:
+            print(f"⛔ 일봉 데이터 없음")
+        return None
+
+    df = pd.DataFrame(data["output"])
+    if df.empty:
+        return None
+
+    # 날짜 필터 (YYYYMMDD)
+    day_df = df[df["stck_bsop_date"] == trade_date]
+
+    if day_df.empty:
+        if verbose:
+            print(f"⛔ {trade_date} 일봉 없음")
+        return None
+
+    # trade_date 종가
+    return int(day_df.iloc[0]["stck_clpr"])
+
 # 주식현재가 호가/예상체결
 def inquire_asking_price(access_token, app_key, app_secret, code):
 
@@ -931,7 +984,7 @@ def callback_get(update, context) :
     elif command == "매도추적":
         query.edit_message_text(
             text="📅 매도 추적 시작일을 선택하세요",
-            reply_markup=build_date_buttons1(50)  # 최근 50일
+            reply_markup=build_date_buttons1(38)  # 최근 38일
         )
 
     elif command.startswith("sell_trace_date:"):
@@ -1237,7 +1290,7 @@ def callback_get(update, context) :
     elif command == "추적삭제":
         query.edit_message_text(
             text="📅 추적 삭제 시작일을 선택하세요",
-            reply_markup=build_date_buttons2(50)  # 최근 50일
+            reply_markup=build_date_buttons2(38)  # 최근 38일
         )
             
     elif command.startswith("trace_delete_date:"):            
@@ -1291,7 +1344,7 @@ def callback_get(update, context) :
     elif command == "매매신호":
         query.edit_message_text(
             text="📅 매매 신호 시작일을 선택하세요",
-            reply_markup=build_date_buttons3(50)  # 최근 50일
+            reply_markup=build_date_buttons3(38)  # 최근 38일
         )
             
     elif command.startswith("trading_signal_date:"):            
@@ -1380,7 +1433,7 @@ def callback_get(update, context) :
     elif command == "매매추적":
         query.edit_message_text(
             text="📅 매매 추적 시작일을 선택하세요",
-            reply_markup=build_date_buttons4(50)  # 최근 50일
+            reply_markup=build_date_buttons4(38)  # 최근 38일
         )
             
     elif command.startswith("trading_trail_date:"):            
@@ -1419,8 +1472,16 @@ def callback_get(update, context) :
                     trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, 
                     stop_price, target_price, proc_min) = r
                     
-                    a = inquire_price(access_token, app_key, app_secret, code)
-                    stck_prpr = int(a['stck_prpr'])                             # 현재가
+                    # 일자별 종가
+                    stck_prpr = get_kis_daily_chart(
+                        stock_code=code,
+                        trade_date=trail_day,
+                        access_token=access_token,
+                        app_key=app_key,
+                        app_secret=app_secret
+                    )
+                    # a = inquire_price(access_token, app_key, app_secret, code)
+                    # stck_prpr = int(a['stck_prpr'])                             # 현재가
                     stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2)   # 수익률
                     trail = ""
                     if trail_price > 0:
