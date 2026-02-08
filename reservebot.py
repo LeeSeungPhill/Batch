@@ -1480,8 +1480,6 @@ def callback_get(update, context) :
                         app_key=app_key,
                         app_secret=app_secret
                     )
-                    # a = inquire_price(access_token, app_key, app_secret, code)
-                    # stck_prpr = int(a['stck_prpr'])                             # 현재가
                     stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2)   # 수익률
                     trail = ""
                     if trail_price > 0:

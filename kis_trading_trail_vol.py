@@ -5,16 +5,13 @@ import requests
 import pandas as pd
 import psycopg2 as db
 import json
-from datetime import time
-import sys
+import time
+from datetime import time as dt_time
 import kis_api_resp as resp
 from telegram import Bot
 from telegram.ext import Updater
-import traceback
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
-
-arguments = sys.argv
 
 # PostgreSQL 연결 설정
 # conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
@@ -161,8 +158,14 @@ def get_kis_daily_chart(
             print(f"⛔ {trade_date} 일봉 없음")
         return None
 
-    # trade_date 저가
-    return int(day_df.iloc[0]["stck_lwpr"])
+    result = {
+        "low_price": int(day_df.iloc[0]["stck_lwpr"]),
+        "high_price": int(day_df.iloc[0]["stck_hgpr"]),
+        "close_price": int(day_df.iloc[0]["stck_clpr"]),
+        "volume": int(day_df.iloc[0]["acml_vol"])
+    }
+    
+    return result
 
 def get_kis_1min_dailychart(
     stock_code: str,
@@ -205,6 +208,7 @@ def get_kis_1min_dailychart(
         return pd.DataFrame()
 
     df = pd.DataFrame(data["output2"])
+    acml_vol = data.get("output1", {}).get("acml_vol", "0")
     if df.empty:
         return df
 
@@ -218,10 +222,13 @@ def get_kis_1min_dailychart(
         "cntg_vol": "거래량"
     })
 
+    # 누적 거래량 컬럼 추가
+    df["누적거래량"] = acml_vol
+
     df["시간"] = df["시간"].str[:2] + ":" + df["시간"].str[2:4]
     df = df.sort_values(["일자", "시간"])
 
-    return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량"]]
+    return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량", "누적거래량"]]
 
 def get_10min_key(dt: datetime):
     return dt.replace(minute=(dt.minute // 10) * 10, second=0)
@@ -263,7 +270,7 @@ def is_business_day(check_date: datetime) -> bool:
 
     return bool(result[0])
 
-def get_prev_day_low(stock_code, trade_date, access_token, app_key, app_secret):
+def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret):
     prev_date = get_previous_business_day((datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"))
 
     return get_kis_daily_chart(
@@ -484,6 +491,37 @@ def get_kis_1min_full_day(
         .reset_index(drop=True)
     )
 
+def volume_rate_chk(current_time, vol_ratio):
+    # ===============================
+    # 시간대별 거래량 조건 설정 
+    # ===============================
+    is_volume_satisfied = False
+    
+    # 1. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
+    if current_time < datetime.strptime("10:00", "%H:%M").time() and vol_ratio >= 50:
+        is_volume_satisfied = True
+        
+    # 2. 09:00 ~ 09:20 사이: 20% 이상
+    elif datetime.strptime("09:00", "%H:%M").time() <= current_time <= datetime.strptime("09:20", "%H:%M").time():
+        if vol_ratio >= 20:
+            is_volume_satisfied = True
+            
+    # 3. 09:00 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
+    elif datetime.strptime("09:00", "%H:%M").time() <= current_time <= datetime.strptime("09:30", "%H:%M").time():
+        if vol_ratio >= 25:
+            is_volume_satisfied = True
+            
+    # 4. 15:00 ~ 15:30 사이: 25% 이상
+    elif datetime.strptime("15:00", "%H:%M").time() <= current_time <= datetime.strptime("15:30", "%H:%M").time():
+        if vol_ratio >= 25:
+            is_volume_satisfied = True
+            
+    else:
+        # 그 외 시간대는 거래량 제한 없이 기본 로직 수행
+        is_volume_satisfied = True
+
+    return is_volume_satisfied
+
 def get_kis_1min_from_datetime(
     stock_code: str,
     stock_name: str,
@@ -515,14 +553,18 @@ def get_kis_1min_from_datetime(
     if verbose:
         print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
 
+    prev_day_info = get_prev_day_info(
+        stock_code,
+        trade_date,
+        access_token,
+        app_key,
+        app_secret
+    )
+
+    prev_low = prev_day_info['low_price']
+    prev_volume = prev_day_info['volume']
+
     if trail_tp == 'L':
-        prev_low = get_prev_day_low(
-            stock_code,
-            trade_date,
-            access_token,
-            app_key,
-            app_secret
-        )
 
         df = get_kis_1min_full_day(
             stock_code=stock_code,
@@ -539,12 +581,12 @@ def get_kis_1min_from_datetime(
 
         # 날짜별 시작 시간 설정 : 1월 2일 10시 시작
         if trade_date.endswith("0102"):
-            start_t = time(10, 0)  
+            start_t = dt_time(10, 0)  
         else:
-            start_t = time(9, 0) 
+            start_t = dt_time(9, 0) 
 
         # 시간 필터
-        df = df[(df["dt"].dt.time >= start_t) & (df["dt"].dt.time <= time(15, 30))]
+        df = df[(df["dt"].dt.time >= start_t) & (df["dt"].dt.time <= dt_time(15, 30))]
 
         # 시간 오름차순 정렬 (필수)
         df = df.sort_values("dt").reset_index(drop=True)
@@ -555,6 +597,7 @@ def get_kis_1min_from_datetime(
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
+                acml_vol = int(row["누적거래량"])
 
                 breakout_check = high_price if breakout_type == "high" else close_price
                 breakdown_check = low_price if breakdown_type == "low" else close_price
@@ -568,14 +611,18 @@ def get_kis_1min_from_datetime(
                 # 현재 분봉 시간
                 current_time = row["시간"].replace(":", "")
 
+                # 시장 흐름 : 레벨1 단기 상승, 레벨2 단기 하락 , 레벨3 추세 상승, 레벨4 추세 하락
+                # 종목 속성 : ST 단기, LT 중장기 
+
                 # ===============================
                 # 1️⃣ 15:10 이후 일봉 이탈 감시
                 # ===============================
                 if current_time >= "151000" and prev_low is not None:
-                    if close_price < prev_low :
+                    # 전일저가 금일 종가 이탈 및 전일 거래량 대비 50% 이상 거래량
+                    if close_price < prev_low and int(prev_volume/2) < acml_vol:
                         if verbose:
                             message = (
-                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈"
+                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
                             )
                             print(message)
                             bot.send_message(
@@ -602,6 +649,7 @@ def get_kis_1min_from_datetime(
                             "발생시간": row["시간"],
                             "이탈가격": close_price,
                             "전일저가": prev_low,
+                            "전일거래량 대비 50%": int(prev_volume/2),
                         })
                         return signals
 
@@ -635,12 +683,12 @@ def get_kis_1min_from_datetime(
 
         # 날짜별 시작 시간 설정 : 1월 2일 10시 시작
         if trade_date.endswith("0102"):
-            start_t = time(10, 0)  
+            start_t = dt_time(10, 0)  
         else:
-            start_t = time(9, 0) 
+            start_t = dt_time(9, 0) 
 
         # 시간 필터
-        df = df[(df["dt"].dt.time >= start_t) & (df["dt"].dt.time <= time(15, 30))]
+        df = df[(df["dt"].dt.time >= start_t) & (df["dt"].dt.time <= dt_time(15, 30))]
 
         # 시간 오름차순 정렬 (필수)
         df = df.sort_values("dt").reset_index(drop=True)
@@ -651,15 +699,19 @@ def get_kis_1min_from_datetime(
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
+                acml_vol = int(row["누적거래량"])
 
                 breakout_check = high_price if breakout_type == "high" else close_price
                 breakdown_check = low_price if breakdown_type == "low" else close_price
+
+                current_time = row["dt"].time()
+                vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
                 if high_price > low_price:
                     # ===============================
                     # 09:10 이전 미처리
                     # ===============================
-                    if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
+                    if current_time < datetime.strptime("09:10", "%H:%M").time():
                         continue
                     
                     # ===============================
@@ -669,37 +721,41 @@ def get_kis_1min_from_datetime(
                         # 돌파 이전 이탈 → 즉시 종료
                         if breakdown_check <= stop_price:
                             if trail_tp == '1':
-                                if verbose:
-                                    message = (
-                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
-                                    )
-                                    print(message)
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode='HTML'
-                                    )
 
-                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                # 시간대별 거래량 비율 체크
+                                if volume_rate_chk(current_time, vol_ratio):
 
-                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                                i_trail_plan = trail_plan if trail_plan is not None else "100"
-                                trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                                trail_amt = close_price * trail_qty
-                                u_basic_qty = basic_qty - trail_qty
-                                u_basic_amt = basic_price * u_basic_qty
+                                    if verbose:
+                                        message = (
+                                            f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                        )
+                                        print(message)
+                                        bot.send_message(
+                                            chat_id=chat_id,
+                                            text=message,
+                                            parse_mode='HTML'
+                                        )
 
-                                update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                                signals.append({
-                                    "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
-                                    "종목명": stock_name,
-                                    "종목코드": stock_code,
-                                    "발생일자": row["일자"],
-                                    "발생시간": row["시간"],
-                                    "이탈가격": breakdown_check
-                                })
-                                return signals
+                                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                                    i_trail_plan = trail_plan if trail_plan is not None else "100"
+                                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                    trail_amt = close_price * trail_qty
+                                    u_basic_qty = basic_qty - trail_qty
+                                    u_basic_amt = basic_price * u_basic_qty
+
+                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+
+                                    signals.append({
+                                        "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                                        "종목명": stock_name,
+                                        "종목코드": stock_code,
+                                        "발생일자": row["일자"],
+                                        "발생시간": row["시간"],
+                                        "이탈가격": breakdown_check
+                                    })
+                                    return signals
 
                         # 목표가 돌파
                         if breakout_check >= target_price:
@@ -827,103 +883,109 @@ def get_kis_1min_from_datetime(
 if __name__ == "__main__":
 
     if is_business_day(today):
+
+        nickname_list = ['yh480825', 'mamalong']
         
-        ac = account(arguments[1])
-        acct_no = ac['acct_no']
-        access_token = ac['access_token']
-        app_key = ac['app_key']
-        app_secret = ac['app_secret']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        for nick in nickname_list:
 
-        # 계좌잔고 조회
-        c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-            
-        cur199 = conn.cursor()
+            ac = account(nick)
+            acct_no = ac['acct_no']
+            access_token = ac['access_token']
+            app_key = ac['app_key']
+            app_secret = ac['app_secret']
+            token = ac['bot_token2']
+            chat_id = ac['chat_id']
 
-        # 일별 매매 잔고 현행화
-        for i in range(len(c)):
-            insert_query199 = """
-                INSERT INTO dly_trading_balance (
+            # 계좌잔고 조회
+            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                
+            cur199 = conn.cursor()
+
+            # 일별 매매 잔고 현행화
+            for i in range(len(c)):
+                insert_query199 = """
+                    INSERT INTO dly_trading_balance (
+                        acct_no,
+                        code,
+                        name,
+                        balance_day,
+                        balance_price,
+                        balance_qty,
+                        balance_amt,
+                        value_rate,
+                        value_amt,
+                        buy_qty,
+                        sell_qty,
+                        mod_dt
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (acct_no, code, balance_day)
+                    DO UPDATE SET
+                        balance_price = EXCLUDED.balance_price,
+                        balance_qty   = EXCLUDED.balance_qty,
+                        balance_amt   = EXCLUDED.balance_amt,
+                        value_rate    = EXCLUDED.value_rate,
+                        value_amt     = EXCLUDED.value_amt,
+                        buy_qty       = EXCLUDED.buy_qty,
+                        sell_qty      = EXCLUDED.sell_qty,
+                        mod_dt        = EXCLUDED.mod_dt;
+                """
+                record_to_insert199 = (
                     acct_no,
-                    code,
-                    name,
-                    balance_day,
-                    balance_price,
-                    balance_qty,
-                    balance_amt,
-                    value_rate,
-                    value_amt,
-                    buy_qty,
-                    sell_qty,
-                    mod_dt
+                    c['pdno'][i],
+                    c['prdt_name'][i],
+                    today,
+                    float(c['pchs_avg_pric'][i]),
+                    int(c['hldg_qty'][i]),
+                    int(c['pchs_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    float(c['evlu_pfls_rt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    int(c['evlu_pfls_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
+                    int(c['thdt_buyqty'][i]) if int(c['thdt_buyqty'][i]) > 0 else 0,
+                    int(c['thdt_sll_qty'][i]) if int(c['thdt_sll_qty'][i]) > 0 else 0,
+                    datetime.now()
                 )
-                VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (acct_no, code, balance_day)
-                DO UPDATE SET
-                    balance_price = EXCLUDED.balance_price,
-                    balance_qty   = EXCLUDED.balance_qty,
-                    balance_amt   = EXCLUDED.balance_amt,
-                    value_rate    = EXCLUDED.value_rate,
-                    value_amt     = EXCLUDED.value_amt,
-                    buy_qty       = EXCLUDED.buy_qty,
-                    sell_qty      = EXCLUDED.sell_qty,
-                    mod_dt        = EXCLUDED.mod_dt;
-            """
-            record_to_insert199 = (
-                acct_no,
-                c['pdno'][i],
-                c['prdt_name'][i],
-                today,
-                float(c['pchs_avg_pric'][i]),
-                int(c['hldg_qty'][i]),
-                int(c['pchs_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
-                float(c['evlu_pfls_rt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
-                int(c['evlu_pfls_amt'][i]) if int(c['hldg_qty'][i]) > 0 else 0,
-                int(c['thdt_buyqty'][i]) if int(c['thdt_buyqty'][i]) > 0 else 0,
-                int(c['thdt_sll_qty'][i]) if int(c['thdt_sll_qty'][i]) > 0 else 0,
-                datetime.now()
-            )
-            cur199.execute(insert_query199, record_to_insert199)
-            conn.commit()
+                cur199.execute(insert_query199, record_to_insert199)
+                conn.commit()
 
-        cur199.close()        
+            cur199.close()        
 
-        # 매매추적 조회
-        cur200 = conn.cursor()
-        cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
-        result_two00 = cur200.fetchall()
-        cur200.close()
+            # 매매추적 조회
+            cur200 = conn.cursor()
+            # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+            cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' order by code, proc_min, mod_dt")
+            result_two00 = cur200.fetchall()
+            cur200.close()
 
-        if len(result_two00) > 0:
-            
-            for i in result_two00:
+            if len(result_two00) > 0:
+                
+                for i in result_two00:
 
-                signal = get_kis_1min_from_datetime(
-                    stock_code=i[0],
-                    stock_name=i[1], 
-                    start_date=i[2],
-                    start_time=i[3],
-                    target_price=int(i[4]),
-                    stop_price=int(i[5]),
-                    basic_price=int(i[6]),
-                    basic_qty=int(i[7]),
-                    trail_tp=i[8],
-                    trail_plan=i[9],
-                    proc_min=i[10],
-                    volumn=i[11],
-                    access_token=ac['access_token'],
-                    app_key=ac['app_key'],
-                    app_secret=ac['app_secret'],
-                    breakout_type="high",
-                    verbose=True
-                )
+                    signal = get_kis_1min_from_datetime(
+                        stock_code=i[0],
+                        stock_name=i[1], 
+                        start_date=i[2],
+                        start_time=i[3],
+                        target_price=int(i[4]),
+                        stop_price=int(i[5]),
+                        basic_price=int(i[6]),
+                        basic_qty=int(i[7]),
+                        trail_tp=i[8],
+                        trail_plan=i[9],
+                        proc_min=i[10],
+                        volumn=i[11],
+                        access_token=ac['access_token'],
+                        app_key=ac['app_key'],
+                        app_secret=ac['app_secret'],
+                        breakout_type="high",
+                        verbose=True
+                    )
 
-                if signal:
-                    print("\n📌 신호 결과")
-                    print(signal)
-                else:
-                    print("\n📌 아직 신호 없음")
-                    
+                    if signal:
+                        print("\n📌 신호 결과")
+                        print(signal)
+                    else:
+                        print("\n📌 아직 신호 없음")
+
+            time.sleep(0.3)                    
