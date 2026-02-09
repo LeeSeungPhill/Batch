@@ -994,41 +994,41 @@ def get_kis_1min_from_datetime(
                             if trail_tp == '1':
 
                                 # 시간대별 거래량 비율 체크
-                                if volume_rate_chk(current_time, vol_ratio):
-                                    if verbose:
-                                        message = (
-                                            f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
-                                        )
-                                        print(message)
-                                        bot.send_message(
-                                            chat_id=chat_id,
-                                            text=message,
-                                            parse_mode='HTML'
-                                        )
+                                # if volume_rate_chk(current_time, vol_ratio):
+                                if verbose:
+                                    message = (
+                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                    )
+                                    print(message)
+                                    bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message,
+                                        parse_mode='HTML'
+                                    )
 
-                                    update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                                    i_trail_plan = trail_plan if trail_plan is not None else "100"
-                                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                                    trail_amt = close_price * trail_qty
-                                    u_basic_qty = basic_qty - trail_qty
-                                    u_basic_amt = basic_price * u_basic_qty
+                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                                i_trail_plan = trail_plan if trail_plan is not None else "100"
+                                trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                trail_amt = close_price * trail_qty
+                                u_basic_qty = basic_qty - trail_qty
+                                u_basic_amt = basic_price * u_basic_qty
 
-                                    try:
-                                        update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
-                                    except Exception as e:
-                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+                                try:
+                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
-                                    signals.append({
-                                        "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
-                                        "종목명": stock_name,
-                                        "종목코드": stock_code,
-                                        "발생일자": row["일자"],
-                                        "발생시간": row["시간"],
-                                        "이탈가격": breakdown_check
-                                    })
-                                    return signals
+                                signals.append({
+                                    "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                                    "종목명": stock_name,
+                                    "종목코드": stock_code,
+                                    "발생일자": row["일자"],
+                                    "발생시간": row["시간"],
+                                    "이탈가격": breakdown_check
+                                })
+                                return signals
 
                         # 목표가 돌파
                         if breakout_check >= target_price:

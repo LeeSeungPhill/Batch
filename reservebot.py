@@ -970,14 +970,14 @@ def callback_get(update, context) :
     elif command == "매수등록":
         menuNum = "71"
 
-        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(시장가:0), 이탈가, 매수금액을 입력하세요.",
+        context.bot.edit_message_text(text="매수등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(시장가:0), 이탈가, 매수금액, 대상(단독:1)을 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
 
     elif command == "매도등록":
         menuNum = "81"
 
-        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(시장가:0), 비중(%)을 입력하세요.",
+        context.bot.edit_message_text(text="매도등록할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(시장가:0), 비중(%), 대상(단독:1)을 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)        
     
@@ -1934,15 +1934,16 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=6)
+                commandBot = user_text.split(sep=',', maxsplit=7)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매수가(시장가:0)
                 print("commandBot[4] : ", commandBot[4])    # 이탈가
                 print("commandBot[5] : ", commandBot[5])    # 매수금액
+                print("commandBot[6] : ", commandBot[6])    # 대상(단독:1)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(시장가:0), 이탈가, 매수금액 존재시
-            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(시장가:0), 이탈가, 매수금액, 대상(단독:1) 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal() and commandBot[6].isdecimal():
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 buy_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                  # 매수가(시장가:0)
@@ -1952,382 +1953,405 @@ def echo(update, context):
                 
                 safe_margin_price = int(buy_price + buy_price * 0.05)   # 안전마진가(매수가 대비 5%)
 
-                # 계좌잔고 조회
-                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-            
-                ord_psbl_qty = 0
-                hold_price = 0
-                hldg_qty = 0
-                hold_amt = 0
+                nickname_list = ['yh480825', 'mamalong']
+                target_nicks = nickname_list if int(commandBot[6]) > 1 else [None]
+                for nick in target_nicks:
+                    # 다수 계좌일 경우에만 정보를 새로 가져옴 (nick이 None이 아닐 때)
+                    if nick is not None:
+                        ac = account(nick)
+                        acct_no = ac['acct_no']
+                        access_token = ac['access_token']
+                        app_key = ac['app_key']
+                        app_secret = ac['app_secret']
+                
+                    # 계좌잔고 조회
+                    c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                
+                    ord_psbl_qty = 0
+                    hold_price = 0
+                    hldg_qty = 0
+                    hold_amt = 0
 
-                for i, name in enumerate(c.index):
-                    if code == c['pdno'][i]:
-                        ord_psbl_qty = int(c['ord_psbl_qty'][i])
-                        hold_price = float(c['pchs_avg_pric'][i])
-                        hldg_qty = int(c['hldg_qty'][i])
-                        hold_amt = int(c['pchs_amt'][i])
-                        
-                # 매매추적 보유가, 보유수량, 보유금액 조회
-                cur300 = conn.cursor()
-                select_query = """
-                    SELECT 
-                        basic_price,
-                        basic_qty,
-                        basic_amt
-                    FROM (
-                        SELECT
-                            COALESCE(basic_price, 0) AS basic_price,
-                            COALESCE(basic_qty, 0) AS basic_qty,
-                            COALESCE(basic_amt, 0) AS basic_amt,
-                            row_number() OVER (
-                                PARTITION BY acct_no, code
-                                ORDER BY trail_dtm DESC
-                            ) AS rn
-                        FROM public.trading_trail
-                        WHERE acct_no = %s
-                        AND trail_tp IN ('1', '2', '3', 'L')
-                        AND trail_day = %s
-                        AND code = %s
-                    ) T
-                    WHERE rn = 1
-                    """
-                cur300.execute(select_query, (acct_no, year_day, code))
-                row = cur300.fetchone()
-                cur300.close()
-
-                basic_price = int(row[0]) if row else 0
-                basic_qty = int(row[1]) if row else 0
-                basic_amt = int(row[2]) if row else 0
-                # 보유가
-                base_price = hold_price if hold_price > 0 else basic_price
-                # 보유량
-                base_qty = hldg_qty if hldg_qty > 0 else basic_qty
-                # 보유금액
-                base_amt = hold_amt if hold_amt > 0 else basic_amt
-                # 총보유량
-                sum_base_qty = base_qty + buy_qty
-                # 평균보유가
-                avg_base_price = int(round((base_amt + buy_amt) / sum_base_qty))
-
-                # 매매추적 update 및 insert
-                cur400 = conn.cursor()
-                merge_query = """
-                    WITH upd AS (
-                        UPDATE trading_trail tt
-                        SET
-                            trail_dtm = %s,
-                            trail_tp = %s,
-                            stop_price = %s,
-                            target_price = %s,
-                            basic_price = %s,
-                            basic_qty = %s,
-                            basic_amt = %s,
-                            proc_min = %s,
-                            mod_dt = %s
+                    for i, name in enumerate(c.index):
+                        if code == c['pdno'][i]:
+                            ord_psbl_qty = int(c['ord_psbl_qty'][i])
+                            hold_price = float(c['pchs_avg_pric'][i])
+                            hldg_qty = int(c['hldg_qty'][i])
+                            hold_amt = int(c['pchs_amt'][i])
+                            
+                    # 매매추적 보유가, 보유수량, 보유금액 조회
+                    cur300 = conn.cursor()
+                    select_query = """
+                        SELECT 
+                            basic_price,
+                            basic_qty,
+                            basic_amt
                         FROM (
                             SELECT
-                                acct_no,
-                                code,
-                                trail_day,
+                                COALESCE(basic_price, 0) AS basic_price,
+                                COALESCE(basic_qty, 0) AS basic_qty,
+                                COALESCE(basic_amt, 0) AS basic_amt,
                                 row_number() OVER (
                                     PARTITION BY acct_no, code
                                     ORDER BY trail_dtm DESC
                                 ) AS rn
                             FROM public.trading_trail
                             WHERE acct_no = %s
-                            AND code = %s
-                            AND trail_day = %s
                             AND trail_tp IN ('1', '2', '3', 'L')
-                        ) sub
-                        WHERE tt.acct_no  = sub.acct_no
-                        AND tt.code     = sub.code
-                        AND tt.trail_day = sub.trail_day
-                        AND sub.rn = 1
-                        RETURNING 1 AS flag
-                    ),
-                    ins AS (
-                        INSERT INTO trading_trail (
-                            acct_no,
-                            code,
-                            name,
-                            trail_day,
-                            trail_dtm,
-                            trail_tp,
-                            stop_price,
-                            target_price,
-                            basic_price,
-                            basic_qty,
-                            basic_amt,
-                            proc_min,
-                            crt_dt,
-                            mod_dt
+                            AND trail_day = %s
+                            AND code = %s
+                        ) T
+                        WHERE rn = 1
+                        """
+                    cur300.execute(select_query, (acct_no, year_day, code))
+                    row = cur300.fetchone()
+                    cur300.close()
+
+                    basic_price = int(row[0]) if row else 0
+                    basic_qty = int(row[1]) if row else 0
+                    basic_amt = int(row[2]) if row else 0
+                    # 보유가
+                    base_price = hold_price if hold_price > 0 else basic_price
+                    # 보유량
+                    base_qty = hldg_qty if hldg_qty > 0 else basic_qty
+                    # 보유금액
+                    base_amt = hold_amt if hold_amt > 0 else basic_amt
+                    # 총보유량
+                    sum_base_qty = base_qty + buy_qty
+                    # 평균보유가
+                    avg_base_price = int(round((base_amt + buy_amt) / sum_base_qty))
+
+                    # 매매추적 update 및 insert
+                    cur400 = conn.cursor()
+                    merge_query = """
+                        WITH upd AS (
+                            UPDATE trading_trail tt
+                            SET
+                                trail_dtm = %s,
+                                trail_tp = %s,
+                                stop_price = %s,
+                                target_price = %s,
+                                basic_price = %s,
+                                basic_qty = %s,
+                                basic_amt = %s,
+                                proc_min = %s,
+                                mod_dt = %s
+                            FROM (
+                                SELECT
+                                    acct_no,
+                                    code,
+                                    trail_day,
+                                    row_number() OVER (
+                                        PARTITION BY acct_no, code
+                                        ORDER BY trail_dtm DESC
+                                    ) AS rn
+                                FROM public.trading_trail
+                                WHERE acct_no = %s
+                                AND code = %s
+                                AND trail_day = %s
+                                AND trail_tp IN ('1', '2', '3', 'L')
+                            ) sub
+                            WHERE tt.acct_no  = sub.acct_no
+                            AND tt.code     = sub.code
+                            AND tt.trail_day = sub.trail_day
+                            AND sub.rn = 1
+                            RETURNING 1 AS flag
+                        ),
+                        ins AS (
+                            INSERT INTO trading_trail (
+                                acct_no,
+                                code,
+                                name,
+                                trail_day,
+                                trail_dtm,
+                                trail_tp,
+                                stop_price,
+                                target_price,
+                                basic_price,
+                                basic_qty,
+                                basic_amt,
+                                proc_min,
+                                crt_dt,
+                                mod_dt
+                            )
+                            SELECT
+                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            WHERE NOT EXISTS (SELECT 1 FROM upd)
+                            RETURNING 1 AS flag
                         )
-                        SELECT
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                        WHERE NOT EXISTS (SELECT 1 FROM upd)
-                        RETURNING 1 AS flag
-                    )
-                    SELECT flag FROM upd
-                    UNION ALL 
-                    SELECT flag FROM ins;
-                    """
-                # merge 인자값 설정
-                cur400.execute(merge_query, (
-                        hour_minute, "1", loss_price, safe_margin_price, avg_base_price, sum_base_qty, avg_base_price * sum_base_qty, hour_minute, datetime.now(), acct_no, code, year_day,
-                        acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price if base_price > 0 else buy_price, sum_base_qty if base_qty > 0 else buy_qty, avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, hour_minute, datetime.now(), datetime.now()
-                ))
+                        SELECT flag FROM upd
+                        UNION ALL 
+                        SELECT flag FROM ins;
+                        """
+                    # merge 인자값 설정
+                    cur400.execute(merge_query, (
+                            hour_minute, "1", loss_price, safe_margin_price, avg_base_price, sum_base_qty, avg_base_price * sum_base_qty, hour_minute, datetime.now(), acct_no, code, year_day,
+                            acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price if base_price > 0 else buy_price, sum_base_qty if base_qty > 0 else buy_qty, avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, hour_minute, datetime.now(), datetime.now()
+                    ))
 
-                was_updated = cur400.fetchone() is not None
+                    was_updated = cur400.fetchone() is not None
 
-                conn.commit()
-                cur400.close()
+                    conn.commit()
+                    cur400.close()
 
-                if was_updated:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else buy_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
-                else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매매추적 미처리")       
-
-                # 매매시뮬레이션 insert
-                cur500 = conn.cursor()
-                insert_query = """
-                    INSERT INTO tradng_simulation (
-                        acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
-                    DO NOTHING
-                    RETURNING 1;
-                    """
-                # insert 인자값 설정
-                cur500.execute(insert_query, (
-                    acct_no, company, code, year_day, hour_minute, "1", buy_price, buy_qty, buy_price*buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
-                ))
-
-                was_inserted = cur500.fetchone() is not None
-
-                conn.commit()
-                cur500.close()
-
-                if was_inserted:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록", parse_mode='HTML')
-
-                    # 매수예정금액
-                    buy_expect_sum = buy_price * buy_qty
-                    print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
-                    # 매수 가능(현금) 조회
-                    b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                    print("매수 가능(현금) : " + format(int(b), ',d'));
-                
-                    if int(b) > int(buy_expect_sum):  # 매수가능(현금)이 매수예정금액보다 큰 경우
-
-                        ord_dvsn = "00"    
-
-                        try:
-                            # 매수
-                            c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(buy_qty), str(buy_price))
-                        
-                            if c['ODNO'] != "":
-                                time.sleep(0.5) # 주문 등록 대기
-                                # 일별주문체결 조회
-                                output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
-                                tdf = pd.DataFrame(output1)
-                                tdf.set_index('odno')
-                                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                                for i, name in enumerate(d.index):
-                                    d_order_no = int(d['odno'][i])
-                                    d_order_type = d['sll_buy_dvsn_cd_name'][i]
-                                    d_order_dt = d['ord_dt'][i]
-                                    d_order_tmd = d['ord_tmd'][i]
-                                    d_name = d['prdt_name'][i]
-                                    d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
-                                    d_order_amount = d['ord_qty'][i]
-                                    d_total_complete_qty = d['tot_ccld_qty'][i]
-                                    d_remain_qty = d['rmn_qty'][i]
-                                    d_total_complete_amt = d['tot_ccld_amt'][i]
-
-                                    print("매수주문 완료")
-                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
-
-                            else:
-                                print("매수주문 실패")
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
-
-                        except Exception as e:
-                            print('매수주문 오류.', e)
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 [매수주문 오류] - " + str(e), parse_mode='HTML')
-                        
+                    if was_updated:
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else buy_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
                     else:
-                        print("매수 가능(현금) 부족")
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') +"원 부족")
-                else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록 미처리")
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매매추적 미처리")       
+
+                    # 매매시뮬레이션 insert
+                    cur500 = conn.cursor()
+                    insert_query = """
+                        INSERT INTO tradng_simulation (
+                            acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                        ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
+                        DO NOTHING
+                        RETURNING 1;
+                        """
+                    # insert 인자값 설정
+                    cur500.execute(insert_query, (
+                        acct_no, company, code, year_day, hour_minute, "1", buy_price, buy_qty, buy_price*buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
+                    ))
+
+                    was_inserted = cur500.fetchone() is not None
+
+                    conn.commit()
+                    cur500.close()
+
+                    if was_inserted:
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록", parse_mode='HTML')
+
+                        # 매수예정금액
+                        buy_expect_sum = buy_price * buy_qty
+                        print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
+                        # 매수 가능(현금) 조회
+                        b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
+                        print("매수 가능(현금) : " + format(int(b), ',d'));
+                    
+                        if int(b) > int(buy_expect_sum):  # 매수가능(현금)이 매수예정금액보다 큰 경우
+
+                            ord_dvsn = "00"    
+
+                            try:
+                                # 매수
+                                c = order_cash(True, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(buy_qty), str(buy_price))
+                            
+                                if c['ODNO'] != "":
+                                    time.sleep(0.5) # 주문 등록 대기
+                                    # 일별주문체결 조회
+                                    output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
+                                    tdf = pd.DataFrame(output1)
+                                    tdf.set_index('odno')
+                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+
+                                    for i, name in enumerate(d.index):
+                                        d_order_no = int(d['odno'][i])
+                                        d_order_type = d['sll_buy_dvsn_cd_name'][i]
+                                        d_order_dt = d['ord_dt'][i]
+                                        d_order_tmd = d['ord_tmd'][i]
+                                        d_name = d['prdt_name'][i]
+                                        d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
+                                        d_order_amount = d['ord_qty'][i]
+                                        d_total_complete_qty = d['tot_ccld_qty'][i]
+                                        d_remain_qty = d['rmn_qty'][i]
+                                        d_total_complete_amt = d['tot_ccld_amt'][i]
+
+                                        print("매수주문 완료")
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
+
+                                else:
+                                    print("매수주문 실패")
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
+
+                            except Exception as e:
+                                print('매수주문 오류.', e)
+                                context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(buy_price), ',d') + "원, 매수량 : " + format(int(buy_qty), ',d') + "주 [매수주문 오류] - " + str(e), parse_mode='HTML')
+                            
+                        else:
+                            print("매수 가능(현금) 부족")
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') +"원 부족")
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록 미처리")
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가 미존재 또는 부적합")         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가, 매수금액, 대상(단독:1) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가, 매수금액, 대상(단독:1) 미존재 또는 부적합")         
 
         elif menuNum == '81':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=5)
+                commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매도가(시장가:0)
                 print("commandBot[4] : ", commandBot[4])    # 비중(%)
+                print("commandBot[5] : ", commandBot[5])    # 대상(단독:1)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가(시장가:0), 비중(%) 존재시
-            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]):
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가(시장가:0), 비중(%), 대상(단독:1) 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and is_positive_int(commandBot[4]) and commandBot[5].isdecimal():
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 sell_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                 # 매도가(시장가:0)
                 sell_rate = int(commandBot[4])                          # 비중(%)
 
-                # 계좌잔고 조회
-                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-            
-                hldg_qty = 0
+                nickname_list = ['yh480825', 'mamalong']
+                target_nicks = nickname_list if int(commandBot[5]) > 1 else [None]
+                for nick in target_nicks:
+                    # 다수 계좌일 경우에만 정보를 새로 가져옴 (nick이 None이 아닐 때)
+                    if nick is not None:
+                        ac = account(nick)
+                        acct_no = ac['acct_no']
+                        access_token = ac['access_token']
+                        app_key = ac['app_key']
+                        app_secret = ac['app_secret']
 
-                for i, name in enumerate(c.index):
-                    if code == c['pdno'][i]:
-                        hldg_qty = int(c['hldg_qty'][i])
+                    # 계좌잔고 조회
+                    c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                
+                    hldg_qty = 0
 
-                # 매매추적 보유가, 보유수량, 추적유형 조회
-                cur300 = conn.cursor()
-                select_query = """
-                    SELECT 
-                        basic_price,
-                        basic_qty,
-                        trail_tp
-                    FROM (
-                        SELECT
-                            COALESCE(basic_price, 0) AS basic_price,
-                            COALESCE(basic_qty, 0) AS basic_qty,
-                            trail_tp, 
-                            row_number() OVER (
-                                PARTITION BY acct_no, code
-                                ORDER BY trail_dtm DESC
-                            ) AS rn
-                        FROM public.trading_trail
-                        WHERE acct_no = %s
-                        AND trail_tp IN ('1', '2', '3', 'L')
-                        AND trail_day = %s
-                        AND code = %s
-                    ) T
-                    WHERE rn = 1
-                    """
-                cur300.execute(select_query, (acct_no, year_day, code))
-                row = cur300.fetchone()
-                cur300.close()
+                    for i, name in enumerate(c.index):
+                        if code == c['pdno'][i]:
+                            hldg_qty = int(c['hldg_qty'][i])
 
-                basic_price = int(row[0]) if row else 0
-                basic_qty = int(row[1]) if row else 0
-                prev_trail_tp = row[2] if row else "1"
-                # 보유량
-                base_qty = hldg_qty if hldg_qty > 0 else basic_qty
-                # 매도량
-                sell_qty = int(base_qty * sell_rate * 0.01)
+                    # 매매추적 보유가, 보유수량, 추적유형 조회
+                    cur300 = conn.cursor()
+                    select_query = """
+                        SELECT 
+                            basic_price,
+                            basic_qty,
+                            trail_tp
+                        FROM (
+                            SELECT
+                                COALESCE(basic_price, 0) AS basic_price,
+                                COALESCE(basic_qty, 0) AS basic_qty,
+                                trail_tp, 
+                                row_number() OVER (
+                                    PARTITION BY acct_no, code
+                                    ORDER BY trail_dtm DESC
+                                ) AS rn
+                            FROM public.trading_trail
+                            WHERE acct_no = %s
+                            AND trail_tp IN ('1', '2', '3', 'L')
+                            AND trail_day = %s
+                            AND code = %s
+                        ) T
+                        WHERE rn = 1
+                        """
+                    cur300.execute(select_query, (acct_no, year_day, code))
+                    row = cur300.fetchone()
+                    cur300.close()
 
-                if sell_qty > 0:
+                    basic_price = int(row[0]) if row else 0
+                    basic_qty = int(row[1]) if row else 0
+                    prev_trail_tp = row[2] if row else "1"
+                    # 보유량
+                    base_qty = hldg_qty if hldg_qty > 0 else basic_qty
+                    # 매도량
+                    sell_qty = int(base_qty * sell_rate * 0.01)
 
-                    try:
-                        with conn.cursor() as cur:
-                            # 매매추적 update
-                            update_query1 = """
-                                UPDATE trading_trail tt SET
-                                    trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
-                                FROM (
-                                    SELECT
-                                        acct_no,
-                                        code,
-                                        trail_day,
-                                        row_number() OVER (
-                                            PARTITION BY acct_no, code
-                                            ORDER BY trail_dtm DESC
-                                        ) AS rn
-                                    FROM public.trading_trail
-                                    WHERE acct_no = %s
-                                    AND code = %s
-                                    AND trail_day = %s
-                                    AND trail_tp IN ('1', '2', '3', 'L')
-                                ) sub
-                                WHERE tt.acct_no = sub.acct_no
-                                AND tt.code = sub.code
-                                AND tt.trail_day = sub.trail_day
-                                AND sub.rn = 1
-                                RETURNING 1;
-                                """
-                            # update 인자값 설정
-                            cur.execute(update_query1, (hour_minute, "2", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
+                    if sell_qty > 0:
 
-                            was_updated1 = cur.fetchone() is not None
-
-                            # 매매시뮬레이션 update
-                            update_query2 = """
-                                UPDATE public.tradng_simulation SET 
-                                    loss_price = %s
-                                    , profit_price = %s
-                                    , proc_dtm = %s 
-                                    , proc_yn = %s      
-                                    , mod_dt = %s
-                                WHERE acct_no = %s
-                                AND code = %s
-                                AND trade_tp = %s
-                                AND trade_day <= %s
-                                AND proc_yn != 'Y'
-                                RETURNING 1;
-                                """
-                            # update 인자값 설정
-                            cur.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), acct_no, code, "1", year_day))
-                            
-                            was_updated2 = cur.fetchone() is not None
-
-                            if was_updated1 and was_updated2:
-                                conn.commit()
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
-
-                                # 매매시뮬레이션 insert
-                                insert_query = """
-                                    INSERT INTO tradng_simulation (
-                                        acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
-                                    )
-                                    VALUES (
-                                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                                    )
-                                    ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
-                                    DO NOTHING
+                        try:
+                            with conn.cursor() as cur:
+                                # 매매추적 update
+                                update_query1 = """
+                                    UPDATE trading_trail tt SET
+                                        trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
+                                    FROM (
+                                        SELECT
+                                            acct_no,
+                                            code,
+                                            trail_day,
+                                            row_number() OVER (
+                                                PARTITION BY acct_no, code
+                                                ORDER BY trail_dtm DESC
+                                            ) AS rn
+                                        FROM public.trading_trail
+                                        WHERE acct_no = %s
+                                        AND code = %s
+                                        AND trail_day = %s
+                                        AND trail_tp IN ('1', '2', '3', 'L')
+                                    ) sub
+                                    WHERE tt.acct_no = sub.acct_no
+                                    AND tt.code = sub.code
+                                    AND tt.trail_day = sub.trail_day
+                                    AND sub.rn = 1
                                     RETURNING 1;
                                     """
-                                # insert 인자값 설정
-                                cur.execute(insert_query, (
-                                    acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
-                                ))
+                                # update 인자값 설정
+                                cur.execute(update_query1, (hour_minute, "2", str(sell_rate), int(stck_lwpr), sell_price, hour_minute, datetime.now(), acct_no, code, year_day))
 
-                                was_inserted = cur.fetchone() is not None
-                                conn.commit()
+                                was_updated1 = cur.fetchone() is not None
 
-                                if was_inserted:
-                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록", parse_mode='HTML')
+                                # 매매시뮬레이션 update
+                                update_query2 = """
+                                    UPDATE public.tradng_simulation SET 
+                                        loss_price = %s
+                                        , profit_price = %s
+                                        , proc_dtm = %s 
+                                        , proc_yn = %s      
+                                        , mod_dt = %s
+                                    WHERE acct_no = %s
+                                    AND code = %s
+                                    AND trade_tp = %s
+                                    AND trade_day <= %s
+                                    AND proc_yn != 'Y'
+                                    RETURNING 1;
+                                    """
+                                # update 인자값 설정
+                                cur.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), acct_no, code, "1", year_day))
+                                
+                                was_updated2 = cur.fetchone() is not None
+
+                                if was_updated1 and was_updated2:
+                                    conn.commit()
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
+
+                                    # 매매시뮬레이션 insert
+                                    insert_query = """
+                                        INSERT INTO tradng_simulation (
+                                            acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
+                                        )
+                                        VALUES (
+                                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                        )
+                                        ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
+                                        DO NOTHING
+                                        RETURNING 1;
+                                        """
+                                    # insert 인자값 설정
+                                    cur.execute(insert_query, (
+                                        acct_no, company, code, year_day, hour_minute, "2", sell_price,  sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
+                                    ))
+
+                                    was_inserted = cur.fetchone() is not None
+                                    conn.commit()
+
+                                    if was_inserted:
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록", parse_mode='HTML')
+                                    else:
+                                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")
+
                                 else:
-                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매도등록 미처리")
+                                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")   
 
-                            else:
-                                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")   
+                        except Exception as e:
+                            conn.rollback()
+                            print(f"Error 발생: {e}")
+                            context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다: {e}")                            
 
-                    except Exception as e:
-                        conn.rollback()
-                        print(f"Error 발생: {e}")
-                        context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다: {e}")                            
-
-                else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도량 부족 미처리")                                
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도량 부족 미처리")                                
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%) 미존재 또는 부적합")                         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%), 대상(단독:1) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(시장가:0), 비중(%), 대상(단독:1) 미존재 또는 부적합")                         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
