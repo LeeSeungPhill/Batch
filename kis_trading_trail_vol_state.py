@@ -769,21 +769,21 @@ def volume_rate_chk(current_time, vol_ratio):
     is_volume_satisfied = False
     
     # 1. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
-    if current_time < datetime.strptime("10:00", "%H:%M").time() and vol_ratio >= 50:
+    if int(current_time) < 1000 and vol_ratio >= 50:
         is_volume_satisfied = True
         
     # 2. 09:00 ~ 09:20 사이: 20% 이상
-    elif datetime.strptime("09:00", "%H:%M").time() <= current_time <= datetime.strptime("09:20", "%H:%M").time():
+    elif 900 <= int(current_time) <= 920:
         if vol_ratio >= 20:
             is_volume_satisfied = True
             
-    # 3. 09:00 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
-    elif datetime.strptime("09:00", "%H:%M").time() <= current_time <= datetime.strptime("09:30", "%H:%M").time():
+    # 3. 09:21 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
+    elif 921 <= int(current_time) <= 930:
         if vol_ratio >= 25:
             is_volume_satisfied = True
             
     # 4. 15:00 ~ 15:30 사이: 25% 이상
-    elif datetime.strptime("15:00", "%H:%M").time() <= current_time <= datetime.strptime("15:30", "%H:%M").time():
+    elif 1500 <= int(current_time) <= 1530:
         if vol_ratio >= 25:
             is_volume_satisfied = True
             
@@ -881,6 +881,45 @@ def get_kis_1min_from_datetime(
 
                 # 현재 분봉 시간
                 current_time = row["시간"].replace(":", "")
+                vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
+
+                # 수익 후, 이탈가 이탈 및 전일 저가 이탈 → 즉시 종료
+                if prev_low is not None:
+                    if close_price <= stop_price and close_price < prev_low:
+
+                        # 시간대별 거래량 비율 체크
+                        if volume_rate_chk(current_time, vol_ratio):
+                            if verbose:
+                                message = (
+                                    f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
+                                )
+                                print(message)
+                                bot.send_message(
+                                    chat_id=chat_id,
+                                    text=message,
+                                    parse_mode='HTML'
+                                )
+
+                            update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
+                            trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
+                            i_trail_plan = trail_plan if trail_plan is not None else "100"
+                            trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                            trail_amt = close_price * trail_qty
+                            u_basic_qty = basic_qty - trail_qty
+                            u_basic_amt = basic_price * u_basic_qty
+
+                            update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+
+                            signals.append({
+                                "signal_type": "BREAKDOWN_AFTER_PROFIT",
+                                "종목명": stock_name,
+                                "종목코드": stock_code,
+                                "발생일자": row["일자"],
+                                "발생시간": row["시간"],
+                                "이탈가격": breakdown_check
+                            })
+                            return signals
 
                 # ===============================
                 # 1️⃣ 15:10 이후 일봉 이탈 감시
