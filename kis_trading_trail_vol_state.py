@@ -1281,32 +1281,34 @@ if __name__ == "__main__":
             if len(result_two00) > 0:
                 
                 for i in result_two00:
+                    try:
+                        signal = get_kis_1min_from_datetime(
+                            stock_code=i[0],
+                            stock_name=i[1], 
+                            start_date=i[2],
+                            start_time=i[3],
+                            target_price=int(i[4]),
+                            stop_price=int(i[5]),
+                            basic_price=int(i[6]),
+                            basic_qty=int(i[7]),
+                            trail_tp=i[8],
+                            trail_plan=i[9],
+                            proc_min=i[10],
+                            volumn=i[11],
+                            access_token=ac['access_token'],
+                            app_key=ac['app_key'],
+                            app_secret=ac['app_secret'],
+                            breakout_type="high",
+                            verbose=True
+                        )
 
-                    signal = get_kis_1min_from_datetime(
-                        stock_code=i[0],
-                        stock_name=i[1], 
-                        start_date=i[2],
-                        start_time=i[3],
-                        target_price=int(i[4]),
-                        stop_price=int(i[5]),
-                        basic_price=int(i[6]),
-                        basic_qty=int(i[7]),
-                        trail_tp=i[8],
-                        trail_plan=i[9],
-                        proc_min=i[10],
-                        volumn=i[11],
-                        access_token=ac['access_token'],
-                        app_key=ac['app_key'],
-                        app_secret=ac['app_secret'],
-                        breakout_type="high",
-                        verbose=True
-                    )
-
-                    if signal:
-                        print("\n📌 신호 결과")
-                        print(signal)
-                    else:
-                        print("\n📌 아직 신호 없음")
+                        if signal:
+                            print("\n📌 신호 결과")
+                            print(signal)
+                        else:
+                            print("\n📌 아직 신호 없음")
+                    except Exception as e:
+                        print(f"\n⚠️ [{i[1]}-{i[0]}] 처리 중 오류 (건너뜀): {e}")
 
             time.sleep(0.3)                        
                     

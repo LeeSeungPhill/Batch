@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from datetime import timedelta
@@ -19,7 +20,7 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 # DB 연결
 conn = db.connect(conn_string)
 
-today = datetime.now().strftime("%Y%m%d")
+today = '20260213'
 
 bot = None
 chat_id = None
@@ -51,7 +52,7 @@ def account(nickname):
 
     acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1, bot_token2, chat_id = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
-    if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
+    if (datetime.now() - validTokenDate).days >= 1 or token_day != datetime.now().strftime("%Y%m%d"):
         access_token = auth(app_key, app_secret)
         token_publ_date = datetime.now().strftime('%Y%m%d%H%M%S')
         cur02 = conn.cursor()
@@ -991,8 +992,8 @@ if __name__ == "__main__":
 
             # 매매추적 조회
             cur200 = conn.cursor()
-            cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
-            # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' order by code, proc_min, mod_dt")
+            # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+            cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' order by code, proc_min, mod_dt")
             result_two00 = cur200.fetchall()
             cur200.close()
 
@@ -1002,7 +1003,7 @@ if __name__ == "__main__":
                     try:
                         signal = get_kis_1min_from_datetime(
                             stock_code=i[0],
-                            stock_name=i[1], 
+                            stock_name=i[1],
                             start_date=i[2],
                             start_time=i[3],
                             target_price=int(i[4]),
