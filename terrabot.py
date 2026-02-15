@@ -5850,8 +5850,8 @@ def echo(update, context):
 
     # 입력메시지가 6자리 이상인 경우,
     if len(user_text) >= 6:
-        # 입력메시지가 앞의 6자리가 숫자인 경우,
-        if user_text[:6].isdecimal():
+        # 입력메시지가 앞의 1자리가 숫자인 경우,
+        if user_text[:1].isdecimal():
             # 입력메시지가 종목코드에 존재하는 경우
             if len(stock_code[stock_code.code == user_text[:6]].values) > 0:
                 code = stock_code[stock_code.code == user_text[:6]].code.values[0].strip()  ## strip() : 공백제거
