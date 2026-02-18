@@ -1953,8 +1953,14 @@ def echo(update, context):
                 
                 safe_margin_price = int(buy_price + buy_price * 0.05)   # 안전마진가(매수가 대비 5%)
 
-                nickname_list = ['yh480825', 'mamalong']
-                target_nicks = nickname_list if int(commandBot[6]) > 1 else [None]
+                target_val = int(commandBot[6])
+                if target_val >= 3:
+                    nickname_list = ['phills2', 'mamalong', 'worry106']
+                elif target_val == 2:
+                    nickname_list = ['phills2', 'mamalong']
+                else:
+                    nickname_list = arguments
+                target_nicks = nickname_list if target_val >= 1 else [None]
                 for nick in target_nicks:
                     # 다수 계좌일 경우에만 정보를 새로 가져옴 (nick이 None이 아닐 때)
                     if nick is not None:
@@ -2199,8 +2205,14 @@ def echo(update, context):
                 sell_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                 # 매도가(시장가:0)
                 sell_rate = int(commandBot[4])                          # 비중(%)
 
-                nickname_list = ['yh480825', 'mamalong']
-                target_nicks = nickname_list if int(commandBot[5]) > 1 else [None]
+                target_val = int(commandBot[5])
+                if target_val >= 3:
+                    nickname_list = ['phills2', 'mamalong', 'worry106']
+                elif target_val == 2:
+                    nickname_list = ['phills2', 'mamalong']
+                else:
+                    nickname_list = arguments
+                target_nicks = nickname_list if target_val >= 1 else [None]
                 for nick in target_nicks:
                     # 다수 계좌일 경우에만 정보를 새로 가져옴 (nick이 None이 아닐 때)
                     if nick is not None:
