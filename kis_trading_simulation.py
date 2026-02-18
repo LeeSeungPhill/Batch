@@ -114,7 +114,7 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
-nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong']
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
 for nick in nickname_list:
     try:
