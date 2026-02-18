@@ -840,8 +840,7 @@ def callback_get(update, context) :
 
             else:
                 context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            chat_id=query.message.chat_id)
 
         except Exception as e:
             print('일별주문체결 조회 오류.', e)
@@ -937,8 +936,7 @@ def callback_get(update, context) :
 
             else:
                 context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            chat_id=query.message.chat_id)
 
         except Exception as e:
             print('전체예약 조회 오류.', e)
