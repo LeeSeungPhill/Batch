@@ -284,7 +284,7 @@ def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret)
 def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
-        UPDATE public.tradng_simulation SET 
+        UPDATE public.trading_simulation SET 
             proc_yn = %s
             , proc_dtm = %s
             , mod_dt = %s
@@ -300,7 +300,7 @@ def update_long_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_dat
 def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
-        UPDATE public.tradng_simulation SET 
+        UPDATE public.trading_simulation SET 
             proc_yn = %s
             , proc_dtm = %s                  
             , mod_dt = %s
@@ -316,7 +316,7 @@ def update_exit_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
 def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
-        UPDATE public.tradng_simulation SET 
+        UPDATE public.trading_simulation SET 
             proc_yn = %s
             , proc_dtm = %s 
             , mod_dt = %s
@@ -332,7 +332,7 @@ def update_safe_trading_mng(udt_proc_yn, acct_no, code, trade_tp, start_date, pr
 def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade_tp, start_date, proc_dtm):
     cur03 = conn.cursor()
     cur03.execute("""
-        UPDATE public.tradng_simulation SET 
+        UPDATE public.trading_simulation SET 
             loss_price = %s
             , profit_price = %s
             , proc_dtm = %s 

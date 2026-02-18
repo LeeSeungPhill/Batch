@@ -1092,7 +1092,7 @@ def callback_get(update, context) :
                                 PARTITION BY A.acct_no, A.code
                                 ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
                             ) AS rn
-                        FROM tradng_simulation A
+                        FROM trading_simulation A
                         LEFT JOIN trading_trail B
                             ON B.acct_no = A.acct_no
                             AND B.code = A.code
@@ -1196,7 +1196,7 @@ def callback_get(update, context) :
                                 PARTITION BY A.acct_no, A.code
                                 ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
                             ) AS rn
-                        FROM tradng_simulation A
+                        FROM trading_simulation A
                         LEFT JOIN trading_trail B
                             ON B.acct_no = A.acct_no
                             AND B.code = A.code
@@ -1363,7 +1363,7 @@ def callback_get(update, context) :
             # 매매신호 select
             cur200 = conn.cursor()
             select_query = """
-                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM tradng_simulation WHERE acct_no = %s AND trade_day = %s ORDER BY proc_yn, trade_dtm DESC
+                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM trading_simulation WHERE acct_no = %s AND trade_day = %s ORDER BY proc_yn, trade_dtm DESC
                 """
             # select 인자값 설정
             cur200.execute(select_query, (acct_no, trade_day))
@@ -2102,7 +2102,7 @@ def echo(update, context):
                     # 매매시뮬레이션 insert
                     cur500 = conn.cursor()
                     insert_query = """
-                        INSERT INTO tradng_simulation (
+                        INSERT INTO trading_simulation (
                             acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
                         )
                         VALUES (
@@ -2241,7 +2241,7 @@ def echo(update, context):
 
                                 # 매매시뮬레이션 update
                                 update_query2 = """
-                                    UPDATE public.tradng_simulation SET 
+                                    UPDATE public.trading_simulation SET 
                                         loss_price = %s
                                         , profit_price = %s
                                         , proc_dtm = %s 
@@ -2265,7 +2265,7 @@ def echo(update, context):
 
                                     # 매매시뮬레이션 insert
                                     insert_query = """
-                                        INSERT INTO tradng_simulation (
+                                        INSERT INTO trading_simulation (
                                             acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt 
                                         )
                                         VALUES (
@@ -2496,7 +2496,7 @@ def cli_run(menu, user_input):
                 # 매매시뮬레이션 insert
                 cur500 = conn.cursor()
                 insert_query = """
-                    INSERT INTO tradng_simulation (
+                    INSERT INTO trading_simulation (
                         acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
                     )
                     VALUES (
@@ -2628,7 +2628,7 @@ def cli_run(menu, user_input):
 
                             # 매매시뮬레이션 update
                             update_query2 = """
-                                UPDATE public.tradng_simulation SET
+                                UPDATE public.trading_simulation SET
                                     loss_price = %s
                                     , profit_price = %s
                                     , proc_dtm = %s
@@ -2653,7 +2653,7 @@ def cli_run(menu, user_input):
 
                                 # 매매시뮬레이션 insert
                                 insert_query = """
-                                    INSERT INTO tradng_simulation (
+                                    INSERT INTO trading_simulation (
                                         acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt
                                     )
                                     VALUES (

@@ -221,7 +221,7 @@ for nick in nickname_list:
                             PARTITION BY A.acct_no, A.code
                             ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
                         ) AS rn
-                    FROM tradng_simulation A
+                    FROM trading_simulation A
                     LEFT JOIN trading_trail B
                         ON B.acct_no = A.acct_no
                         AND B.code = A.code
@@ -345,7 +345,7 @@ for nick in nickname_list:
                             PARTITION BY A.acct_no, A.code
                             ORDER BY A.trade_day DESC, A.trade_dtm DESC, A.crt_dt DESC
                         ) AS rn
-                    FROM tradng_simulation A
+                    FROM trading_simulation A
                     LEFT JOIN trading_trail B
                         ON B.acct_no = A.acct_no
                         AND B.code = A.code

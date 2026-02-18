@@ -613,7 +613,7 @@ if __name__ == "__main__":
 
     # 매매시뮬레이션 조회
     cur200 = conn.cursor()
-    cur200.execute("select code, name, trade_day, trade_dtm, profit_price, loss_price from tradng_simulation where acct_no = '" + str(acct_no) + "' and trade_tp = '1' and trade_day = '20251219'")
+    cur200.execute("select code, name, trade_day, trade_dtm, profit_price, loss_price from trading_simulation where acct_no = '" + str(acct_no) + "' and trade_tp = '1' and trade_day = '20251219'")
     result_two00 = cur200.fetchall()
     cur200.close()
 
