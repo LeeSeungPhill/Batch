@@ -59,51 +59,84 @@ def kis_auth(APP_KEY, APP_SECRET):
     res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
     return res.json()["access_token"]
 
-# KIS 1분봉 조회
-def get_kis_1min_dailychart(
+# KIS 당일 분봉 조회 (최대 30건 페이징 처리)
+def get_kis_1min_chart(
     stock_code: str,
-    trade_date: str,
-    trade_time: str,
+    search_time: str,       # HHMM - 이 시간 이후 분봉이 필요
     access_token: str,
     app_key: str,
     app_secret: str,
     market_code: str = "J",
-    include_past: str = "Y",
-    include_fake_tick: str = "N",
     verbose: bool = False
 ):
-    url = f"{KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
+    """당일분봉조회 /inquire-time-itemchartprice
+    search_time(HHMM) 이후 ~ 현재까지 전체 1분봉 반환 (30건 초과 시 페이징).
+    """
+    url = f"{KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
 
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {access_token}",
         "appkey": app_key,
         "appsecret": app_secret,
-        "tr_id": "FHKST03010230",
+        "tr_id": "FHKST03010200",
         "custtype": "P"
     }
 
-    params = {
-        "FID_COND_MRKT_DIV_CODE": market_code,
-        "FID_INPUT_ISCD": stock_code,
-        "FID_INPUT_DATE_1": trade_date,
-        "FID_INPUT_HOUR_1": trade_time,
-        "FID_PW_DATA_INCU_YN": include_past,
-        "FID_FAKE_TICK_INCU_YN": include_fake_tick
-    }
+    # HHMM → HHMMSS (API 파라미터 형식)
+    search_time_hhmmss = search_time + "00" if len(search_time) == 4 else search_time
+    query_time = datetime.now().strftime('%H%M%S')  # 현재 시각부터 역방향 조회
+    all_rows = []
+    prdy_ctrt = "0.00"
+    seen_times = set()  # 중복 방지
 
-    res = requests.get(url, headers=headers, params=params)
-    data = res.json()
+    while True:
+        params = {
+            "FID_ETC_CLS_CODE": "",
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": stock_code,
+            "FID_INPUT_HOUR_1": query_time,
+            "FID_PW_DATA_INCU_YN": "Y"
+        }
 
-    if "output2" not in data or not data["output2"]:
+        res = requests.get(url, headers=headers, params=params)
+        data = res.json()
+
+        if "output2" not in data or not data["output2"]:
+            break
+
+        if not all_rows:
+            # 첫 번째 호출에서만 현재 등락률 추출 (output1)
+            prdy_ctrt = data.get("output1", {}).get("prdy_ctrt", "0.00")
+
+        rows = data["output2"]
+        new_added = False
+        for row in rows:
+            t = row["stck_cntg_hour"]
+            if t not in seen_times:
+                seen_times.add(t)
+                all_rows.append(row)
+                new_added = True
+
+        if not new_added:
+            break  # 중복만 반환 → 무한루프 방지
+
+        # 이번 배치의 가장 오래된 시간 확인
+        oldest_time = min(row["stck_cntg_hour"] for row in rows)
+
+        if oldest_time <= search_time_hhmmss:
+            break  # search_time 이전 데이터까지 확보 완료
+
+        # 다음 페이지: 가장 오래된 시각으로 재조회
+        query_time = oldest_time
+        time.sleep(0.2)
+
+    if not all_rows:
         if verbose:
-            print(f"데이터 없음 ({trade_date} {trade_time})")
+            print(f"데이터 없음 ({stock_code})")
         return pd.DataFrame()
 
-    df = pd.DataFrame(data["output2"])
-    if df.empty:
-        return df
-
+    df = pd.DataFrame(all_rows)
     df = df.rename(columns={
         "stck_bsop_date": "일자",
         "stck_cntg_hour": "시간",
@@ -115,9 +148,11 @@ def get_kis_1min_dailychart(
     })
 
     df["시간"] = df["시간"].str[:2] + ":" + df["시간"].str[2:4]
-    df = df.sort_values(["일자", "시간"])
+    df["등락률"] = prdy_ctrt
+    df = df.drop_duplicates(subset=["일자", "시간"])
+    df = df.sort_values(["일자", "시간"]).reset_index(drop=True)
 
-    return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량"]]
+    return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량", "등락률"]]
 
 def get_10min_key(dt: datetime):
     return dt.replace(minute=(dt.minute // 10) * 10, second=0)
@@ -427,12 +462,10 @@ class WebSocketClient:
                 if now < next_10min_dt:
                     continue
 
-                # KIS API 1분봉 조회
-                current_time = now.strftime('%H%M%S')
-                df = get_kis_1min_dailychart(
+                # KIS API 당일 분봉 조회 (search_time 이후 전체, 페이징)
+                df = get_kis_1min_chart(
                     stock_code=code,
-                    trade_date=today,
-                    trade_time=current_time,
+                    search_time=search_time,
                     access_token=self.kis_access_token,
                     app_key=self.kis_app_key,
                     app_secret=self.kis_app_secret
@@ -476,9 +509,10 @@ class WebSocketClient:
                     # 돌파 알림 전송
                     safe_name = html.escape(name.strip())
                     breakout_time_fmt = now.strftime('%H:%M')
+                    current_rate = df.iloc[-1]["등락률"]
                     message = (
                         f"[{breakout_time_fmt}] {safe_name}[<code>{code}</code>] "
-                        f"10분봉고가: {tenmin_high:,}원 돌파, 현재고가: {latest_high:,}원"
+                        f"10분봉고가: {tenmin_high:,}원 돌파, 현재고가: {latest_high:,}원, 등락율: {current_rate}%"
                     )
                     print(message)
                     await send_telegram_message(message, self.bot_token, parse_mode='HTML')
