@@ -474,8 +474,8 @@ class WebSocketClient:
                     breakout_time = breakout_row["시간"].replace(":", "")  # HHMM
 
                     # 돌파 알림 전송
-                    safe_name = html.escape(name)
-                    breakout_time_fmt = f"{breakout_time[:2]}:{breakout_time[2:]}"
+                    safe_name = html.escape(name.strip())
+                    breakout_time_fmt = now.strftime('%H:%M')
                     message = (
                         f"[{breakout_time_fmt}] {safe_name}[<code>{code}</code>] "
                         f"10분봉고가: {tenmin_high:,}원 돌파, 현재고가: {latest_high:,}원"
@@ -491,7 +491,7 @@ class WebSocketClient:
                                 , signal_time = %s
                                 , signal_price = %s
                             WHERE code = %s AND search_day = %s
-                        """, (breakout_time, latest_high, code, today))
+                        """, (breakout_time, int(latest_high), code, today))
                         conn.commit()
 
                 time.sleep(0.5)  # API rate limit
