@@ -469,21 +469,29 @@ class WebSocketClient:
                 latest_high = after_df["고가"].astype(int).max()
 
                 if latest_high > tenmin_high:
+                    # 돌파 발생 분봉 시간 추출 (고가 최대 행의 시간)
+                    breakout_row = after_df.loc[after_df["고가"].astype(int).idxmax()]
+                    breakout_time = breakout_row["시간"].replace(":", "")  # HHMM
+
                     # 돌파 알림 전송
+                    safe_name = html.escape(name)
+                    breakout_time_fmt = f"{breakout_time[:2]}:{breakout_time[2:]}"
                     message = (
-                        f"[10분봉 돌파] {name}[<code>{code}</code>] "
+                        f"[{breakout_time_fmt}] {safe_name}[<code>{code}</code>] "
                         f"10분봉고가: {tenmin_high:,}원 돌파, 현재고가: {latest_high:,}원"
                     )
                     print(message)
                     await send_telegram_message(message, self.bot_token, parse_mode='HTML')
 
-                    # 돌파 알림 완료 업데이트
+                    # 돌파 알림 완료 업데이트 (signal_time: 돌파 시간, signal_price: 돌파가)
                     with conn.cursor() as cur:
                         cur.execute("""
                             UPDATE stock_search_form
                             SET breakout_noti_yn = 'Y'
+                                , signal_time = %s
+                                , signal_price = %s
                             WHERE code = %s AND search_day = %s
-                        """, (code, today))
+                        """, (breakout_time, latest_high, code, today))
                         conn.commit()
 
                 time.sleep(0.5)  # API rate limit
