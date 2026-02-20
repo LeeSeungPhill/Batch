@@ -505,9 +505,17 @@ class WebSocketClient:
                 if latest_high > tenmin_high:
                     # 고가 최대 분봉 (돌파 발생 분봉)
                     breakout_row = after_df.loc[after_df["고가"].astype(int).idxmax()]
-                    breakout_vol = int(breakout_row["거래량"])
 
-                    # 거래량 돌파 체크: 돌파 분봉 거래량 > 10분봉 누적 거래량
+                    # 돌파 분봉이 속한 10분봉 구간의 누적 거래량
+                    breakout_dt = breakout_row["dt"]
+                    breakout_10min_start = get_10min_key(breakout_dt)
+                    breakout_10min_end = breakout_10min_start + timedelta(minutes=10)
+                    breakout_tenmin_df = after_df[
+                        (after_df["dt"] >= breakout_10min_start) & (after_df["dt"] < breakout_10min_end)
+                    ]
+                    breakout_vol = breakout_tenmin_df["거래량"].astype(int).sum()
+
+                    # 거래량 돌파 체크: 돌파 10분봉 누적 거래량 > 기준 10분봉 누적 거래량
                     if breakout_vol <= tenmin_vol:
                         time.sleep(0.5)
                         continue
@@ -521,8 +529,8 @@ class WebSocketClient:
                     current_rate = df.iloc[-1]["등락률"]
                     message = (
                         f"[{breakout_time_fmt}] {safe_name}[<code>{code}</code>] "
-                        f"10분봉고가: {tenmin_high:,}원 돌파, 현재고가: {latest_high:,}원, "
-                        f"현재가: {current_price:,}원, 등락율: {current_rate}%"
+                        f"10분봉 고가 : {tenmin_high:,}원 돌파, 현재 고가 : {latest_high:,}원, "
+                        f"현재가 : {current_price:,}원, 등락율 : {current_rate}%"
                     )
                     print(message)
                     await send_telegram_message(message, self.bot_token, parse_mode='HTML')
