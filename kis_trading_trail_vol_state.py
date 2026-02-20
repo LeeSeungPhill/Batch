@@ -499,30 +499,10 @@ def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade
 def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     
     trail_qty = trail_rate * 0.01
-    
-    try:
-        cur04 = conn.cursor()
-        cur04.execute("""
-            UPDATE public.trading_trail SET 
-                trail_price = %s
-                , trail_qty = %s
-                , trail_amt = %s      
-                , trail_rate = %s      
-                , trail_plan = %s
-                , trail_tp = %s
-                , proc_min = %s
-                , basic_qty = %s
-                , basic_amt = %s
-                , mod_dt = %s
-            WHERE acct_no = %s
-            AND code = %s
-            AND trail_day = %s
-            AND trail_dtm = %s
-            AND trail_tp = 'L'                  
-        """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
-        conn.commit()
-        cur04.close()
+    d_order_price = 0
+    d_order_amount = 0
 
+    try:
         # 매도 주문정보 존재시 취소 처리
         if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
 
@@ -574,6 +554,36 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
                 )
             except Exception as te:
                 print(f"텔레그램 발송 실패: {te}")
+
+        # 주문가와 주문수량이 존재하는 경우
+        if int(d_order_price) > 0 and int(d_order_amount) > 0:
+            cur04 = conn.cursor()
+            cur04.execute("""
+                UPDATE public.trading_trail SET 
+                    order_no = %s
+                    , order_type = %s
+                    , order_dt = %s
+                    , order_tmd = %s
+                    , order_price = %s
+                    , order_amount = %s                          
+                    , trail_price = %s
+                    , trail_qty = %s
+                    , trail_amt = %s      
+                    , trail_rate = %s      
+                    , trail_plan = %s
+                    , trail_tp = %s
+                    , proc_min = %s
+                    , basic_qty = %s
+                    , basic_amt = %s
+                    , mod_dt = %s
+                WHERE acct_no = %s
+                AND code = %s
+                AND trail_day = %s
+                AND trail_dtm = %s
+                AND trail_tp = 'L'                  
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            conn.commit()
+            cur04.close()                
                    
     except Exception as total_e:
         # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘
@@ -584,29 +594,10 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
     return True          
 
 def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
-    try:
-        cur04 = conn.cursor()
-        cur04.execute("""
-            UPDATE public.trading_trail SET 
-                trail_price = %s
-                , trail_qty = %s
-                , trail_amt = %s 
-                , trail_rate = %s      
-                , trail_plan = %s
-                , trail_tp = %s
-                , proc_min = %s
-                , basic_qty = %s
-                , basic_amt = %s
-                , mod_dt = %s
-            WHERE acct_no = %s
-            AND code = %s
-            AND trail_day = %s
-            AND trail_dtm = %s
-            AND trail_tp <> 'L'                  
-        """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
-        conn.commit()
-        cur04.close()
+    d_order_price = 0
+    d_order_amount = 0
 
+    try:
         # 매도 주문정보 존재시 취소 처리
         if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
 
@@ -658,6 +649,36 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
                 )
             except Exception as te:
                 print(f"텔레그램 발송 실패: {te}")
+
+        # 주문가와 주문수량이 존재하는 경우
+        if int(d_order_price) > 0 and int(d_order_amount) > 0:
+            cur04 = conn.cursor()
+            cur04.execute("""
+                UPDATE public.trading_trail SET 
+                    order_no = %s
+                    , order_type = %s
+                    , order_dt = %s
+                    , order_tmd = %s
+                    , order_price = %s
+                    , order_amount = %s      
+                    , trail_price = %s
+                    , trail_qty = %s
+                    , trail_amt = %s 
+                    , trail_rate = %s      
+                    , trail_plan = %s
+                    , trail_tp = %s
+                    , proc_min = %s
+                    , basic_qty = %s
+                    , basic_amt = %s
+                    , mod_dt = %s
+                WHERE acct_no = %s
+                AND code = %s
+                AND trail_day = %s
+                AND trail_dtm = %s
+                AND trail_tp <> 'L'                  
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            conn.commit()
+            cur04.close()                
 
     except Exception as total_e:
         # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘

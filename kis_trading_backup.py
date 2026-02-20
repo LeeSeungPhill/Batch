@@ -214,7 +214,7 @@ for nick in nickname_list:
         cur5 = conn.cursor()
         cur5.execute("""
             SELECT 
-                search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate
+                search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate, breakout_noti_yn, signal_time, signal_price
             FROM stock_search_form
             WHERE search_day BETWEEN %s AND %s
         """, (start_dt, end_dt))
@@ -228,16 +228,16 @@ for nick in nickname_list:
 
         insert_query5 = """
             INSERT INTO stock_search_form (
-                search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate, breakout_noti_yn, signal_time, signal_price
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (search_day, search_name, code) DO NOTHING
         """
 
         for row in stock_search_result:
-            search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate = row
+            search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate, breakout_noti_yn, signal_time, signal_price = row
             try:
                 remote_cur5.execute(insert_query5, (
-                    search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate
+                    search_day, search_time, search_name, code, name, low_price, high_price, current_price, day_rate, volumn, volumn_rate, market_total_sum, cdate, breakout_noti_yn, signal_time, signal_price
                 ))
             except Exception as e:
                 print(f"[{nick}] Error stock_search_form inserting row {row}: {e}")
