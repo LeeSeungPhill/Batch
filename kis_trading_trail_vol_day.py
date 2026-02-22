@@ -392,7 +392,7 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
-        AND trail_tp <> 'L'                  
+        AND trail_tp IN ('1', '2')              
     """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
@@ -411,7 +411,7 @@ def update_trading_trail(stop_price, target_price, volumn, acct_no, code, trail_
         AND code = %s
         AND trail_day = %s
         AND trail_dtm = %s
-        AND trail_tp <> 'L'
+        AND trail_tp IN ('1', '2')
     """, (stop_price, target_price, volumn, trail_tp, proc_min, datetime.now(), acct_no, code, trail_day, trail_dtm))
     conn.commit()
     cur04.close()    
