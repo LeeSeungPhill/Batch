@@ -916,19 +916,6 @@ def get_kis_1min_from_datetime(
 
                         # 시간대별 거래량 비율 체크
                         if volume_rate_chk(current_time, vol_ratio):
-                            if verbose:
-                                message = (
-                                    f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
-                                )
-                                print(message)
-                                bot.send_message(
-                                    chat_id=chat_id,
-                                    text=message,
-                                    parse_mode='HTML'
-                                )
-
-                            update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-
                             trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                             i_trail_plan = trail_plan if trail_plan is not None else "100"
                             trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -936,7 +923,19 @@ def get_kis_1min_from_datetime(
                             u_basic_qty = basic_qty - trail_qty
                             u_basic_amt = basic_price * u_basic_qty
 
-                            update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            if update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
+                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                
+                                if verbose:
+                                    message = (
+                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
+                                    )
+                                    print(message)
+                                    bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message,
+                                        parse_mode='HTML'
+                                    )
 
                             signals.append({
                                 "signal_type": "BREAKDOWN_AFTER_PROFIT",
@@ -954,19 +953,6 @@ def get_kis_1min_from_datetime(
                 if current_time >= "151000" and prev_low is not None:
                     # 전일저가 금일 종가 이탈 및 전일 거래량 대비 50% 이상 거래량
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                        if verbose:
-                            message = (
-                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
-                            )
-                            print(message)
-                            bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode='HTML'
-                            )
-
-                        update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                        
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                         i_trail_plan = trail_plan if trail_plan is not None else "100"
                         trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -975,7 +961,21 @@ def get_kis_1min_from_datetime(
                         u_basic_amt = basic_price * u_basic_qty
 
                         try:
-                            update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            result = update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            if result:
+                                update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                
+                                if verbose:
+                                    message = (
+                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
+                                    )
+                                    print(message)
+                                    bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message,
+                                        parse_mode='HTML'
+                                    )
+
                         except Exception as e:
                             print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                            
 
@@ -1061,19 +1061,6 @@ def get_kis_1min_from_datetime(
 
                                 # 시간대별 거래량 비율 체크
                                 # if volume_rate_chk(current_time, vol_ratio):
-                                if verbose:
-                                    message = (
-                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
-                                    )
-                                    print(message)
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode='HTML'
-                                    )
-
-                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                                 i_trail_plan = trail_plan if trail_plan is not None else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -1082,7 +1069,21 @@ def get_kis_1min_from_datetime(
                                 u_basic_amt = basic_price * u_basic_qty
 
                                 try:
-                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    if result:
+                                        update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
+                                        if verbose:
+                                            message = (
+                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                            )
+                                            print(message)
+                                            bot.send_message(
+                                                chat_id=chat_id,
+                                                text=message,
+                                                parse_mode='HTML'
+                                            )
+
                                 except Exception as e:
                                     print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
@@ -1143,17 +1144,6 @@ def get_kis_1min_from_datetime(
                     else:
                         # 기준봉 저가 이탈 → 즉시 종료
                         if low_price < tenmin_state["base_low"]:
-                            if verbose:
-                                message = (
-                                    f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
-                                )
-                                print(message)
-                                bot.send_message(
-                                    chat_id=chat_id,
-                                    text=message,
-                                    parse_mode='HTML'
-                                )
-
                             trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                             i_trail_plan = trail_plan if trail_plan is not None else "50"
                             trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -1162,18 +1152,42 @@ def get_kis_1min_from_datetime(
                             u_basic_amt = basic_price * u_basic_qty
 
                             if basic_qty == trail_qty:
-                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                               
                                 try:
-                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
-                                except Exception as e:
-                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")    
+                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    if result:
+                                        update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                        
+                                        if verbose:
+                                            message = (
+                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                            )
+                                            print(message)
+                                            bot.send_message(
+                                                chat_id=chat_id,
+                                                text=message,
+                                                parse_mode='HTML'
+                                            )
 
-                            else:    
-                                update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+
+                            else:
                                 try:
-                                    update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                    if result:
+                                        update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
+                                        if verbose:
+                                            message = (
+                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                            )
+                                            print(message)
+                                            bot.send_message(
+                                                chat_id=chat_id,
+                                                text=message,
+                                                parse_mode='HTML'
+                                            )
+                                        
                                 except Exception as e:
                                     print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                                    
 
