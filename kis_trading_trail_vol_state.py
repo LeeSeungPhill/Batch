@@ -155,7 +155,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
     try:
         # 일별주문체결 조회
-        output1 = (access_token, app_key, app_secret, acct_no, code, '')
+        output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, '')
 
         if len(output1) > 0:
         
