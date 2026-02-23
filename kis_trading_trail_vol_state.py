@@ -142,8 +142,11 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     URL = f"{BASE_URL}/{PATH}"
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
-    #ar.printAll()
-    return ar.getBody().output
+    if ar.isOK():
+        return ar.getBody().output
+    else:
+        ar.printError()
+        return None
 
 # 매도 주문정보 존재시 취소 처리
 def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
@@ -152,7 +155,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
     try:
         # 일별주문체결 조회
-        output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, '')
+        output1 = (access_token, app_key, app_secret, acct_no, code, '')
 
         if len(output1) > 0:
         
@@ -171,7 +174,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
                         # 주문취소
                         c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
-                        if c['ODNO'] != "":
+                        if c is not None and c['ODNO'] != "":
                             print("매도주문취소 완료")
 
                         else:
@@ -219,8 +222,11 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     URL = f"{BASE_URL}/{PATH}"
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
-    #ar.printAll()
-    return ar.getBody().output
+    if ar.isOK():
+        return ar.getBody().output
+    else:
+        ar.printError()
+        return None
 
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
@@ -511,7 +517,7 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
                 # 매도 : 지정가 주문
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
 
-                if c['ODNO'] != "":
+                if c is not None and c['ODNO'] != "":
                     # 일별주문체결 조회
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
@@ -606,7 +612,7 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
                 # 매도 : 지정가 주문
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
 
-                if c['ODNO'] != "":
+                if c is not None and c['ODNO'] != "":
                     # 일별주문체결 조회
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
