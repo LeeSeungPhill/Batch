@@ -1195,7 +1195,7 @@ def callback_get(update, context) :
                 AND NOT EXISTS (
                     SELECT 1
                     FROM public.dly_stock_balance DSB
-                    WHERE DSB.acct_no = BAL.acct_no
+                    WHERE DSB.acct::int = BAL.acct_no
                     AND DSB.code = BAL.code
                     AND DSB.dt = '{prev_date}'
                     AND DSB.trading_plan IN ('i', 'h')
