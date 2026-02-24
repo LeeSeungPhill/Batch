@@ -515,7 +515,7 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
             result_msgs = []
             try:
                 # 매도 : 지정가 주문
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(int(trail_qty)), str(int(trail_price)))
 
                 if c is not None and c['ODNO'] != "":
                     # 일별주문체결 조회
@@ -610,7 +610,7 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
             result_msgs = []
             try:
                 # 매도 : 지정가 주문
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(trail_qty), str(trail_price))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(int(trail_qty)), str(int(trail_price)))
 
                 if c is not None and c['ODNO'] != "":
                     # 일별주문체결 조회
