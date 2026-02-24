@@ -1187,10 +1187,18 @@ def callback_get(update, context) :
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
-                    WHERE T.acct_no = COALESCE(BAL.acct_no, S.acct_no)
-                    AND T.code = COALESCE(BAL.code, S.code)
+                    WHERE T.acct_no = BAL.acct_no
+                    AND T.code = BAL.code
                     AND T.trail_day = '{trail_day}'
                     AND T.trail_dtm >= CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM public.dly_stock_balance DSB
+                    WHERE DSB.acct_no = BAL.acct_no
+                    AND DSB.code = BAL.code
+                    AND DSB.dt = '{prev_date}'
+                    AND DSB.trading_plan IN ('i', 'h')
                 );
                 """
 
