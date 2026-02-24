@@ -1183,7 +1183,7 @@ def callback_get(update, context) :
                     now(),
                     now()
                 FROM balance BAL
-                FULL OUTER JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
+                LEFT JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM trading_trail T
