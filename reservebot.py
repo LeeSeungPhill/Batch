@@ -2179,6 +2179,21 @@ def echo(update, context):
                         app_key = ac['app_key']
                         app_secret = ac['app_secret']
                 
+                    # 계좌잔고 조회
+                    c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+                
+                    ord_psbl_qty = 0
+                    hold_price = 0
+                    hldg_qty = 0
+                    hold_amt = 0
+
+                    for i, name in enumerate(c.index):
+                        if code == c['pdno'][i]:
+                            ord_psbl_qty = int(c['ord_psbl_qty'][i])
+                            hold_price = float(c['pchs_avg_pric'][i])
+                            hldg_qty = int(c['hldg_qty'][i])
+                            hold_amt = int(c['pchs_amt'][i])
+                    
                     # 매수예정금액
                     buy_expect_sum = buy_price * buy_qty
                     print("매수예정금액 : " + format(int(buy_expect_sum), ',d'))
@@ -2239,60 +2254,49 @@ def echo(update, context):
                     if int(d_order_price) > 0 and int(d_order_amount) > 0:
                         buy_price = int(d_order_price)                          # 매수가
                         buy_qty = int(d_order_amount)                           # 매수량
+                        buy_amt = buy_price * buy_qty
                         safe_margin_price = int(buy_price + buy_price * 0.05)   # 안전마진가(매수가 대비 5%)
                         
-                        # 계좌잔고 조회
-                        c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-                    
-                        ord_psbl_qty = 0
-                        hold_price = 0
-                        hldg_qty = 0
-                        hold_amt = 0
-
-                        for i, name in enumerate(c.index):
-                            if code == c['pdno'][i]:
-                                ord_psbl_qty = int(c['ord_psbl_qty'][i])
-                                hold_price = float(c['pchs_avg_pric'][i])
-                                hldg_qty = int(c['hldg_qty'][i])
-                                hold_amt = int(c['pchs_amt'][i])
-                                
                         # 매매추적 보유가, 보유수량, 보유금액 조회
-                        cur300 = conn.cursor()
-                        select_query = """
-                            SELECT 
-                                basic_price,
-                                basic_qty,
-                                basic_amt
-                            FROM (
-                                SELECT
-                                    COALESCE(basic_price, 0) AS basic_price,
-                                    COALESCE(basic_qty, 0) AS basic_qty,
-                                    COALESCE(basic_amt, 0) AS basic_amt,
-                                    row_number() OVER (
-                                        PARTITION BY acct_no, code
-                                        ORDER BY trail_dtm DESC
-                                    ) AS rn
-                                FROM public.trading_trail
-                                WHERE acct_no = %s
-                                AND trail_tp IN ('1', '2', '3', 'L')
-                                AND trail_day = %s
-                                AND code = %s
-                            ) T
-                            WHERE rn = 1
-                            """
-                        cur300.execute(select_query, (acct_no, year_day, code))
-                        row = cur300.fetchone()
-                        cur300.close()
+                        # cur300 = conn.cursor()
+                        # select_query = """
+                        #     SELECT 
+                        #         basic_price,
+                        #         basic_qty,
+                        #         basic_amt
+                        #     FROM (
+                        #         SELECT
+                        #             COALESCE(basic_price, 0) AS basic_price,
+                        #             COALESCE(basic_qty, 0) AS basic_qty,
+                        #             COALESCE(basic_amt, 0) AS basic_amt,
+                        #             row_number() OVER (
+                        #                 PARTITION BY acct_no, code
+                        #                 ORDER BY trail_dtm DESC
+                        #             ) AS rn
+                        #         FROM public.trading_trail
+                        #         WHERE acct_no = %s
+                        #         AND trail_tp IN ('1', '2', '3', 'L')
+                        #         AND trail_day = %s
+                        #         AND code = %s
+                        #     ) T
+                        #     WHERE rn = 1
+                        #     """
+                        # cur300.execute(select_query, (acct_no, year_day, code))
+                        # row = cur300.fetchone()
+                        # cur300.close()
 
-                        basic_price = int(row[0]) if row else 0
-                        basic_qty = int(row[1]) if row else 0
-                        basic_amt = int(row[2]) if row else 0
+                        # basic_price = int(row[0]) if row else 0
+                        # basic_qty = int(row[1]) if row else 0
+                        # basic_amt = int(row[2]) if row else 0
                         # 보유가
-                        base_price = hold_price if hold_price > 0 else basic_price
+                        # base_price = hold_price if hold_price > 0 else basic_price
+                        base_price = hold_price if hold_price > 0 else buy_price
                         # 보유량
-                        base_qty = hldg_qty if hldg_qty > 0 else basic_qty
+                        # base_qty = hldg_qty if hldg_qty > 0 else basic_qty
+                        base_qty = hldg_qty if hldg_qty > 0 else buy_qty
                         # 보유금액
-                        base_amt = hold_amt if hold_amt > 0 else basic_amt
+                        # base_amt = hold_amt if hold_amt > 0 else basic_amt
+                        base_amt = hold_amt if hold_amt > 0 else buy_amt
                         # 총보유량
                         sum_base_qty = base_qty + buy_qty
                         # 평균보유가
@@ -2375,7 +2379,7 @@ def echo(update, context):
                         # merge 인자값 설정
                         cur400.execute(merge_query, (
                                 str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), hour_minute, "1", loss_price, safe_margin_price, avg_base_price, sum_base_qty, avg_base_price * sum_base_qty, hour_minute, datetime.now(), acct_no, code, year_day,
-                                str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price if base_price > 0 else buy_price, sum_base_qty if base_qty > 0 else buy_qty, avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, hour_minute, datetime.now(), datetime.now()
+                                str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, avg_base_price if base_price > 0 else buy_price, sum_base_qty if base_qty > 0 else buy_qty, avg_base_price*sum_base_qty if base_qty > 0 else buy_amt, hour_minute, datetime.now(), datetime.now()
                         ))
 
                         was_updated = cur400.fetchone() is not None
@@ -2384,9 +2388,9 @@ def echo(update, context):
                         cur400.close()
 
                         if was_updated:
-                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else buy_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price*sum_base_qty if base_qty > 0 else buy_price*buy_qty, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
+                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else buy_qty, ',d') + "주, 총보유금액 : " + format(avg_base_price*sum_base_qty if base_qty > 0 else buy_amt, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
                         else:
-                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매매추적 미처리")       
+                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_amt, ',d') + "원 매매추적 미처리")       
 
                         # 매매시뮬레이션 insert
                         cur500 = conn.cursor()
@@ -2412,9 +2416,9 @@ def echo(update, context):
                         cur500.close()
 
                         if was_inserted:
-                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록", parse_mode='HTML')
+                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_amt, ',d') + "원 매수등록", parse_mode='HTML')
                         else:
-                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_price*buy_qty, ',d') + "원 매수등록 미처리")
+                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_amt, ',d') + "원 매수등록 미처리")
 
             else:
                 print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(시장가:0), 이탈가, 매수금액, 대상(단독:1) 미존재 또는 부적합")
