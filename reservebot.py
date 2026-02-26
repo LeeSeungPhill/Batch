@@ -2291,12 +2291,12 @@ def echo(update, context):
                         # 보유가
                         # base_price = hold_price if hold_price > 0 else basic_price
                         base_price = hold_price if hold_price > 0 else buy_price
-                        # 보유량
+                        # 보유량 (신규 매수 시 hldg_qty=0이므로 fallback 없이 그대로 사용)
                         # base_qty = hldg_qty if hldg_qty > 0 else basic_qty
-                        base_qty = hldg_qty if hldg_qty > 0 else buy_qty
-                        # 보유금액
+                        base_qty = hldg_qty
+                        # 보유금액 (신규 매수 시 hold_amt=0이므로 fallback 없이 그대로 사용)
                         # base_amt = hold_amt if hold_amt > 0 else basic_amt
-                        base_amt = hold_amt if hold_amt > 0 else buy_amt
+                        base_amt = hold_amt
                         # 총보유량
                         sum_base_qty = base_qty + buy_qty
                         # 평균보유가
