@@ -502,7 +502,7 @@ def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade
     cur03.close()
 
 
-def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     
     trail_qty = trail_rate * 0.01
     d_order_price = 0
@@ -537,17 +537,17 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
                         d_total_complete_amt = d['tot_ccld_amt'][k]
 
                         print("매도주문 완료")
-                        msg = f"[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        msg = f"-{nick}-[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                         result_msgs.append(msg)
 
                 else:
                     print("매도주문 실패")
-                    msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+                    msg = f"-{nick}-[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
                     result_msgs.append(msg)
 
             except Exception as e:
                 print('매도주문 오류.', e)
-                msg = f"[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
+                msg = f"-{nick}-[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
                 result_msgs.append(msg)
 
             try:
@@ -593,13 +593,13 @@ def update_trading_daily_close(trail_price, trail_qty, trail_amt, trail_rate, tr
                    
     except Exception as total_e:
         # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘
-        print(f"CRITICAL: update_trading_close 함수 전체 에러: {total_e}")
+        print(f"CRITICAL: update_trading_daily_close 함수 전체 에러: {total_e}")
         # 에러가 나도 상위로 raise 하지 않고 리턴함
         return False 
 
     return True          
 
-def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     d_order_price = 0
     d_order_amount = 0
 
@@ -632,17 +632,17 @@ def update_trading_close(trail_price, trail_qty, trail_amt, trail_rate, trail_pl
                         d_total_complete_amt = d['tot_ccld_amt'][k]
 
                         print("매도주문 완료")
-                        msg = f"[이탈가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        msg = f"-{nick}-[이탈가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                         result_msgs.append(msg)
 
                 else:
                     print("매도주문 실패")
-                    msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+                    msg = f"-{nick}-[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
                     result_msgs.append(msg)
 
             except Exception as e:
                 print('매도주문 오류.', e)
-                msg = f"[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
+                msg = f"-{nick}-[이탈가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
                 result_msgs.append(msg)
 
             try:
@@ -821,6 +821,7 @@ def volume_rate_chk(current_time, vol_ratio):
     return is_volume_satisfied
 
 def get_kis_1min_from_datetime(
+    nick: str,
     stock_code: str,
     stock_name: str,
     start_date: str,
@@ -840,6 +841,7 @@ def get_kis_1min_from_datetime(
     breakdown_type: str = "low",        # low / close
     verbose: bool = True
 ):
+    global bot
     updater = Updater(token=token, use_context=True)
     bot = updater.bot
     start_dt = datetime.strptime(start_date + start_time, "%Y%m%d%H%M%S")
@@ -849,7 +851,7 @@ def get_kis_1min_from_datetime(
     signals = []
 
     if verbose:
-        print(f"[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
+        print(f"-{nick}-[{stock_name}-{stock_code}] {trade_date} {datetime.now().strftime('%H%M%S')} 1분봉 생성 중")
 
     prev_day_info = get_prev_day_info(
         stock_code,
@@ -923,12 +925,12 @@ def get_kis_1min_from_datetime(
                             u_basic_qty = basic_qty - trail_qty
                             u_basic_amt = basic_price * u_basic_qty
 
-                            if update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, stock_code, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
+                            if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
                                 update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
                                 if verbose:
                                     message = (
-                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
                                     )
                                     print(message)
                                     bot.send_message(
@@ -961,13 +963,13 @@ def get_kis_1min_from_datetime(
                         u_basic_amt = basic_price * u_basic_qty
 
                         try:
-                            result = update_trading_daily_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                             if result:
                                 update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
                                 if verbose:
                                     message = (
-                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
                                     )
                                     print(message)
                                     bot.send_message(
@@ -1069,13 +1071,13 @@ def get_kis_1min_from_datetime(
                                 u_basic_amt = basic_price * u_basic_qty
 
                                 try:
-                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                                     if result:
                                         update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                         if verbose:
                                             message = (
-                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
                                             )
                                             print(message)
                                             bot.send_message(
@@ -1114,7 +1116,7 @@ def get_kis_1min_from_datetime(
 
                                 if verbose:
                                     message = (
-                                        f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
                                     )
                                     print(message)
                                     bot.send_message(
@@ -1153,13 +1155,13 @@ def get_kis_1min_from_datetime(
 
                             if basic_qty == trail_qty:
                                 try:
-                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                                     if result:
                                         update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                         
                                         if verbose:
                                             message = (
-                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
                                             )
                                             print(message)
                                             bot.send_message(
@@ -1173,13 +1175,13 @@ def get_kis_1min_from_datetime(
 
                             else:
                                 try:
-                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
                                     if result:
                                         update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                         if verbose:
                                             message = (
-                                                f"[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
                                             )
                                             print(message)
                                             bot.send_message(
@@ -1224,7 +1226,7 @@ def get_kis_1min_from_datetime(
                                     if verbose:
                                         reason = "고가 돌파" if new_high > tenmin_state["base_high"] else "거래량 돌파"
                                         message = (
-                                            f"[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
+                                            f"-{nick}-[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {new_high:,}원,  저가 : {new_low:,}원, 거래량 : {new_vol:,}주"
                                         )
                                         print(message)
                                         # bot.send_message(
@@ -1324,6 +1326,7 @@ if __name__ == "__main__":
                 for i in result_two00:
                     try:
                         signal = get_kis_1min_from_datetime(
+                            nick=nick,
                             stock_code=i[0],
                             stock_name=i[1], 
                             start_date=i[2],
@@ -1344,10 +1347,10 @@ if __name__ == "__main__":
                         )
 
                         if signal:
-                            print("\n📌 신호 결과")
+                            print("\n📌 신호 결과-",nick)
                             print(signal)
                         else:
-                            print("\n📌 아직 신호 없음")
+                            print("\n📌 아직 신호 없음-",nick)
                     except Exception as e:
                         print(f"\n⚠️ [{i[1]}-{i[0]}] 처리 중 오류 (건너뜀): {e}")
 
