@@ -1229,64 +1229,64 @@ def get_kis_1min_from_datetime(
                                     except Exception as e:
                                         print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
-                            else:
-                                try:
-                                    result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')                                                                                                         
-                                    if result:                                                                                         
-                                        update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-
-                                        if verbose:
-                                            message = (
-                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
-                                            )
-                                            print(message)
-                                            bot.send_message(
-                                                chat_id=chat_id,
-                                                text=message,
-                                                parse_mode='HTML'
-                                            )
-                                        
-                                except Exception as e:
-                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                                                  
-                        
-                            signals.append({
-                                "signal_type": "BASE_10MIN_LOW_BREAK",
-                                "종목명": stock_name,
-                                "종목코드": stock_code,
-                                "발생일자": row["일자"],
-                                "발생시간": row["시간"],
-                                "기준봉저가": tenmin_state["base_low"],
-                                "10분봉 저가": row["저가"]
-                            })
-                            return signals  
-
-                        # 10분봉 완성 시 기준봉 갱신                                                                                   
-                        if tenmin_high > tenmin_low:                                                                                   
-                            if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
-                                tenmin_state.update({
-                                    "base_low": tenmin_low,
-                                    "base_high": tenmin_high,
-                                    "base_vol": tenmin_vol
-                                })
-
-                                if verbose:
-                                    reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
-                                    message = (
-                                        f"-{nick}-[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {tenmin_high:,}원,  저가 : {tenmin_low:,}원, 거래량 : {tenmin_vol:,}주"
-                                    )
-                                    print(message)
-                                    # bot.send_message(
-                                    #     chat_id=chat_id,
-                                    #     text=message,
-                                    #     parse_mode='HTML'
-                                    # )
-                                
-                                if trail_plan is not None:
-                                    update_stop_price_trading_mng(int(tenmin_low), int(tenmin_high), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 else:
-                                    update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    try:
+                                        result = update_trading_close(close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')                                                                                                         
+                                        if result:                                                                                         
+                                            update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
-                                update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
+                                            if verbose:
+                                                message = (
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                                )
+                                                print(message)
+                                                bot.send_message(
+                                                    chat_id=chat_id,
+                                                    text=message,
+                                                    parse_mode='HTML'
+                                                )
+                                            
+                                    except Exception as e:
+                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                                                  
+                        
+                                signals.append({
+                                    "signal_type": "BASE_10MIN_LOW_BREAK",
+                                    "종목명": stock_name,
+                                    "종목코드": stock_code,
+                                    "발생일자": row["일자"],
+                                    "발생시간": row["시간"],
+                                    "기준봉저가": tenmin_state["base_low"],
+                                    "10분봉 저가": row["저가"]
+                                })
+                                return signals  
+
+                            # 10분봉 완성 시 기준봉 갱신                                                                                   
+                            if tenmin_high > tenmin_low:                                                                                   
+                                if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
+                                    tenmin_state.update({
+                                        "base_low": tenmin_low,
+                                        "base_high": tenmin_high,
+                                        "base_vol": tenmin_vol
+                                    })
+
+                                    if verbose:
+                                        reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
+                                        message = (
+                                            f"-{nick}-[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {tenmin_high:,}원,  저가 : {tenmin_low:,}원, 거래량 : {tenmin_vol:,}주"
+                                        )
+                                        print(message)
+                                        # bot.send_message(
+                                        #     chat_id=chat_id,
+                                        #     text=message,
+                                        #     parse_mode='HTML'
+                                        # )
+                                    
+                                    if trail_plan is not None:
+                                        update_stop_price_trading_mng(int(tenmin_low), int(tenmin_high), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    else:
+                                        update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
+                                    update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
 
     return signals
 
