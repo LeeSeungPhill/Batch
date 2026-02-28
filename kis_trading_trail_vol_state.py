@@ -974,7 +974,7 @@ def get_kis_1min_from_datetime(
                                 
                                 if verbose:
                                     message = (
-                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈"
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
                                     )
                                     print(message)
                                     bot.send_message(
@@ -1121,7 +1121,7 @@ def get_kis_1min_from_datetime(
 
                                         if verbose:
                                             message = (
-                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈"
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
                                             )
                                             print(message)
                                             bot.send_message(
@@ -1160,7 +1160,7 @@ def get_kis_1min_from_datetime(
 
                                 if verbose:
                                     message = (
-                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원 "
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원, 거래량 : {tenmin_state['base_vol']:,}주 "
                                     )
                                     print(message)
                                     bot.send_message(
@@ -1218,7 +1218,7 @@ def get_kis_1min_from_datetime(
 
                                             if verbose:                                                                                    
                                                 message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈 (10분봉 저가 : {tenmin_low:,}원)"
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈 (10분봉 저가 : {tenmin_low:,}원), 거래량 : {tenmin_vol:,}주"
                                                 )                                                                                          
                                                 print(message)                                                                             
                                                 bot.send_message(                                                                          
@@ -1237,7 +1237,7 @@ def get_kis_1min_from_datetime(
 
                                             if verbose:
                                                 message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈"
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈 (10분봉 저가 : {tenmin_low:,}원), 거래량 : {tenmin_vol:,}주"
                                                 )
                                                 print(message)
                                                 bot.send_message(
