@@ -20,7 +20,7 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 conn = db.connect(conn_string)
 
 # today = datetime.now().strftime("%Y%m%d")
-today = '20260227'
+today = '20260225'
 
 bot = None
 chat_id = None
@@ -963,7 +963,7 @@ def get_kis_1min_from_datetime(
                         # 시간대별 거래량 비율 체크
                         if volume_rate_chk(current_time, vol_ratio):
                             trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                            i_trail_plan = trail_plan if trail_plan is not None else "100"
+                            i_trail_plan = trail_plan if trail_plan else "100"
                             trail_qty = basic_qty * int(i_trail_plan) * 0.01
                             trail_amt = close_price * trail_qty
                             u_basic_qty = basic_qty - trail_qty
@@ -1000,7 +1000,7 @@ def get_kis_1min_from_datetime(
                     # 전일저가 금일 종가 이탈 및 전일 거래량 대비 50% 이상 거래량
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                        i_trail_plan = trail_plan if trail_plan is not None else "100"
+                        i_trail_plan = trail_plan if trail_plan else "100"
                         trail_qty = basic_qty * int(i_trail_plan) * 0.01
                         trail_amt = close_price * trail_qty
                         u_basic_qty = basic_qty - trail_qty
@@ -1108,7 +1108,7 @@ def get_kis_1min_from_datetime(
                                 # 시간대별 거래량 비율 체크
                                 # if volume_rate_chk(current_time, vol_ratio):
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
-                                i_trail_plan = trail_plan if trail_plan is not None else "100"
+                                i_trail_plan = trail_plan if trail_plan else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
                                 trail_amt = close_price * trail_qty
                                 u_basic_qty = basic_qty - trail_qty
@@ -1204,7 +1204,7 @@ def get_kis_1min_from_datetime(
                             # 완성된 10분봉 저가와 거래량이 기준봉 저가 이탈 및 기준봉 거래량 초과 → 매도                                                                 
                             if tenmin_low < tenmin_state["base_low"] and tenmin_vol > tenmin_state["base_vol"]:                                                                      
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)                                      
-                                i_trail_plan = trail_plan if trail_plan is not None else "50"                                              
+                                i_trail_plan = trail_plan if trail_plan else "50"                                              
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01                                                           
                                 trail_amt = close_price * trail_qty                                                                        
                                 u_basic_qty = basic_qty - trail_qty                                                                        
