@@ -1088,7 +1088,6 @@ def get_kis_1min_from_datetime(
                 breakdown_check = low_price if breakdown_type == "low" else close_price
 
                 current_time = row["dt"].time()
-                vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
                 if high_price > low_price:
                     # ===============================
@@ -1101,6 +1100,7 @@ def get_kis_1min_from_datetime(
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성
                     # ===============================
                     if tenmin_state["base_low"] is None:
+                        volumn if volumn else 0
                         # 돌파 이전 이탈 및 누적거래량 초과 → 즉시 종료
                         if breakdown_check <= stop_price and acml_vol > volumn:
                             if trail_tp == '1':
@@ -1118,7 +1118,7 @@ def get_kis_1min_from_datetime(
 
                                         if verbose:
                                             message = (
-                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈, 누적거래량 : {acml_vol:,}주"
                                             )
                                             print(message)
                                             bot.send_message(
