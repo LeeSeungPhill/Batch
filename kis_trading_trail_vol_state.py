@@ -1201,8 +1201,8 @@ def get_kis_1min_from_datetime(
                             tenmin_high = tenmin_df["고가"].astype(int).max()                                                              
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
 
-                            # 완성된 10분봉 저가가 기준봉 저가 이탈 → 매도                                                                 
-                            if tenmin_low < tenmin_state["base_low"]:                                                                      
+                            # 완성된 10분봉 저가와 거래량이 기준봉 저가 이탈 및 기준봉 거래량 초과 → 매도                                                                 
+                            if tenmin_low < tenmin_state["base_low"] and tenmin_vol > tenmin_state["base_vol"]:                                                                      
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)                                      
                                 i_trail_plan = trail_plan if trail_plan is not None else "50"                                              
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01                                                           
