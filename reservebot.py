@@ -1128,6 +1128,7 @@ def callback_get(update, context) :
                             COALESCE(B.basic_qty, A.buy_qty) AS buy_qty,
                             COALESCE(B.stop_price, A.loss_price) AS loss_price,
                             COALESCE(B.target_price, A.profit_price) AS profit_price,
+                            COALESCE(B.volumn, 0) AS volumn,
                             A.proc_yn,
                             ROW_NUMBER() OVER (
                                 PARTITION BY A.acct_no, A.code
@@ -1161,6 +1162,7 @@ def callback_get(update, context) :
                     basic_price,
                     basic_qty,
                     basic_amt,
+                    volumn,
                     stop_price,
                     target_price,
                     proc_min,
@@ -1177,6 +1179,7 @@ def callback_get(update, context) :
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.buy_price END AS basic_price,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.buy_qty END AS basic_qty,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.buy_price*S.buy_qty END AS basic_amt,
+                    COALESCE(S.volumn, 0) AS volumn,
                     COALESCE(S.loss_price, 0) AS stop_price,
                     COALESCE(S.profit_price, 0) AS target_price,
                     CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END AS proc_min,
