@@ -1101,12 +1101,9 @@ def get_kis_1min_from_datetime(
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성
                     # ===============================
                     if tenmin_state["base_low"] is None:
-                        # 돌파 이전 이탈 → 즉시 종료
-                        if breakdown_check <= stop_price:
+                        # 돌파 이전 이탈 및 누적거래량 초과 → 즉시 종료
+                        if breakdown_check <= stop_price and acml_vol > volumn:
                             if trail_tp == '1':
-
-                                # 시간대별 거래량 비율 체크
-                                # if volume_rate_chk(current_time, vol_ratio):
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2)
                                 i_trail_plan = trail_plan if trail_plan else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
