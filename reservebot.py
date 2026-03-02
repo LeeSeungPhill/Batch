@@ -1203,7 +1203,7 @@ def callback_get(update, context) :
                     BAL.code,
                     '{trail_day}' AS trail_day,
                     '090000' AS trail_dtm,
-                    CASE WHEN COALESCE(S.trail_tp, '1') = 'L' THEN 'L' ELSE '1' END AS trail_tp,
+                    CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.basic_price*S.basic_qty END AS basic_amt,
