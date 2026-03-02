@@ -2420,29 +2420,29 @@ def echo(update, context):
                                 context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 매매추적 미처리")
 
                             # 매매시뮬레이션 insert
-                            cur500 = thread_conn.cursor()
-                            insert_query = """
-                                INSERT INTO trading_simulation (
-                                    acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
-                                )
-                                VALUES (
-                                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                                )
-                                ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
-                                DO NOTHING
-                                RETURNING 1;
-                                """
-                            cur500.execute(insert_query, (
-                                t_acct_no, company, code, year_day, hour_minute, "1", t_buy_price, t_buy_qty, t_buy_price*t_buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
-                            ))
-                            was_inserted = cur500.fetchone() is not None
-                            thread_conn.commit()
-                            cur500.close()
+                            # cur500 = thread_conn.cursor()
+                            # insert_query = """
+                            #     INSERT INTO trading_simulation (
+                            #         acct_no, name, code, trade_day, trade_dtm, trade_tp, buy_price, buy_qty, buy_amt, loss_price, profit_price, proc_yn, crt_dt, mod_dt
+                            #     )
+                            #     VALUES (
+                            #         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            #     )
+                            #     ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
+                            #     DO NOTHING
+                            #     RETURNING 1;
+                            #     """
+                            # cur500.execute(insert_query, (
+                            #     t_acct_no, company, code, year_day, hour_minute, "1", t_buy_price, t_buy_qty, t_buy_price*t_buy_qty, loss_price, safe_margin_price, 'N', datetime.now(), datetime.now()
+                            # ))
+                            # was_inserted = cur500.fetchone() is not None
+                            # thread_conn.commit()
+                            # cur500.close()
 
-                            if was_inserted:
-                                context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 추적등록", parse_mode='HTML')
-                            else:
-                                context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 추적등록 미처리")
+                            # if was_inserted:
+                            #     context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 추적등록", parse_mode='HTML')
+                            # else:
+                            #     context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 추적등록 미처리")
                         finally:
                             thread_conn.close()
 
@@ -2574,51 +2574,51 @@ def echo(update, context):
                                     was_updated1 = cur.fetchone() is not None
 
                                     # 매매시뮬레이션 update
-                                    update_query2 = """
-                                        UPDATE public.trading_simulation SET
-                                            loss_price = %s
-                                            , profit_price = %s
-                                            , proc_dtm = %s
-                                            , proc_yn = %s
-                                            , mod_dt = %s
-                                        WHERE acct_no = %s
-                                        AND code = %s
-                                        AND trade_tp = %s
-                                        AND trade_day <= %s
-                                        AND proc_yn != 'Y'
-                                        RETURNING 1;
-                                        """
-                                    cur.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), t_acct_no, code, "1", year_day))
-                                    was_updated2 = cur.fetchone() is not None
+                                    # update_query2 = """
+                                    #     UPDATE public.trading_simulation SET
+                                    #         loss_price = %s
+                                    #         , profit_price = %s
+                                    #         , proc_dtm = %s
+                                    #         , proc_yn = %s
+                                    #         , mod_dt = %s
+                                    #     WHERE acct_no = %s
+                                    #     AND code = %s
+                                    #     AND trade_tp = %s
+                                    #     AND trade_day <= %s
+                                    #     AND proc_yn != 'Y'
+                                    #     RETURNING 1;
+                                    #     """
+                                    # cur.execute(update_query2, (int(stck_lwpr), sell_price, datetime.now().strftime("%Y%m%d%H%M"), "C", datetime.now(), t_acct_no, code, "1", year_day))
+                                    # was_updated2 = cur.fetchone() is not None
 
-                                    if was_updated1 and was_updated2:
-                                        thread_conn.commit()
-                                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
+                                    # if was_updated1 and was_updated2:
+                                    #     thread_conn.commit()
+                                    #     context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 처리", parse_mode='HTML')
 
-                                        # 매매시뮬레이션 insert
-                                        insert_query = """
-                                            INSERT INTO trading_simulation (
-                                                acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt
-                                            )
-                                            VALUES (
-                                                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                                            )
-                                            ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
-                                            DO NOTHING
-                                            RETURNING 1;
-                                            """
-                                        cur.execute(insert_query, (
-                                            t_acct_no, company, code, year_day, hour_minute, "2", sell_price, sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
-                                        ))
-                                        was_inserted = cur.fetchone() is not None
-                                        thread_conn.commit()
+                                    #     # 매매시뮬레이션 insert
+                                    #     insert_query = """
+                                    #         INSERT INTO trading_simulation (
+                                    #             acct_no, name, code, trade_day, trade_dtm, trade_tp, sell_price, sell_qty, trading_plan, proc_yn, crt_dt, mod_dt
+                                    #         )
+                                    #         VALUES (
+                                    #             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                    #         )
+                                    #         ON CONFLICT (acct_no, code, trade_day, trade_dtm, trade_tp)
+                                    #         DO NOTHING
+                                    #         RETURNING 1;
+                                    #         """
+                                    #     cur.execute(insert_query, (
+                                    #         t_acct_no, company, code, year_day, hour_minute, "2", sell_price, sell_qty, str(sell_rate), 'N', datetime.now(), datetime.now()
+                                    #     ))
+                                    #     was_inserted = cur.fetchone() is not None
+                                    #     thread_conn.commit()
 
-                                        if was_inserted:
-                                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경", parse_mode='HTML')
-                                        else:
-                                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경 미처리")
-                                    else:
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")
+                                    #     if was_inserted:
+                                    #         context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경", parse_mode='HTML')
+                                    #     else:
+                                    #         context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경 미처리")
+                                    # else:
+                                    #     context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 매매추적 미처리")
 
                             except Exception as e:
                                 thread_conn.rollback()
