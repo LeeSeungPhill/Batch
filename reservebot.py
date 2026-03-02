@@ -1169,7 +1169,8 @@ def callback_get(update, context) :
                             basic_qty,
                             stop_price,
                             target_price,
-                            volumn
+                            volumn,
+                            trail_tp
                         FROM trading_trail
                         WHERE acct_no = {acct_no}                            
                         AND trail_day = '{prev_date}'
