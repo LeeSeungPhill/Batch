@@ -1221,7 +1221,7 @@ def callback_get(update, context) :
                     WHERE T.acct_no = BAL.acct_no
                     AND T.code = BAL.code
                     AND T.trail_day = '{trail_day}'
-                    AND T.trail_dtm >= CASE WHEN S.trade_day = '{trail_day}' THEN S.trade_dtm ELSE '090000' END
+                    AND T.trail_dtm >= CASE WHEN S.trail_day = '{trail_day}' THEN S.trail_dtm ELSE '090000' END
                 )
                 AND NOT EXISTS (
                     SELECT 1
