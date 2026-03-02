@@ -2552,7 +2552,7 @@ def echo(update, context):
                                     # 매매추적 update
                                     update_query1 = """
                                         UPDATE trading_trail tt SET
-                                            trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mmod_dt = %s
+                                            trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s
                                         WHERE acct_no = %s
                                         AND code = %s
                                         AND trail_day = %s
