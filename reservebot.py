@@ -2486,9 +2486,9 @@ def echo(update, context):
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 sell_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                 # 매도가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[4] == '0' else int(commandBot[4])                 # 이탈가(저가:0)
-                sell_rate = int(commandBot[4])                          # 비중(%)
+                sell_rate = int(commandBot[5])                                                              # 비중(%)
 
-                target_val = int(commandBot[5])
+                target_val = int(commandBot[6])
                 if target_val >= 3:
                     nickname_list = ['phills2', 'mamalong', 'worry106']
                 elif target_val == 2:
