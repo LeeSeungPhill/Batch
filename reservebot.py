@@ -1208,8 +1208,8 @@ def callback_get(update, context) :
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.basic_price*S.basic_qty END AS basic_amt,
                     COALESCE(S.volumn, 0) AS volumn,
-                    COALESCE(S.loss_price, 0) AS stop_price,
-                    COALESCE(S.profit_price, 0) AS target_price,
+                    COALESCE(S.stop_price, 0) AS stop_price,
+                    COALESCE(S.target_price, 0) AS target_price,
                     '090000' AS proc_min,
                     now(),
                     now()
