@@ -20,7 +20,7 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 conn = db.connect(conn_string)
 
 # today = datetime.now().strftime("%Y%m%d")
-today = '20260225'
+today = '20260227'
 
 bot = None
 chat_id = None
@@ -573,6 +573,8 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
         #             , order_tmd = %s
         #             , order_price = %s
         #             , order_amount = %s                          
+        #             , complete_qty = %s
+        #             , remain_qty = %s
         #             , trail_price = %s
         #             , trail_qty = %s
         #             , trail_amt = %s      
@@ -588,7 +590,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
         #         AND trail_day = %s
         #         AND trail_dtm = %s
         #         AND trail_tp = 'L'                  
-        #     """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+        #     """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
         #     conn.commit()
         #     cur04.close()                
         cur04 = conn.cursor()
@@ -689,6 +691,8 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
         #             , order_tmd = %s
         #             , order_price = %s
         #             , order_amount = %s      
+        #             , complete_qty = %s
+        #             , remain_qty = %s        
         #             , trail_price = %s
         #             , trail_qty = %s
         #             , trail_amt = %s 
@@ -704,7 +708,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
         #         AND trail_day = %s
         #         AND trail_dtm = %s
         #         AND trail_tp IN ('1', '2')
-        #     """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+        #     """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
         #     conn.commit()
         #     cur04.close()                
 
@@ -970,7 +974,7 @@ def get_kis_1min_from_datetime(
                             u_basic_amt = basic_price * u_basic_qty
 
                             if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
-                                update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
                                 if verbose:
                                     message = (
@@ -1009,7 +1013,7 @@ def get_kis_1min_from_datetime(
                         try:
                             result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                             if result:
-                                update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                # update_long_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
                                 if verbose:
                                     message = (
@@ -1114,7 +1118,7 @@ def get_kis_1min_from_datetime(
                                 try:
                                     result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
                                     if result:
-                                        update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                        # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                         if verbose:
                                             message = (
@@ -1166,7 +1170,7 @@ def get_kis_1min_from_datetime(
                                         parse_mode='HTML'
                                     )
 
-                                update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                # update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
                                 
                                 update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), int(tenmin_state['base_vol']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')    
 
@@ -1211,7 +1215,7 @@ def get_kis_1min_from_datetime(
                                     try:                                                                                                                                                                                                       
                                         result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')                              
                                         if result:                                                                                         
-                                            update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                            # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                             if verbose:                                                                                    
                                                 message = (
@@ -1230,7 +1234,7 @@ def get_kis_1min_from_datetime(
                                     try:
                                         result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')                                                                                                         
                                         if result:                                                                                         
-                                            update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                            # update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                             if verbose:
                                                 message = (
@@ -1278,10 +1282,10 @@ def get_kis_1min_from_datetime(
                                         #     parse_mode='HTML'
                                         # )
                                     
-                                    if trail_plan is not None:
-                                        update_stop_price_trading_mng(int(tenmin_low), int(tenmin_high), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                    else:
-                                        update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    # if trail_plan is not None:
+                                        # update_stop_price_trading_mng(int(tenmin_low), int(tenmin_high), acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                    # else:
+                                        # update_safe_trading_mng("C", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                     update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
 
