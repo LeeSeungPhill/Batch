@@ -2199,7 +2199,7 @@ def echo(update, context):
                 elif target_val == 2:
                     nickname_list = ['phills2', 'mamalong']
                 else:
-                    nickname_list = arguments[1]
+                    nickname_list = [arguments[1]]
                 target_nicks = nickname_list if target_val >= 1 else [None]
                 
                 def process_nick_71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -2493,7 +2493,7 @@ def echo(update, context):
                 elif target_val == 2:
                     nickname_list = ['phills2', 'mamalong']
                 else:
-                    nickname_list = arguments[1]
+                    nickname_list = [arguments[1]]
                 target_nicks = nickname_list if target_val >= 1 else [None]
 
                 def process_nick_81(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
