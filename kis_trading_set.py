@@ -291,7 +291,7 @@ for nick in nickname_list:
                         proc_min,
                         crt_dt,
                         mod_dt
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
                 """
                 

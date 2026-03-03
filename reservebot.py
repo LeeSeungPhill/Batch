@@ -555,7 +555,11 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
     ar = resp.APIResp(res)
     #ar.printAll()
-    return ar.getBody().output
+    if ar.isOK():
+        return ar.getBody().output
+    else:
+        print(f"주문정정취소 API 오류: {ar.getErrorCode()} {ar.getErrorMessage()}")
+        return None
 
 # 주식예약주문 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
 def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord_price, trade_cd, ord_dvsn_cd, reserve_end_dt):
@@ -1816,7 +1820,7 @@ def echo(update, context):
 
                             # 주문정정
                             try:
-                                c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, udt_qty, revise_price)
+                                c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "01", order_no, udt_qty, int(revise_price))
                                 if c['ODNO'] != "":
                                     print("주문정정 완료")
                                     context.bot.send_message(chat_id=user_id, text="주문정정 완료 [" + company + "] 주문번호 : <code>" + str(int(c['ODNO'])) + "</code>", parse_mode='HTML')
@@ -1845,14 +1849,14 @@ def echo(update, context):
                                                         # 매매추적 update
                                                         update_query1 = """
                                                             UPDATE trading_trail 
-                                                            SET order_no = %s, order_tmd = %s, oder_price = %s
+                                                            SET order_no = %s, order_tmd = %s, oder_price = %s, mod_dt = %s
                                                             WHERE acct_no = %s
                                                             AND code = %s
                                                             AND trail_day = %s
                                                             AND order_no = %s
                                                             """
                                                         # update 인자값 설정
-                                                        cur.execute(update_query1, (str(int(c['ODNO'])), dd_order_tmd, int(dd_order_price), datetime.now(), acct_no, code, year_day, order_no))
+                                                        cur.execute(update_query1, (str(int(c['ODNO'])), dd_order_tmd, int(dd_order_price), datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
                                                         conn.commit()
                                             except Exception as e:
                                                 conn.rollback()
@@ -1914,14 +1918,14 @@ def echo(update, context):
                                     # 매매추적 update
                                     update_query1 = """
                                         UPDATE trading_trail 
-                                        SET trail_tp = %s, mod_dt = %s
+                                        SET trail_tp = %s, order_no = NULL, order_type = NULL, order_dt = NULL, order_tmd = NULL, order_price = NULL, order_amount = NULL, remain_qty = NULL, complete_qty = NULL, trail_plan = NULL, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, mod_dt = %s
                                         WHERE acct_no = %s
                                         AND code = %s
                                         AND trail_day = %s
                                         AND order_no = %s
                                         """
                                     # update 인자값 설정
-                                    cur.execute(update_query1, ("C", datetime.now(), acct_no, code, year_day, order_no))
+                                    cur.execute(update_query1, ("1", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
                                     conn.commit()
                         except Exception as e:
                             conn.rollback()
@@ -2256,8 +2260,8 @@ def echo(update, context):
                                     d_order_tmd = d['ord_tmd'][i]
                                     d_order_price = d['avg_prvs'][i] if int(d['avg_prvs'][i]) > 0 else d['ord_unpr'][i]
                                     d_order_amount = d['ord_qty'][i]
-                                    d_order_complete_qty = d['tot_ccld_qty'][i],
-                                    d_order_remain_qty = d['rmn_qty'][i],
+                                    d_order_complete_qty = d['tot_ccld_qty'][i]
+                                    d_order_remain_qty = d['rmn_qty'][i]
 
                                     print("매수주문 완료")
                                     context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
