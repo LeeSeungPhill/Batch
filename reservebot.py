@@ -1849,14 +1849,14 @@ def echo(update, context):
                                                         # 매매추적 update
                                                         update_query1 = """
                                                             UPDATE trading_trail 
-                                                            SET order_no = %s, order_tmd = %s, oder_price = %s, mod_dt = %s
+                                                            SET trail_tp = %s, mod_dt = %s
                                                             WHERE acct_no = %s
                                                             AND code = %s
                                                             AND trail_day = %s
                                                             AND order_no = %s
                                                             """
                                                         # update 인자값 설정
-                                                        cur.execute(update_query1, (str(int(c['ODNO'])), dd_order_tmd, int(dd_order_price), datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
+                                                        cur.execute(update_query1, ("U", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
                                                         conn.commit()
                                             except Exception as e:
                                                 conn.rollback()
@@ -1918,14 +1918,14 @@ def echo(update, context):
                                     # 매매추적 update
                                     update_query1 = """
                                         UPDATE trading_trail 
-                                        SET trail_tp = %s, order_no = NULL, order_type = NULL, order_dt = NULL, order_tmd = NULL, order_price = NULL, order_amount = NULL, remain_qty = NULL, complete_qty = NULL, trail_plan = NULL, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, mod_dt = %s
+                                        SET trail_tp = %s, mod_dt = %s
                                         WHERE acct_no = %s
                                         AND code = %s
                                         AND trail_day = %s
                                         AND order_no = %s
                                         """
                                     # update 인자값 설정
-                                    cur.execute(update_query1, ("1", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
+                                    cur.execute(update_query1, ("C", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d"), order_no))
                                     conn.commit()
                         except Exception as e:
                             conn.rollback()
