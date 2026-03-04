@@ -1725,7 +1725,10 @@ def echo(update, context):
                 print("commandBot[3] : ", commandBot[3])    # 비중(%)
 
             # 이탈가(저가:0), 목표가(고가:0), 비중(%) 존재시
-            if is_positive_int(commandBot[1]) and is_positive_int(commandBot[2]) and is_positive_int(commandBot[3]):
+            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and is_positive_int(commandBot[3]):
+
+                stop_price = int(stck_lwpr) if int(commandBot[1]) == 0 else int(commandBot[1])
+                target_price = int(stck_hgpr) if int(commandBot[2]) == 0 else int(commandBot[2])
 
                 # 계좌잔고 조회
                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
@@ -1752,14 +1755,14 @@ def echo(update, context):
                             AND trail_tp = 'P'
                             RETURNING 1;
                             """
-                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), "1", str(commandBot[3]), int(commandBot[1]), int(commandBot[2]), datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, acct_no, code, datetime.now().strftime("%Y%m%d")))
+                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), "1", str(commandBot[3]), stop_price, target_price, datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, acct_no, code, datetime.now().strftime("%Y%m%d")))
                         was_updated1 = cur.fetchone() is not None
 
                         if was_updated1:
                             conn.commit()
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(int(commandBot[1]), ',d') + "원, 목표가 : " + format(int(commandBot[2]), ',d') + "원, 매도비율(%) : " + str(commandBot[2]) + "% 추적재개 처리", parse_mode='HTML')
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 매도비율(%) : " + str(commandBot[3]) + "% 추적재개 처리", parse_mode='HTML')
                         else:
-                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가 : " + format(int(commandBot[1]), ',d') + "원, 목표가 : " + format(int(commandBot[2]), ',d') + "원, 매도비율(%) : " + str(commandBot[2]) + "% 추적재개 미처리")                        
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 매도비율(%) : " + str(commandBot[3]) + "% 추적재개 미처리")                        
                 except Exception as e:
                     conn.rollback()
                     print(f"Error 발생: {e}")
