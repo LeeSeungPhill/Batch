@@ -1426,8 +1426,8 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)          
 
     elif command == "추적상태":
-        if len(data_selected.split(",")) == 1:
-            button_list = build_button(["재개", "멈춤", "취소"], data_selected)
+        if len(data_selected.split(",")) <= 2:
+            button_list = build_button(["재개", "멈춤"], data_selected)
             show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
             context.bot.edit_message_text(text="상태를 선택해 주세요.",
@@ -1435,15 +1435,9 @@ def callback_get(update, context) :
                                           message_id=update.callback_query.message.message_id,
                                           reply_markup=show_markup)
 
-        elif len(data_selected.split(",")) == 2:
+        elif len(data_selected.split(",")) == 3:
 
-            if data_selected.find("취소") != -1:
-                context.bot.edit_message_text(text="취소하였습니다.",
-                                              chat_id=update.callback_query.message.chat_id,
-                                              message_id=update.callback_query.message.message_id)
-                return
-
-            elif data_selected.find("재개") != -1:
+            if data_selected.find("재개") != -1:
                 menuNum = "41"
 
                 context.bot.edit_message_text(text="재개 종목코드(종목명), 이탈가(저가:0), 목표가(고가:0), 비중(%)을 입력하세요.",
