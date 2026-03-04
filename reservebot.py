@@ -265,7 +265,7 @@ def build_button(text_list, callback_header = "") : # make button list
 def get_command(update, context) :
     main_buttons = build_button(["보유종목", "전체주문", "주문정정", "주문취소",
                                   "전체예약", "예약주문", "예약정정", "예약철회", 
-                                  "추적등록", "추적변경", "매매신호", "매매추적",
+                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                   "추적준비", "추적삭제"],
                                   callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
@@ -1425,94 +1425,37 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)          
 
-    elif command == "매매신호":
-        query.edit_message_text(
-            text="📅 매매 신호 시작일을 선택하세요",
-            reply_markup=build_date_buttons3(38)  # 최근 38일
-        )
-            
-    elif command.startswith("trading_signal_date:"):            
-        ac = account()
-        acct_no = ac['acct_no']
+    elif command == "추적상태":
+        if len(data_selected.split(",")) == 1:
+            button_list = build_button(["재개", "멈춤", "취소"], data_selected)
+            show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list) - 1))
 
-        try:
-            context.bot.edit_message_text(text="[매매신호]",
-                                chat_id=query.message.chat_id,
-                                message_id=query.message.message_id)
-            
-            business_day = command.split(":")[1]
-            trade_day = post_business_day_char(business_day)
-            result_msgs = []
+            context.bot.edit_message_text(text="상태를 선택해 주세요.",
+                                          chat_id=update.callback_query.message.chat_id,
+                                          message_id=update.callback_query.message.message_id,
+                                          reply_markup=show_markup)
+
+        elif len(data_selected.split(",")) == 2:
+
+            if data_selected.find("취소") != -1:
+                context.bot.edit_message_text(text="취소하였습니다.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
+                return
+
+            elif data_selected.find("재개") != -1:
+                menuNum = "41"
+
+                context.bot.edit_message_text(text="재개 종목코드(종목명), 이탈가(저가:0), 목표가(고가:0), 비중(%)을 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
         
-            # 매매신호 select
-            cur200 = conn.cursor()
-            select_query = """
-                SELECT code, name, trade_day, trade_dtm, case when trade_tp = '1' then '매수' else '매도' end as trade_tp, buy_price, buy_qty, buy_amt, sell_price, sell_qty, sell_amt, loss_price, profit_price, proc_yn, proc_dtm FROM trading_simulation WHERE acct_no = %s AND trade_day = %s ORDER BY proc_yn, trade_dtm DESC
-                """
-            # select 인자값 설정
-            cur200.execute(select_query, (acct_no, trade_day))
-            result_two00 = cur200.fetchall()
-            cur200.close()
+            elif data_selected.find("멈춤") != -1:
+                menuNum = "42"
 
-            if len(result_two00) > 0:
-            
-                for row in result_two00:
-                    # 각 값이 None이면 0으로, 아니면 원래 값 유지
-                    r = [val if val is not None else 0 for val in row]
-                    # 각 컬럼을 변수에 할당 (언패킹)
-                    (code, name, t_day, t_dtm, t_tp, buy_p, buy_q, buy_a, sell_p, sell_q, sell_a, loss_p, profit_p, p_yn, p_dtm) = r
-
-                    if p_dtm == 0:
-                        last_val = "상태: "+p_yn
-                    else:
-                        last_val = "상태: "+p_yn+" ["+p_dtm[:8]+"-"+p_dtm[8:10]+":"+p_dtm[10:12]+"]"
-
-                    # t_tp(매수/매도 구분) 값에 따라 메시지 구성
-                    if t_tp == '매도':
-                        msg = (f"[{t_day}-{t_dtm[:2]}:{t_dtm[2:4]}]{name}[<code>{code}</code>] "
-                            f"매도가:{sell_p:,}원({sell_q:,}주), 매도금액:{sell_p*sell_q:,}원")
-                    else: # '매수'인 경우
-                        msg = (f"[{t_day}-{t_dtm[:2]}:{t_dtm[2:4]}]{name}[<code>{code}</code>] "
-                            f"매수가:{buy_p:,}원({buy_q:,}주), 매수금액:{buy_p*buy_q:,}원, "
-                            f"손절가:{loss_p:,}원, 목표가:{profit_p:,}원, {last_val}")
-                        
-                    result_msgs.append(msg)
-
-            if result_msgs:
-                # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
-                chunk_size = 10
-                chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
-
-                for idx, chunk in enumerate(chunks):
-                    final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
-                    
-                    if idx == 0:
-                        # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
-                        context.bot.edit_message_text(
-                            text=final_message,
-                            parse_mode='HTML',
-                            chat_id=query.message.chat_id,
-                            message_id=query.message.message_id
-                        )
-                    else:
-                        # 두 번째 묶음부터는 새로운 메시지로 전송
-                        context.bot.send_message(
-                            text=final_message,
-                            parse_mode='HTML',
-                            chat_id=query.message.chat_id
-                        )
-            else:
-                context.bot.edit_message_text(
-                    text="매매 신호 대상이 존재하지 않습니다.",
-                    chat_id=query.message.chat_id,
-                    message_id=query.message.message_id
-                )
-
-        except Exception as e:
-            print('매매 신호 오류.', e)
-            context.bot.edit_message_text(text="[매매 신호] 오류 : "+str(e),
-                                            chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)     
+                context.bot.edit_message_text(text="멈춤 종목코드(종목명)를 입력하세요.",
+                                              chat_id=update.callback_query.message.chat_id,
+                                              message_id=update.callback_query.message.message_id)
 
     elif command == "매매추적":
         query.edit_message_text(
@@ -1781,7 +1724,89 @@ def echo(update, context):
 
         print("menuNum : ", menuNum)
 
-        if menuNum == '51':
+        if menuNum == '41':
+            initMenuNum()
+            if len(user_text.split(",")) > 0:
+               
+                commandBot = user_text.split(sep=',', maxsplit=4)
+                print("commandBot[1] : ", commandBot[1])    # 이탈가(저가:0)
+                print("commandBot[2] : ", commandBot[2])    # 목표가(고가:0)
+                print("commandBot[3] : ", commandBot[3])    # 비중(%)
+
+            # 이탈가(저가:0), 목표가(고가:0), 비중(%) 존재시
+            if is_positive_int(commandBot[1]) and is_positive_int(commandBot[2]) and is_positive_int(commandBot[3]):
+
+                # 계좌잔고 조회
+                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+
+                hold_price = 0
+                hldg_qty = 0
+                hold_amt = 0
+
+                for i, name in enumerate(c.index):
+                    if code == c['pdno'][i]:
+                        hold_price = float(c['pchs_avg_pric'][i])
+                        hldg_qty = int(c['hldg_qty'][i])
+                        hold_amt = int(c['pchs_amt'][i])
+
+                try:
+                    with conn.cursor() as cur:
+                        # 매매추적 update
+                        update_query1 = """
+                            UPDATE trading_trail tt SET
+                                trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL
+                            WHERE acct_no = %s
+                            AND code = %s
+                            AND trail_day = %s
+                            AND trail_tp = 'P'
+                            RETURNING 1;
+                            """
+                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), "1", str(commandBot[3]), int(commandBot[1]), int(commandBot[2]), datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, acct_no, code, datetime.now().strftime("%Y%m%d")))
+                        was_updated1 = cur.fetchone() is not None
+
+                        if was_updated1:
+                            conn.commit()
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(int(commandBot[1]), ',d') + "원, 목표가 : " + format(int(commandBot[2]), ',d') + "원, 매도비율(%) : " + str(commandBot[2]) + "% 추적재개 처리", parse_mode='HTML')
+                        else:
+                            context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가 : " + format(int(commandBot[1]), ',d') + "원, 목표가 : " + format(int(commandBot[2]), ',d') + "원, 매도비율(%) : " + str(commandBot[2]) + "% 추적재개 미처리")                        
+                except Exception as e:
+                    conn.rollback()
+                    print(f"Error 발생: {e}")
+                    context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다: {e}")                            
+            
+            else:
+                print("이탈가(저가:0), 목표가(고가:0), 비중(%) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가(저가:0), 목표가(고가:0), 비중(%) 미존재 또는 부적합")
+
+        elif menuNum == '42':
+            initMenuNum()
+
+            try:
+                with conn.cursor() as cur:
+                    # 매매추적 update
+                    update_query1 = """
+                        UPDATE trading_trail tt SET
+                            trail_tp = %s, mod_dt = %s
+                        WHERE acct_no = %s
+                        AND code = %s
+                        AND trail_day = %s
+                        AND trail_tp IN ('1', '2', '3', 'L')
+                        RETURNING 1;
+                        """
+                    cur.execute(update_query1, ("P", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d")))
+                    was_updated1 = cur.fetchone() is not None
+
+                    if was_updated1:
+                        conn.commit()
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 추적멈춤 처리", parse_mode='HTML')
+                    else:
+                        context.bot.send_message(chat_id=user_id, text="[" + company + "] 추적멈춤 미처리")                        
+            except Exception as e:
+                conn.rollback()
+                print(f"Error 발생: {e}")
+                context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다: {e}") 
+
+        elif menuNum == '51':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                
@@ -2568,7 +2593,7 @@ def echo(update, context):
 
                                     if was_updated1:
                                         thread_conn.commit()
-                                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 매도가 : " + format(sell_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경 처리", parse_mode='HTML')
+                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 매도가 : " + format(sell_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경 처리", parse_mode='HTML')
                                     else:
                                         context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매도가 : " + format(sell_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 매도량 : " + format(sell_qty, ',d') + "주, 매도비율(%) : " + str(sell_rate) + "% 추적변경 미처리")
 
