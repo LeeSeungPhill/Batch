@@ -1748,11 +1748,11 @@ def echo(update, context):
                         # 매매추적 update
                         update_query1 = """
                             UPDATE trading_trail tt SET
-                                trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL
+                                trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s, trail_plan = NULL, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL
                             WHERE acct_no = %s
                             AND code = %s
                             AND trail_day = %s
-                            AND trail_tp = 'P'
+                            AND trail_tp IN ('C', 'U', 'P')
                             RETURNING 1;
                             """
                         cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), str(commandBot[3]), stop_price, target_price, datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, acct_no, code, datetime.now().strftime("%Y%m%d")))
