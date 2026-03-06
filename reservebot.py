@@ -1516,7 +1516,7 @@ def callback_get(update, context) :
                         app_key=app_key,
                         app_secret=app_secret
                     )
-                    stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2)   # 수익률
+                    stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2) if basic_price > 0 else 0  # 수익률
                     trail = ""
                     if trail_price > 0:
                         trail_qty = int(round(trail_amt/trail_price)) if trail_qty == 0 else trail_qty  # 추적수량
