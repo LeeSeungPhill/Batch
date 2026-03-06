@@ -25,6 +25,20 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 # DB 연결
 conn = db.connect(conn_string)
 
+def get_conn():
+    global conn
+    try:
+        conn.isolation_level
+        with conn.cursor() as cur:
+            conn.execute("SELECT 1")
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        conn = db.connect(conn_string)
+    return conn                
+
 cur001 = conn.cursor()
 cur001.execute("select bot_token2 from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
 result_001 = cur001.fetchone()
@@ -105,7 +119,7 @@ def format_number(value):
     
 def build_date_buttons1(days=7):
     today = datetime.now().date()
-
+    conn = get_conn()
     cur00 = conn.cursor()
     cur00.execute("SELECT holiday FROM stock_holiday")
     holidays = {row[0] for row in cur00.fetchall()}
@@ -140,7 +154,7 @@ def build_date_buttons1(days=7):
 
 def build_date_buttons2(days=7):
     today = datetime.now().date()
-
+    conn = get_conn()
     cur00 = conn.cursor()
     cur00.execute("SELECT holiday FROM stock_holiday")
     holidays = {row[0] for row in cur00.fetchall()}
@@ -175,7 +189,7 @@ def build_date_buttons2(days=7):
 
 def build_date_buttons3(days=7):
     today = datetime.now().date()
-
+    conn = get_conn()
     cur00 = conn.cursor()
     cur00.execute("SELECT holiday FROM stock_holiday")
     holidays = {row[0] for row in cur00.fetchall()}
@@ -210,7 +224,7 @@ def build_date_buttons3(days=7):
 
 def build_date_buttons4(days=7):
     today = datetime.now().date()
-
+    conn = get_conn()
     cur00 = conn.cursor()
     cur00.execute("SELECT holiday FROM stock_holiday")
     holidays = {row[0] for row in cur00.fetchall()}
@@ -275,6 +289,7 @@ def get_command(update, context) :
 
 def start(update, context) :
     chat_id = update.effective_chat.id
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
         UPDATE \"stockAccount_stock_account\"
@@ -306,6 +321,7 @@ def auth(APP_KEY, APP_SECRET):
 
 # 계정정보 조회
 def account(nickname=None):
+    conn = get_conn()
     cur01 = conn.cursor()
     if nickname is None:
         cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
@@ -705,6 +721,7 @@ def is_positive_int(val: str) -> bool:
     return False    
 
 def post_business_day_char(business_day:str):
+    conn = get_conn()
     cur100 = conn.cursor()
     cur100.execute("select post_business_day_char('"+business_day+"'::date)")
     result_one00 = cur100.fetchall()
@@ -713,6 +730,7 @@ def post_business_day_char(business_day:str):
     return result_one00[0][0]
 
 def get_previous_business_day(day):
+    conn = get_conn()
     cur100 = conn.cursor()
     cur100.execute("select prev_business_day_char(%s)", (day,))
     result_one00 = cur100.fetchall()
@@ -1749,8 +1767,7 @@ def echo(update, context):
                         update_query1 = """
                             UPDATE trading_trail tt SET
                                 trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s, trail_plan = NULL, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL
-                            WHERE acct_no = %s
-                            AND code = %s
+                            WHERE code = %s
                             AND trail_day = %s
                             AND trail_tp IN ('C', 'U', 'P')
                             RETURNING 1;
@@ -1781,8 +1798,7 @@ def echo(update, context):
                     update_query1 = """
                         UPDATE trading_trail tt SET
                             trail_tp = %s, mod_dt = %s
-                        WHERE acct_no = %s
-                        AND code = %s
+                        WHERE code = %s
                         AND trail_day = %s
                         AND trail_tp IN ('1', '2', 'L')
                         RETURNING 1;
