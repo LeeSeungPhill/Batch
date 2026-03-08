@@ -1777,13 +1777,13 @@ def echo(update, context):
 
                         if was_updated1:
                             conn.commit()
-                            context.bot.send_message(chat_id=user_id, text=datetime.now().strftime('%H%M%S')+"[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 처리", parse_mode='HTML')
+                            context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime("%Y%m%d")+"]" + company + "[{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 처리", parse_mode='HTML')
                         else:
-                            context.bot.send_message(chat_id=user_id, text=datetime.now().strftime('%H%M%S')+"[" + company + "] 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 미처리")                        
+                            context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime("%Y%m%d")+"]" + company + " 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 미처리")                        
                 except Exception as e:
                     conn.rollback()
                     print(f"Error 발생: {e}")
-                    context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다:{datetime.now().strftime('%H%M%S')} {e}")                            
+                    context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다:[{datetime.now().strftime("%Y%m%d")}] {e}")                            
             
             else:
                 print("이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 미존재 또는 부적합")
