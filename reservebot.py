@@ -1772,7 +1772,7 @@ def echo(update, context):
                             AND trail_tp IN ('C', 'U', 'P')
                             RETURNING 1;
                             """
-                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), str(commandBot[3]), stop_price, target_price, datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, acct_no, code, datetime.now().strftime("%Y%m%d")))
+                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), str(commandBot[3]), stop_price, target_price, datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, code, datetime.now().strftime("%Y%m%d")))
                         was_updated1 = cur.fetchone() is not None
 
                         if was_updated1:
@@ -1803,7 +1803,7 @@ def echo(update, context):
                         AND trail_tp IN ('1', '2', 'L')
                         RETURNING 1;
                         """
-                    cur.execute(update_query1, ("P", datetime.now(), acct_no, code, datetime.now().strftime("%Y%m%d")))
+                    cur.execute(update_query1, ("P", datetime.now(), code, datetime.now().strftime("%Y%m%d")))
                     was_updated1 = cur.fetchone() is not None
 
                     if was_updated1:
