@@ -1047,12 +1047,16 @@ def get_kis_1min_from_datetime(
                 "base_low": int(stop_price) if stop_price else 0,
                 "base_high": int(target_price) if target_price else 0,
                 "base_vol": int(volumn) if volumn else 0,
+                "consecutive_down": 0,    # 연속 저가 이탈 카운터
+                "peak_high": int(target_price) if target_price else 0,  # 기준봉 갱신 이력 최고 고가
             }
         else:
             tenmin_state = {
                 "base_low": None,         # 기준봉 저가
                 "base_high": None,        # 기준봉 고가
-                "base_vol": None          # 기준봉 거래량
+                "base_vol": None,         # 기준봉 거래량
+                "consecutive_down": 0,    # 연속 저가 이탈 카운터
+                "peak_high": 0,           # 기준봉 갱신 이력 최고 고가
             }
 
         df = get_kis_1min_full_day(
@@ -1202,43 +1206,50 @@ def get_kis_1min_from_datetime(
                             tenmin_high = tenmin_df["고가"].astype(int).max()                                                              
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
 
-                            # 완성된 10분봉 저가와 거래량이 기준봉 저가 이탈 및 기준봉 거래량 초과 → 매도                                                                 
-                            if tenmin_low < tenmin_state["base_low"] and tenmin_vol > tenmin_state["base_vol"]:                                                                      
-                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0                                     
-                                i_trail_plan = trail_plan if trail_plan else "50"                                              
-                                trail_qty = basic_qty * int(i_trail_plan) * 0.01                                                           
-                                trail_amt = close_price * trail_qty                                                                        
-                                u_basic_qty = basic_qty - trail_qty                                                                        
-                                u_basic_amt = basic_price * u_basic_qty 
+                             # ── 매도 조건 판단 ──────────────────────────────────────────
+                            sell_trigger = False
+                            sell_reason = ""
+                            safety_margin = int(basic_price + basic_price * 0.05)
+                            PEAK_DROP_RATE = 0.15  # 고점 대비 하락 임계값 (15%)
 
-                                if basic_qty == trail_qty:                                                                                 
-                                    try:                                                                                                                                                                                                       
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')                              
-                                        if result:                                                                                         
-                                            # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                            # 방향 1: 기준봉 저가 이탈 + 안전마진 미확보 → 즉시 매도
+                            if tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
+                                sell_trigger = True
+                                sell_reason = f"안전마진 미확보 이탈 (기준봉저가:{tenmin_state['base_low']:,}, 안전마진:{safety_margin:,})"
 
-                                            if verbose:                                                                                    
-                                                message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈 (10분봉 저가 : {tenmin_low:,}원), 거래량 : {tenmin_vol:,}주"
-                                                )                                                                                          
-                                                print(message)                                                                             
-                                                bot.send_message(                                                                          
-                                                    chat_id=chat_id,                                                                       
-                                                    text=message,                                                                          
-                                                    parse_mode='HTML'                                                                      
-                                                )
-                                    except Exception as e:
-                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+                            # 방향 2: 고점 대비 PEAK_DROP_RATE 이상 하락 → 즉시 매도
+                            if not sell_trigger and tenmin_state["peak_high"] > 0 and tenmin_low < int(tenmin_state["peak_high"] * (1 - PEAK_DROP_RATE)):
+                                drop_pct = int((1 - tenmin_low / tenmin_state["peak_high"]) * 100)
+                                sell_trigger = True
+                                sell_reason = f"고점({tenmin_state['peak_high']:,}) 대비 {drop_pct}% 하락"
 
-                                else:
+                            # 기존: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
+                            # 거래량 초과 OR 연속 2회 이상 이탈 시 매도 (저거래량 지속 하락 방어)
+                            if tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin:
+                                tenmin_state["consecutive_down"] += 1
+                            else:
+                                tenmin_state["consecutive_down"] = 0
+                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= 2):
+                                sell_trigger = True
+                                sell_reason = f"기준봉 저가({tenmin_state['base_low']:,}) 이탈"
+
+                            if sell_trigger:
+                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                                i_trail_plan = trail_plan if trail_plan else "50"
+                                trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                trail_amt = close_price * trail_qty
+                                u_basic_qty = basic_qty - trail_qty
+                                u_basic_amt = basic_price * u_basic_qty
+
+                                if basic_qty == trail_qty:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')                                                                                                         
-                                        if result:                                                                                         
-                                            # update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                        if result:
+                                            # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
 
                                             if verbose:
                                                 message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 돌파 후 10분 기준봉 저가 : {tenmin_state['base_low']:,}원 이탈 (10분봉 저가 : {tenmin_low:,}원), 거래량 : {tenmin_vol:,}주"
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                 )
                                                 print(message)
                                                 bot.send_message(
@@ -1246,10 +1257,29 @@ def get_kis_1min_from_datetime(
                                                     text=message,
                                                     parse_mode='HTML'
                                                 )
-                                            
                                     except Exception as e:
-                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                                                  
-                        
+                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+
+                                else:
+                                    try:
+                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                        if result:
+                                            # update_safe_trading_mng("L", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+
+                                            if verbose:
+                                                message = (
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
+                                                )
+                                                print(message)
+                                                bot.send_message(
+                                                    chat_id=chat_id,
+                                                    text=message,
+                                                    parse_mode='HTML'
+                                                )
+
+                                    except Exception as e:
+                                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+
                                 signals.append({
                                     "signal_type": "BASE_10MIN_LOW_BREAK",
                                     "종목명": stock_name,
@@ -1259,7 +1289,7 @@ def get_kis_1min_from_datetime(
                                     "기준봉저가": tenmin_state["base_low"],
                                     "10분봉 저가": row["저가"]
                                 })
-                                return signals  
+                                return signals
 
                             # 10분봉 완성 시 기준봉 갱신                                                                                   
                             if tenmin_high > tenmin_low:                                                                                   
@@ -1267,7 +1297,9 @@ def get_kis_1min_from_datetime(
                                     tenmin_state.update({
                                         "base_low": tenmin_low,
                                         "base_high": tenmin_high,
-                                        "base_vol": tenmin_vol
+                                        "base_vol": tenmin_vol,
+                                        "consecutive_down": 0,  # 기준봉 갱신 시 카운터 리셋
+                                        "peak_high": max(tenmin_state["peak_high"], tenmin_high),  # 고점 갱신
                                     })
 
                                     if verbose:
