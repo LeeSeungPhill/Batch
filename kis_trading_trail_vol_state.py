@@ -1210,18 +1210,20 @@ def get_kis_1min_from_datetime(
                             sell_trigger = False
                             sell_reason = ""
                             safety_margin = int(basic_price + basic_price * 0.05)
-                            PEAK_DROP_RATE = 0.15  # 고점 대비 하락 임계값 (15%)
+                            PEAK_RETRACEMENT_RATE = 0.5  # 고점~안전마진 구간 중 허용 되돌림 비율 (50%)
 
                             # 방향 1: 기준봉 저가 이탈 + 안전마진 미확보 → 즉시 매도
                             if tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
                                 sell_trigger = True
                                 sell_reason = f"안전마진 미확보 이탈 (기준봉저가:{tenmin_state['base_low']:,}, 안전마진:{safety_margin:,})"
 
-                            # 방향 2: 고점 대비 PEAK_DROP_RATE 이상 하락 → 즉시 매도
-                            if not sell_trigger and tenmin_state["peak_high"] > 0 and tenmin_low < int(tenmin_state["peak_high"] * (1 - PEAK_DROP_RATE)):
-                                drop_pct = int((1 - tenmin_low / tenmin_state["peak_high"]) * 100)
-                                sell_trigger = True
-                                sell_reason = f"고점({tenmin_state['peak_high']:,}) 대비 {drop_pct}% 하락"
+                            # 방향 2: 고점~안전마진 구간의 50% 이상 되돌림 → 즉시 매도 (동적 임계값)
+                            peak_to_safety = tenmin_state["peak_high"] - safety_margin
+                            if not sell_trigger and tenmin_state["peak_high"] > 0 and peak_to_safety > 0:
+                                peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * PEAK_RETRACEMENT_RATE)
+                                if tenmin_low < peak_sell_threshold:
+                                    sell_trigger = True
+                                    sell_reason = f"고점({tenmin_state['peak_high']:,}) 되돌림 임계({peak_sell_threshold:,}) 이탈"
 
                             # 기존: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
                             # 거래량 초과 OR 연속 2회 이상 이탈 시 매도 (저거래량 지속 하락 방어)
