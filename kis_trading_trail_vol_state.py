@@ -505,7 +505,6 @@ def update_stop_price_trading_mng(loss_price, profit_price, acct_no, code, trade
 
 def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
     
-    trail_qty = trail_rate * 0.01
     d_order_price = 0
     d_order_amount = 0
 
