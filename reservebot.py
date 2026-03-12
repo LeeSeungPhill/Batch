@@ -1291,7 +1291,7 @@ def callback_get(update, context) :
                         FROM trading_trail
                         WHERE acct_no = {acct_no}                            
                         AND trail_day = '{prev_date}'
-                        AND trail_tp IN ('1','2','3','L')
+                        AND trail_tp IN ('1','2','3','L','P','C','U')
                     ) t
                 )
                 """
@@ -1320,7 +1320,7 @@ def callback_get(update, context) :
                     BAL.code,
                     '{trail_day}' AS trail_day,
                     '090000' AS trail_dtm,
-                    CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
+                    CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE  CASE WHEN COALESCE(S.trail_tp, '1') IN ('P','C','U') THEN 'P' ELSE '1' END END AS trail_tp,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.basic_price*S.basic_qty END AS basic_amt,
@@ -2390,7 +2390,7 @@ def echo(update, context):
 
             try:
                 with conn.cursor() as cur:
-                    # 매매추적 update
+                    # 매매추적 update : trail_tp = 'P' 추적멈춤
                     update_query1 = """
                         UPDATE trading_trail tt SET
                             trail_tp = %s, mod_dt = %s
@@ -2477,7 +2477,7 @@ def echo(update, context):
 
                                             try:
                                                 with conn.cursor() as cur:
-                                                        # 매매추적 update
+                                                        # 매매추적 update : trail_tp = 'U' 주문정정
                                                         update_query1 = """
                                                             UPDATE trading_trail 
                                                             SET trail_tp = %s, mod_dt = %s
@@ -2546,7 +2546,7 @@ def echo(update, context):
 
                         try:
                             with conn.cursor() as cur:
-                                    # 매매추적 update
+                                    # 매매추적 update : trail_tp = 'C' 주문취소
                                     update_query1 = """
                                         UPDATE trading_trail 
                                         SET trail_tp = %s, mod_dt = %s

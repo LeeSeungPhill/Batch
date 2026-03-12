@@ -221,7 +221,7 @@ for nick in nickname_list:
                     FROM trading_trail
                     WHERE acct_no = {acct_no}                            
                     AND trail_day = '{prev_date}'
-                    AND trail_tp IN ('1','2','3','L')
+                    AND trail_tp IN ('1','2','3','L','P','C','U')
                 ) t
             )
             SELECT
@@ -230,7 +230,7 @@ for nick in nickname_list:
                 BAL.code,
                 '{trail_day}' AS trail_day,
                 '090000' AS trail_dtm,
-                CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE '1' END AS trail_tp,
+                CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE  CASE WHEN COALESCE(S.trail_tp, '1') IN ('P','C','U') THEN 'P' ELSE '1' END END AS trail_tp,
                 CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
                 CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                 COALESCE(S.volumn, 0) AS volumn,
