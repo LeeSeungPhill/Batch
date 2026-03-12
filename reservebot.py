@@ -809,10 +809,26 @@ def callback_get(update, context) :
             context.bot.edit_message_text(text="[보유종목 조회]",
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
+            
+            result_msgs = []
+            # 계좌잔고 조회
+            b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
+
+            for i, name in enumerate(b.index):
+                u_tot_evlu_amt = int(b['tot_evlu_amt'][i])                  # 총평가금액
+                u_dnca_tot_amt = int(b['dnca_tot_amt'][i])                  # 예수금총금액
+                u_nass_amt = int(b['nass_amt'][i])                          # 순자산금액(세금비용 제외)
+                u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])      # 가수도 정산 금액
+                u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
+                u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
+
+                msg = f"* 총 평가금액:{format(u_tot_evlu_amt, ',d')}원, 잔고금액:{format(u_scts_evlu_amt, ',d')}원, 가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원, 전일증감:{format(u_asst_icdc_amt, ',d')}원"
+                result_msgs.append(msg)
+                
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
         
-            result_msgs = []
+            
             ord_psbl_qty = 0
             for i, name in enumerate(c.index):
                 code = c['pdno'][i]
