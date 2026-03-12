@@ -11,9 +11,20 @@ URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
 # DB 연결
 conn = db.connect(conn_string)
-remote_conn = db.connect(remote_conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
+
+def get_remote_conn(max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return db.connect(remote_conn_string)
+        except Exception as e:
+            print(f"원격 DB 연결 실패 (시도 {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(5)
+            else:
+                raise
 
 def auth(APP_KEY, APP_SECRET):
     headers = {"content-type": "application/json"}
@@ -64,6 +75,8 @@ for nick in nickname_list:
     try:
         ac = account(nick)
         acct_no = ac['acct_no']
+
+        remote_conn = get_remote_conn()
 
         cur1 = conn.cursor()
         cur1.execute("""
@@ -246,9 +259,14 @@ for nick in nickname_list:
         remote_cur5.close()
         print(f"[{nick}] Insert stock_search_form completed. ({len(stock_search_result)} rows processed)")
 
+        remote_conn.close()
+
     except Exception as e:
         print(f"[{nick}] Error trading backup : {e}")
+        try:
+            remote_conn.close()
+        except Exception:
+            pass
 
 # 연결 종료
 conn.close()
-remote_conn.close()
