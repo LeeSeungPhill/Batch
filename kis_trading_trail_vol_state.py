@@ -1219,11 +1219,11 @@ def get_kis_1min_from_datetime(
 
                             # 방향 2: 고점~안전마진 구간의 50% 이상 되돌림 → 즉시 매도 (동적 임계값)
                             peak_to_safety = tenmin_state["peak_high"] - safety_margin
-                            if not sell_trigger and tenmin_state["peak_high"] > 0 and peak_to_safety > 0:
-                                peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * PEAK_RETRACEMENT_RATE)
-                                if tenmin_low < peak_sell_threshold:
-                                    sell_trigger = True
-                                    sell_reason = f"고점({tenmin_state['peak_high']:,}) 되돌림 임계({peak_sell_threshold:,}) 이탈"
+                            # if not sell_trigger and tenmin_state["peak_high"] > 0 and peak_to_safety > 0:
+                            #     peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * PEAK_RETRACEMENT_RATE)
+                            #     if tenmin_low < peak_sell_threshold:
+                            #         sell_trigger = True
+                            #         sell_reason = f"고점({tenmin_state['peak_high']:,}) 되돌림 임계({peak_sell_threshold:,}) 이탈"
 
                             # 기존: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
                             # 거래량 초과 OR 연속 2회 이상 이탈 시 매도 (저거래량 지속 하락 방어)
