@@ -960,42 +960,39 @@ def get_kis_1min_from_datetime(
                 current_time = row["시간"].replace(":", "")
                 vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
-                # 수익 후, 이탈가 이탈 및 전일 저가 이탈 → 즉시 종료
-                if prev_low is not None:
-                    if close_price <= stop_price and close_price < prev_low:
+                # 수익 후, 이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
+                if close_price <= stop_price and volume_rate_chk(current_time, vol_ratio):
+                   
+                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                    i_trail_plan = trail_plan if trail_plan else "100"
+                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                    trail_amt = close_price * trail_qty
+                    u_basic_qty = basic_qty - trail_qty
+                    u_basic_amt = basic_price * u_basic_qty
 
-                        # 시간대별 거래량 비율 체크
-                        if volume_rate_chk(current_time, vol_ratio):
-                            trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
-                            i_trail_plan = trail_plan if trail_plan else "100"
-                            trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                            trail_amt = close_price * trail_qty
-                            u_basic_qty = basic_qty - trail_qty
-                            u_basic_amt = basic_price * u_basic_qty
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
+                        # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
+                        
+                        if verbose:
+                            message = (
+                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
+                            )
+                            print(message)
+                            bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode='HTML'
+                            )
 
-                            if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
-                                # update_exit_trading_mng("Y", acct_no, stock_code, "1", start_date, row['일자']+row['시간'].replace(':', ''))
-                                
-                                if verbose:
-                                    message = (
-                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
-                                    )
-                                    print(message)
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode='HTML'
-                                    )
-
-                            signals.append({
-                                "signal_type": "BREAKDOWN_AFTER_PROFIT",
-                                "종목명": stock_name,
-                                "종목코드": stock_code,
-                                "발생일자": row["일자"],
-                                "발생시간": row["시간"],
-                                "이탈가격": breakdown_check
-                            })
-                            return signals
+                    signals.append({
+                        "signal_type": "BREAKDOWN_AFTER_PROFIT",
+                        "종목명": stock_name,
+                        "종목코드": stock_code,
+                        "발생일자": row["일자"],
+                        "발생시간": row["시간"],
+                        "이탈가격": breakdown_check
+                    })
+                    return signals
 
                 # ===============================
                 # 1️⃣ 15:10 이후 일봉 이탈 감시
@@ -1213,12 +1210,12 @@ def get_kis_1min_from_datetime(
                             PEAK_RETRACEMENT_RATE = 0.5  # 고점~안전마진 구간 중 허용 되돌림 비율 (50%)
 
                             # 방향 1: 기준봉 저가 이탈 + 안전마진 미확보 → 즉시 매도
-                            if tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
-                                sell_trigger = True
-                                sell_reason = f"안전마진 미확보 이탈 (기준봉저가:{tenmin_state['base_low']:,}, 안전마진:{safety_margin:,})"
+                            # if tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
+                            #     sell_trigger = True
+                            #     sell_reason = f"안전마진 미확보 이탈 (기준봉저가:{tenmin_state['base_low']:,}, 안전마진:{safety_margin:,})"
 
                             # 방향 2: 고점~안전마진 구간의 50% 이상 되돌림 → 즉시 매도 (동적 임계값)
-                            peak_to_safety = tenmin_state["peak_high"] - safety_margin
+                            # peak_to_safety = tenmin_state["peak_high"] - safety_margin
                             # if not sell_trigger and tenmin_state["peak_high"] > 0 and peak_to_safety > 0:
                             #     peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * PEAK_RETRACEMENT_RATE)
                             #     if tenmin_low < peak_sell_threshold:
