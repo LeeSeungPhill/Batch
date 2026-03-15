@@ -2007,6 +2007,7 @@ def echo(update, context):
 
                     except Exception as e:
                         print('매도주문 오류.', e)
+                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
                         
                 threads_31 = []
                 for nick in target_nicks:
@@ -2094,6 +2095,7 @@ def echo(update, context):
 
                     except Exception as e:
                         print('매도주문 오류.', e)
+                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
                         
                 threads_32 = []
                 for nick in target_nicks:
@@ -2181,6 +2183,7 @@ def echo(update, context):
 
                     except Exception as e:
                         print('매도주문 오류.', e)
+                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
                         
                 threads_33 = []
                 for nick in target_nicks:
