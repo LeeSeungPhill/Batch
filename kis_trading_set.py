@@ -217,7 +217,9 @@ for nick in nickname_list:
                         stop_price,
                         target_price,
                         volumn,
-                        trail_tp
+                        trail_tp,
+                        trade_tp,
+                        exit_price
                     FROM trading_trail
                     WHERE acct_no = {acct_no}                            
                     AND trail_day = '{prev_date}'
@@ -237,6 +239,8 @@ for nick in nickname_list:
                 COALESCE(S.stop_price, 0) AS stop_price,
                 COALESCE(S.target_price, 0) AS target_price,
                 '090000' AS proc_min,
+                COALESCE(S.trade_tp, 'M') AS trade_tp,
+                COALESCE(S.exit_price, 0) AS exit_price,
                 now(),
                 now()
             FROM balance BAL
@@ -289,18 +293,20 @@ for nick in nickname_list:
                         stop_price,
                         target_price,
                         proc_min,
+                        trade_tp,
+                        exit_price,
                         crt_dt,
                         mod_dt
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
                 """
                 
                 cur201 = conn.cursor()
                 for row in trading_trail_create_list:
-                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, volumn, stop_price, target_price, proc_min, crt_dt, mod_dt = row
+                    acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt = row
                     try:
                         cur201.execute(insert_query1, (
-                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, crt_dt, mod_dt
+                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt
                         ))
                         inserted_count += cur201.rowcount
                     except Exception as e:
