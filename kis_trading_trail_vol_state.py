@@ -1265,7 +1265,7 @@ if __name__ == "__main__":
 
     if is_business_day(today):
         
-        nickname_list = ['phills2', 'mamalong', 'worry106']
+        nickname_list = ['phills2', 'yh480825', 'mamalong', 'worry106']
         
         for nick in nickname_list:
 
