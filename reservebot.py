@@ -30,7 +30,7 @@ def get_conn():
     try:
         conn.isolation_level
         with conn.cursor() as cur:
-            conn.execute("SELECT 1")
+            cur.execute("SELECT 1")
     except Exception:
         try:
             conn.close()
@@ -787,7 +787,8 @@ def show_account_selection_keyboard(query, menu_num):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
     import sys
     current_acc = sys.argv[1] if len(sys.argv) > 1 else ""
-    all_accounts = ([current_acc] if current_acc else []) + SELECTABLE_ACCOUNTS
+    extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
+    all_accounts = extra + SELECTABLE_ACCOUNTS
     buttons = []
     row = []
     for acc in all_accounts:
