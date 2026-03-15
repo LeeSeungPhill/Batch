@@ -112,7 +112,7 @@ g_risk_sum = 0
 g_low_price = 0
 g_selected_accounts = []  # 계좌 다중 선택 목록
 
-SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106']  # 선택 가능 계좌 목록
+SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106', 'phills75', 'yh480825', 'phills13', 'phills15', 'chichipa', 'honeylong']  # 선택 가능 계좌 목록
 
 def format_number(value):
     try:
