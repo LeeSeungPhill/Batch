@@ -3186,14 +3186,16 @@ def echo(update, context):
                 # 매수금액
                 buy_amt = int(buy_price) * round(buy_qty)
                 print("매수금액 : " + format(int(buy_amt), ',d'))
+                # 손절율
+                loss_rate = round((100-(loss_price/buy_price)*100)*-1,2)
                 # 매수 가능(현금) 조회
                 b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                 print("매수 가능(현금) : " + format(int(b), ',d'))
 
                 if int(b) > int(buy_amt):  # 매수가능(현금)이 매수금액보다 큰 경우
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(int(buy_amt), ',d') + "원, 매수량 : " + format(int(round(buy_qty)), ',d') + "주", parse_mode='HTML')
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(int(buy_amt), ',d') + "원, 매수량 : " + format(int(round(buy_qty)), ',d') + "주, 손절율 : " + format(int(loss_rate), ',d') + "%", parse_mode='HTML')
                 else:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(int(buy_amt), ',d') + "원, 매수량 : " + format(int(round(buy_qty)), ',d') + "주, 매수 가능(현금) : " + format(int(b) - int(buy_amt), ',d') +"원 부족")
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(int(buy_amt), ',d') + "원, 매수량 : " + format(int(round(buy_qty)), ',d') + "주, 손절율 : " + format(int(loss_rate), ',d') + "% 매수 가능(현금) : " + format(int(b) - int(buy_amt), ',d') +"원 부족", parse_mode='HTML')
             
             else:
                 print("매수가(현재가:0), 이탈가(저가:0), 손절금액 미존재 또는 부적합")
