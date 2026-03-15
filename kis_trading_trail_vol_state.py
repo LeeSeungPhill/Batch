@@ -437,7 +437,7 @@ def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret)
         app_secret=app_secret
     )
 
-def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result):
     
     d_order_price = 0
     d_order_amount = 0
@@ -517,13 +517,14 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                     , proc_min = %s
                     , basic_qty = %s
                     , basic_amt = %s
+                    , trade_result = %s      
                     , mod_dt = %s
                 WHERE acct_no = %s
                 AND code = %s
                 AND trail_day = %s
                 AND trail_dtm = %s
                 AND trail_tp = 'L'                  
-            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, trade_result, datetime.now(), acct_no, code, trail_day, trail_dtm))
             conn.commit()
             cur04.close()    
                         
@@ -535,7 +536,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
 
     return True          
 
-def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min):
+def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result):
     d_order_price = 0
     d_order_amount = 0
 
@@ -614,37 +615,16 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
                     , proc_min = %s
                     , basic_qty = %s
                     , basic_amt = %s
+                    , trade_result = %s      
                     , mod_dt = %s
                 WHERE acct_no = %s
                 AND code = %s
                 AND trail_day = %s
                 AND trail_dtm = %s
                 AND trail_tp IN ('1', '2')
-            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, trade_result, datetime.now(), acct_no, code, trail_day, trail_dtm))
             conn.commit()
             cur04.close()                
-
-        # cur04 = conn.cursor()
-        # cur04.execute("""
-        #     UPDATE public.trading_trail SET 
-        #         trail_price = %s
-        #         , trail_qty = %s
-        #         , trail_amt = %s 
-        #         , trail_rate = %s      
-        #         , trail_plan = %s
-        #         , trail_tp = %s
-        #         , proc_min = %s
-        #         , basic_qty = %s
-        #         , basic_amt = %s
-        #         , mod_dt = %s
-        #     WHERE acct_no = %s
-        #     AND code = %s
-        #     AND trail_day = %s
-        #     AND trail_dtm = %s
-        #     AND trail_tp IN ('1', '2')
-        # """, (trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, datetime.now(), acct_no, code, trail_day, trail_dtm))
-        # conn.commit()
-        # cur04.close()                
 
     except Exception as total_e:
         # DB 접속이나 아주 기초적인 로직 에러 시 여기서 잡힘
@@ -882,7 +862,7 @@ def get_kis_1min_from_datetime(
                     u_basic_qty = basic_qty - trail_qty
                     u_basic_amt = basic_price * u_basic_qty
 
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00'):
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '이탈매도'):
                         if verbose:
                             message = (
                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
@@ -918,7 +898,7 @@ def get_kis_1min_from_datetime(
                         u_basic_amt = basic_price * u_basic_qty
 
                         try:
-                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '전저매도')
                             if result:
                                 if verbose:
                                     message = (
@@ -1025,7 +1005,7 @@ def get_kis_1min_from_datetime(
                                 u_basic_amt = basic_price * u_basic_qty
 
                                 try:
-                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '손절매도')
                                     if result:
                                         if verbose:
                                             message = (
@@ -1146,7 +1126,7 @@ def get_kis_1min_from_datetime(
 
                                 if basic_qty == trail_qty:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00')
+                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '안전마진')
                                         if result:
                                             if verbose:
                                                 message = (
@@ -1163,7 +1143,7 @@ def get_kis_1min_from_datetime(
 
                                 else:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00')
+                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진')
                                         if result:
                                             if verbose:
                                                 message = (
