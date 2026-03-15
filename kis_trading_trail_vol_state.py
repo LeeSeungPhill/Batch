@@ -774,6 +774,8 @@ def get_kis_1min_from_datetime(
     trail_plan: str,
     proc_min: str,
     volumn: int,
+    trade_tp: str, 
+    exit_price: int,
     access_token: str,
     app_key: str,
     app_secret: str,
@@ -852,8 +854,40 @@ def get_kis_1min_from_datetime(
                 current_time = row["시간"].replace(":", "")
                 vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
-                # 수익 후, 이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
-                if close_price <= stop_price and volume_rate_chk(current_time, vol_ratio):
+                # 손절매수 대상 최종이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
+                if trade_tp is not None and trade_tp == 'S' and close_price <= exit_price and volume_rate_chk(current_time, vol_ratio):
+                    
+                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                    i_trail_plan = trail_plan if trail_plan else "100"
+                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                    trail_amt = close_price * trail_qty
+                    u_basic_qty = basic_qty - trail_qty
+                    u_basic_amt = basic_price * u_basic_qty
+
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '이탈매도'):
+                        if verbose:
+                            message = (
+                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
+                            )
+                            print(message)
+                            bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode='HTML'
+                            )
+
+                    signals.append({
+                        "signal_type": "BREAKDOWN_AFTER_PROFIT",
+                        "종목명": stock_name,
+                        "종목코드": stock_code,
+                        "발생일자": row["일자"],
+                        "발생시간": row["시간"],
+                        "이탈가격": breakdown_check
+                    })
+                    return signals
+                
+                # 매수금액 대상 이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
+                elif trade_tp is not None and trade_tp == 'M' and close_price <= stop_price and volume_rate_chk(current_time, vol_ratio):
                    
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                     i_trail_plan = trail_plan if trail_plan else "100"
@@ -1302,8 +1336,8 @@ if __name__ == "__main__":
 
             # 매매추적 조회
             cur200 = conn.cursor()
-            cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
-            # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' order by code, proc_min, mod_dt")
+            cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
+            # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' order by code, proc_min, mod_dt")
             result_two00 = cur200.fetchall()
             cur200.close()
 
@@ -1325,6 +1359,8 @@ if __name__ == "__main__":
                             trail_plan=i[9],
                             proc_min=i[10],
                             volumn=i[11],
+                            trade_tp = i[12], 
+                            exit_price = int(i[13]),
                             access_token=ac['access_token'],
                             app_key=ac['app_key'],
                             app_secret=ac['app_secret'],
