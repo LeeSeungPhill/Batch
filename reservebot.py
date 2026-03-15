@@ -785,8 +785,7 @@ def get_previous_business_day(day):
 
 def show_account_selection_keyboard(query, menu_num):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
-    import sys
-    current_acc = sys.argv[1] if len(sys.argv) > 1 else ""
+    current_acc = arguments[1] if len(arguments) > 1 else ""
     extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
     all_accounts = extra + SELECTABLE_ACCOUNTS
     buttons = []
@@ -1845,7 +1844,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_21, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_21, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_21.append(t)
                     t.start()
                 for t in threads_21:
@@ -1944,7 +1943,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_22, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_22, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_22.append(t)
                     t.start()
                 for t in threads_22:
@@ -2022,7 +2021,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_31, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_31, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_31.append(t)
                     t.start()
                 for t in threads_31:
@@ -2109,7 +2108,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_32, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_32, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_32.append(t)
                     t.start()
                 for t in threads_32:
@@ -2131,7 +2130,7 @@ def echo(update, context):
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
-                def process_nick_32(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                def process_nick_33(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_sell_price = sell_price
                     t_sell_qty = 0
                     ord_dvsn = "00"
@@ -2183,7 +2182,7 @@ def echo(update, context):
                     except Exception as e:
                         print('매도주문 오류.', e)
                         
-                threads_32 = []
+                threads_33 = []
                 for nick in target_nicks:
                     if nick is not None:
                         ac = account(nick)
@@ -2196,10 +2195,10 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_32, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_32.append(t)
+                    t = threading.Thread(target=process_nick_33, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    threads_33.append(t)
                     t.start()
-                for t in threads_32:
+                for t in threads_33:
                     t.join()
 
             else:
@@ -2861,7 +2860,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_71, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_71, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_71.append(t)
                     t.start()
                 for t in threads_71:
@@ -3044,7 +3043,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_72, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_72, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_72.append(t)
                     t.start()
                 for t in threads_72:
@@ -3135,7 +3134,7 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_81, args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    t = threading.Thread(target=process_nick_81, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_81.append(t)
                     t.start()
                 for t in threads_81:
