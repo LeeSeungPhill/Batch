@@ -864,7 +864,7 @@ def get_kis_1min_from_datetime(
                     u_basic_qty = basic_qty - trail_qty
                     u_basic_amt = basic_price * u_basic_qty
 
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '이탈매도'):
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '손절매수 대상 최종이탈가 매도'):
                         if verbose:
                             message = (
                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
@@ -896,7 +896,7 @@ def get_kis_1min_from_datetime(
                     u_basic_qty = basic_qty - trail_qty
                     u_basic_amt = basic_price * u_basic_qty
 
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '이탈매도'):
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '매수금액 대상 이탈가 매도'):
                         if verbose:
                             message = (
                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
@@ -932,7 +932,7 @@ def get_kis_1min_from_datetime(
                         u_basic_amt = basic_price * u_basic_qty
 
                         try:
-                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '전저매도')
+                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '금일종가 전일저가 이탈')
                             if result:
                                 if verbose:
                                     message = (
@@ -1028,9 +1028,9 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     if tenmin_state["base_low"] is None:
                         chk_vol = volumn if volumn else 0
-                        # 돌파 이전 이탈 및 누적거래량 초과 → 즉시 종료
-                        if breakdown_check <= stop_price and acml_vol > chk_vol:
-                            if trail_tp == '1':
+                        if trail_tp == '1':
+                            # 손절매수 대상 돌파 이전 최종이탈가 이탈 및 누적거래량 초과 → 즉시 종료
+                            if trade_tp is not None and trade_tp == 'S' and breakdown_check <= exit_price and acml_vol > chk_vol:
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -1064,10 +1064,45 @@ def get_kis_1min_from_datetime(
                                     "이탈가격": breakdown_check
                                 })
                                 return signals
+                        
+                            # 매수금액 대상 돌파 이전 이탈가 이탈 및 누적거래량 초과 → 즉시 종료
+                            elif trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:    
+                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                                i_trail_plan = trail_plan if trail_plan else "100"
+                                trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                trail_amt = close_price * trail_qty
+                                u_basic_qty = basic_qty - trail_qty
+                                u_basic_amt = basic_price * u_basic_qty
 
-                        # 목표가 돌파
-                        if breakout_check >= target_price:
-                            if trail_tp == '1':
+                                try:
+                                    result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '이탈매도')
+                                    if result:
+                                        if verbose:
+                                            message = (
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 돌파 전 이탈가 : {stop_price:,}원 이탈, 누적거래량 : {acml_vol:,}주"
+                                            )
+                                            print(message)
+                                            bot.send_message(
+                                                chat_id=chat_id,
+                                                text=message,
+                                                parse_mode='HTML'
+                                            )
+
+                                except Exception as e:
+                                    print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+
+                                signals.append({
+                                    "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                                    "종목명": stock_name,
+                                    "종목코드": stock_code,
+                                    "발생일자": row["일자"],
+                                    "발생시간": row["시간"],
+                                    "이탈가격": breakdown_check
+                                })
+                                return signals
+
+                            # 목표가 돌파
+                            if breakout_check >= target_price:
                                 base_key = get_completed_10min_key(row["dt"])
                                 base_10min = df[df["dt"].apply(get_10min_key) == base_key]
 
@@ -1160,7 +1195,7 @@ def get_kis_1min_from_datetime(
 
                                 if basic_qty == trail_qty:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '안전마진')
+                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료')
                                         if result:
                                             if verbose:
                                                 message = (
