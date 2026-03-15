@@ -110,6 +110,9 @@ g_remain_qty = 0
 g_loss_price = 0
 g_risk_sum = 0
 g_low_price = 0
+g_selected_accounts = []  # 계좌 다중 선택 목록
+
+SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106']  # 선택 가능 계좌 목록
 
 def format_number(value):
     try:
@@ -780,6 +783,24 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
+def show_account_selection_keyboard(query, menu_num):
+    """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
+    import sys
+    current_acc = sys.argv[1] if len(sys.argv) > 1 else ""
+    all_accounts = ([current_acc] if current_acc else []) + SELECTABLE_ACCOUNTS
+    buttons = []
+    row = []
+    for acc in all_accounts:
+        check = "✅" if acc in g_selected_accounts else "⬜"
+        row.append(InlineKeyboardButton(f"{check} {acc}", callback_data=f"acc_{menu_num}_t_{acc}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("✔ 확인", callback_data=f"acc_{menu_num}_confirm")])
+    query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
+
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     query = update.callback_query
@@ -789,6 +810,7 @@ def callback_get(update, context) :
     global menuNum
     global g_order_no
     global g_remain_qty
+    global g_selected_accounts
 
     print("command : ", command)
     if command == "취소":
@@ -968,18 +990,12 @@ def callback_get(update, context) :
                                         reply_markup=show_markup)
 
     elif command == "손절금액" and "매수주문" in data_selected:
-        menuNum = "21"
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "21")
 
-        context.bot.edit_message_text(text="손절금액 기준 종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        
     elif command == "매수금액" and "매수주문" in data_selected:
-        menuNum = "22"
-
-        context.bot.edit_message_text(text="매수금액 기준 종목코드(종목명), 매수가(현재가:0), 매수금액, 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "22")
     
     elif command == "매도주문":
         button_list = build_button(["도가도량", "전체", "절반"], data_selected)
@@ -991,25 +1007,16 @@ def callback_get(update, context) :
                                         reply_markup=show_markup)
 
     elif command == "도가도량" and "매도주문" in data_selected:
-        menuNum = "31"
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "31")
 
-        context.bot.edit_message_text(text="종목코드(종목명), 매도가(현재가:0), 매도량, 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        
     elif command == "전체" and "매도주문" in data_selected:
-        menuNum = "32"
-
-        context.bot.edit_message_text(text="전체 매도의 종목코드(종목명), 매도가(현재가:0), 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)    
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "32")
 
     elif command == "절반" and "매도주문" in data_selected:
-        menuNum = "33"
-
-        context.bot.edit_message_text(text="절반 매도의 종목코드(종목명), 매도가(현재가:0), 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)        
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "33")
     
     elif command == "주문정정":
         menuNum = "51"
@@ -1152,26 +1159,46 @@ def callback_get(update, context) :
                                         reply_markup=show_markup)
 
     elif command == "추적손절금액" and "추적등록" in data_selected:
-        menuNum = "71"
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "71")
 
-        context.bot.edit_message_text(text="손절금액 기준 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1)을 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        
     elif command == "추적매수금액" and "추적등록" in data_selected:
-        menuNum = "72"
-
-        context.bot.edit_message_text(text="매수금액 기준 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 대상(단독:1)을 입력하세요.",
-                                        chat_id=query.message.chat_id,
-                                        message_id=query.message.message_id)
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "72")
 
     elif command == "추적변경":
-        menuNum = "81"
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "81")
 
-        context.bot.edit_message_text(text="추적변경할 종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(현재가:0), 이탈가(저가:0), 비중(%), 대상(단독:1)을 입력하세요.",
-                                        chat_id=query.message.chat_id,
-                                        message_id=query.message.message_id)        
-    
+    elif command.startswith("acc_") and "_t_" in command:
+        # 계좌 토글: callback_data = "acc_{menu_num}_t_{account_name}"
+        parts = command.split("_t_", 1)          # ["acc_21", "phills2"]
+        account_name = parts[1]
+        menu_num = parts[0].split("_", 1)[1]    # "21"
+        if account_name in g_selected_accounts:
+            g_selected_accounts.remove(account_name)
+        else:
+            g_selected_accounts.append(account_name)
+        show_account_selection_keyboard(query, menu_num)
+
+    elif command.startswith("acc_") and command.endswith("_confirm"):
+        # 계좌 선택 확인: callback_data = "acc_{menu_num}_confirm"
+        menu_num = command.split("_")[1]         # "21", "71" 등
+        menuNum = menu_num
+        prompt_texts = {
+            "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 손절금액을 입력하세요.",
+            "22": "종목코드(종목명), 매수가(현재가:0), 매수금액을 입력하세요.",
+            "31": "종목코드(종목명), 매도가(현재가:0), 매도량을 입력하세요.",
+            "32": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
+            "33": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
+            "71": "종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(현재가:0), 이탈가(저가:0), 손절금액을 입력하세요.",
+            "72": "종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매수가(현재가:0), 이탈가(저가:0), 매수금액을 입력하세요.",
+            "81": "종목코드(종목명), 날짜(8자리-현재일자:0), 시간(6자리-현재시간:0), 매도가(현재가:0), 이탈가(저가:0), 비중(%)을 입력하세요.",
+        }
+        selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
+        prompt = prompt_texts.get(menu_num, "입력하세요.")
+        query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
+
     elif command == "추적준비":
         query.edit_message_text(
             text="📅 추적준비 시작일을 선택하세요",
@@ -1634,6 +1661,7 @@ def echo(update, context):
     global g_loss_price
     global g_risk_sum
     global g_low_price
+    global g_selected_accounts
 
     code = ""
     company = ""
@@ -1727,14 +1755,13 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=5)
+                commandBot = user_text.split(sep=',', maxsplit=4)
                 print("commandBot[1] : ", commandBot[1])    # 매수가(현재가:0)
                 print("commandBot[2] : ", commandBot[2])    # 이탈가(저가:0)
                 print("commandBot[3] : ", commandBot[3])    # 손절금액
-                print("commandBot[4] : ", commandBot[4])    # 대상(단독:1)
 
-            # 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
+            # 매수가(현재가:0), 이탈가(저가:0), 손절금액 존재시
+            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal():
                 buy_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매수가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[2] == '0' else int(commandBot[2])                 # 이탈가(저가:0)
                 # 손절금액
@@ -1745,14 +1772,7 @@ def echo(update, context):
                 # 매수금액
                 buy_amt = int(buy_price) * round(buy_qty)
                 print("매수금액 : " + format(int(buy_amt), ',d'))
-                target_val = int(commandBot[4])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_21(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
@@ -1831,20 +1851,19 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 미존재 또는 부적합")         
+                print("매수가(현재가:0), 이탈가(저가:0), 손절금액 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 손절금액 미존재 또는 부적합")         
 
         elif menuNum == '22':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=4)
+                commandBot = user_text.split(sep=',', maxsplit=3)
                 print("commandBot[1] : ", commandBot[1])    # 매수가(현재가:0)
                 print("commandBot[2] : ", commandBot[2])    # 매수금액
-                print("commandBot[3] : ", commandBot[3])    # 대상(단독:1)
 
-            # 매수가(현재가:0), 매수금액, 대상(단독:1) 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal():
+            # 매수가(현재가:0), 매수금액 존재시
+            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
                 buy_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매수가(현재가:0)
                 # 매수금액
                 buy_expect_sum = commandBot[2]
@@ -1855,14 +1874,7 @@ def echo(update, context):
                 # 매수금액
                 buy_amt = int(buy_price) * int(buy_qty)
                 print("매수금액 : " + format(int(buy_amt), ',d'))
-                target_val = int(commandBot[3])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_22(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
@@ -1938,32 +1950,23 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("매수가(현재가:0), 매수금액, 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 매수금액, 대상(단독:1) 미존재 또는 부적합")         
+                print("매수가(현재가:0), 매수금액 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 매수금액 미존재 또는 부적합")         
 
         elif menuNum == '31':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=4)
+                commandBot = user_text.split(sep=',', maxsplit=3)
                 print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
                 print("commandBot[2] : ", commandBot[2])    # 매도량
-                print("commandBot[3] : ", commandBot[3])    # 대상(단독:1)
 
-            # 매도가(현재가:0), 매도량, 대상(단독:1) 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal():
+            # 매도가(현재가:0), 매도량 존재시
+            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
                 # 매도량
                 sell_qty = commandBot[2]
-                
-                target_val = int(commandBot[3])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_31(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_sell_price = sell_price
@@ -2025,28 +2028,20 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("매도가(현재가:0), 매도량, 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0), 매도량, 대상(단독:1) 미존재 또는 부적합")         
+                print("매도가(현재가:0), 매도량 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0), 매도량 미존재 또는 부적합")         
 
         elif menuNum == '32':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=3)
+                commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
-                print("commandBot[2] : ", commandBot[2])    # 대상(단독:1)
 
-            # 매도가(현재가:0), 대상(단독:1) 존재시 : 전체
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
+            # 매도가(현재가:0) 존재시 : 전체
+            if commandBot[1].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
-                target_val = int(commandBot[2])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_32(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_sell_price = sell_price
@@ -2120,28 +2115,20 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("매도가(현재가:0), 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0), 대상(단독:1) 미존재 또는 부적합")         
+                print("매도가(현재가:0) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0) 미존재 또는 부적합")         
 
         elif menuNum == '33':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=3)
+                commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
-                print("commandBot[2] : ", commandBot[2])    # 대상(단독:1)
 
-            # 매도가(현재가:0), 대상(단독:1) 존재시 : 절반
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
+            # 매도가(현재가:0) 존재시 : 절반
+            if commandBot[1].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
-                target_val = int(commandBot[2])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_32(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_sell_price = sell_price
@@ -2215,8 +2202,8 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("매도가(현재가:0), 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0), 대상(단독:1) 미존재 또는 부적합")         
+                print("매도가(현재가:0) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0) 미존재 또는 부적합")         
 
         elif menuNum == '41':
             initMenuNum()
@@ -2701,16 +2688,15 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=7)
+                commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매수가(현재가:0)
                 print("commandBot[4] : ", commandBot[4])    # 이탈가(저가:0)
                 print("commandBot[5] : ", commandBot[5])    # 손절금액
-                print("commandBot[6] : ", commandBot[6])    # 대상(단독:1)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 존재시
-            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal() and commandBot[6].isdecimal():
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(현재가:0), 이탈가(저가:0), 손절금액 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 buy_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                  # 매수가(현재가:0)
@@ -2720,15 +2706,8 @@ def echo(update, context):
                 print("매수량 : " + format(int(round(buy_qty)), ',d'))
                 buy_amt = int(buy_price) * round(buy_qty)                                                   # 매수금액
                 print("매수금액 : " + format(int(buy_amt), ',d'))
-                target_val = int(commandBot[6])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
-                
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
+
                 def process_nick_71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
                     t_buy_qty = buy_qty
@@ -2888,38 +2867,30 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 손절금액, 대상(단독:1) 미존재 또는 부적합")         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 손절금액 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 손절금액 미존재 또는 부적합")         
 
         elif menuNum == '72':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=7)
+                commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매수가(현재가:0)
                 print("commandBot[4] : ", commandBot[4])    # 이탈가(저가:0)
                 print("commandBot[5] : ", commandBot[5])    # 매수금액
-                print("commandBot[6] : ", commandBot[6])    # 대상(단독:1)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 대상(단독:1) 존재시
-            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal() and commandBot[6].isdecimal():
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매수가(현재가:0), 이탈가(저가:0), 매수금액 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and commandBot[5].isdecimal():
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 buy_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                  # 매수가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[4] == '0' else int(commandBot[4])                 # 이탈가(저가:0)
                 buy_amt = int(commandBot[5])                                                                # 매수금액
                 buy_qty = int(round(buy_amt/buy_price))                                                     # 매수량
-                target_val = int(commandBot[6])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
-                
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
+
                 def process_nick_72(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
                     t_buy_qty = buy_qty
@@ -3079,37 +3050,28 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 대상(단독:1) 미존재 또는 부적합")         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 매수금액 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매수가(현재가:0), 이탈가(저가:0), 매수금액 미존재 또는 부적합")         
 
         elif menuNum == '81':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=7)
+                commandBot = user_text.split(sep=',', maxsplit=6)
                 print("commandBot[1] : ", commandBot[1])    # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 print("commandBot[2] : ", commandBot[2])    # 시간-6자리(HHMMSS, 현재일시:0)
                 print("commandBot[3] : ", commandBot[3])    # 매도가(현재가:0)
                 print("commandBot[4] : ", commandBot[4])    # 이탈가(저가:0)
                 print("commandBot[5] : ", commandBot[5])    # 비중(%)
-                print("commandBot[6] : ", commandBot[6])    # 대상(단독:1)
 
-            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가(현재가:0), 이탈가(저가:0), 비중(%), 대상(단독:1) 존재시
-            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and is_positive_int(commandBot[5]) and commandBot[6].isdecimal():
+            # 날짜-8자리(YYYYMMDD, 현재일자:0), 시간-6자리(HHMMSS, 현재일시:0), 매도가(현재가:0), 이탈가(저가:0), 비중(%) 존재시
+            if (commandBot[1] == '0' or len(commandBot[1]) == 8) and commandBot[1].isdigit() and (commandBot[2] == '0' or len(commandBot[2]) == 6) and commandBot[2].isdigit() and commandBot[3].isdecimal() and commandBot[4].isdecimal() and is_positive_int(commandBot[5]):
                 year_day = datetime.now().strftime("%Y%m%d") if commandBot[1] == '0' else commandBot[1]     # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S') if commandBot[2] == '0' else commandBot[2]  # 시간-6자리(HHMMSS, 현재일시:0)
                 sell_price = int(stck_prpr) if commandBot[3] == '0' else int(commandBot[3])                 # 매도가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[4] == '0' else int(commandBot[4])                 # 이탈가(저가:0)
                 sell_rate = int(commandBot[5])                                                              # 비중(%)
-
-                target_val = int(commandBot[6])
-                if target_val >= 3:
-                    nickname_list = ['phills2', 'mamalong', 'worry106']
-                elif target_val == 2:
-                    nickname_list = ['phills2', 'mamalong']
-                else:
-                    nickname_list = [arguments[1]]
-                target_nicks = nickname_list if target_val >= 1 else [None]
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_81(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     # 계좌잔고 조회
@@ -3179,8 +3141,8 @@ def echo(update, context):
                     t.join()
 
             else:
-                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(현재가:0), 이탈가(저가:0), 비중(%), 대상(단독:1) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(현재가:0), 이탈가(저가:0), 비중(%), 대상(단독:1) 미존재 또는 부적합")                         
+                print("날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(현재가:0), 이탈가(저가:0), 비중(%) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 날짜-8자리(YYYYMMDD), 시간-6자리(HHMMSS), 매도가(현재가:0), 이탈가(저가:0), 비중(%) 미존재 또는 부적합")                         
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
