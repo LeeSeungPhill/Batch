@@ -119,9 +119,25 @@ res = requests.post(url, headers=headers, data=json.dumps(params), verify=False,
 | backup_data.py | 8-9 | `sktl2389!1` (로컬) + `gr971499#1` (AWS RDS) |
 | kis_balance_*_save.py | 7-9 | `sktl2389!1` |
 
+**전체 노출 현황:**
+| 비밀번호 | 사용처 | 대상 |
+|----------|--------|------|
+| `sktl2389!1` | 30개+ 파일 | 로컬 PostgreSQL (localhost:5432) |
+| `asdf1234` | 8개 파일 | 원격 PostgreSQL (192.168.50.81:5432) |
+| `gr971499#1` | backup_data.py:9 | AWS RDS (ap-northeast-2) |
+
 **권장:** 환경변수 또는 별도 설정 파일(.env)로 분리, .gitignore에 추가
 
-### 3.2 SQL Injection 취약점 — CRITICAL
+### 3.2 .gitignore 부재 — HIGH
+
+프로젝트 루트에 `.gitignore` 파일이 존재하지 않음. YAML 설정 파일(API 키/시크릿 포함)이나 비밀번호가 담긴 소스 코드가 git에 그대로 커밋될 위험.
+
+### 3.3 SSL 검증 비활성화 — HIGH
+
+**100건 이상**의 API 호출에서 `verify=False`로 SSL 인증서 검증이 비활성화됨. MITM(중간자 공격)에 취약.
+- kis_api_prod*.py, kis_auto_proc.py, kis_trading_trail_vol.py, terrabot.py, reservebot.py 등 전체 파일 해당
+
+### 3.4 SQL Injection 취약점 — CRITICAL
 
 **30개 이상**의 SQL 쿼리에서 문자열 연결(concatenation) 사용:
 
@@ -139,7 +155,7 @@ cur01.execute("... where nick_name = '" + arguments[1] + "'")
 cur01.execute("... where nick_name = %s", (arguments[1],))
 ```
 
-### 3.3 Bare Except 패턴 — HIGH
+### 3.6 Bare Except 패턴 — HIGH
 
 11개 인스턴스에서 `except:` (타입 미지정) 사용:
 - kis_api_resp.py:44, kis_api_prod*.py:221 (6개 모두)
@@ -147,16 +163,37 @@ cur01.execute("... where nick_name = %s", (arguments[1],))
 
 SystemExit, KeyboardInterrupt까지 삼켜서 프로그램 종료 불가 상태 유발 가능.
 
-### 3.4 트랜잭션 무결성 — HIGH
+특히 `kis_api_prod.py:221`의 bare except는 API 인증/응답 파싱 실패 시 원인 추적 불가. `False`만 반환하므로 네트워크 오류인지 데이터 오류인지 구분 불가.
+
+### 3.7 트랜잭션 무결성 — HIGH
 
 - **251개** `conn.commit()` 호출 vs **7개** `conn.rollback()` 호출
 - 대부분의 commit이 에러 핸들링 없이 실행됨
 - rollback이 있는 파일: terrabot.py, reservebot.py, reservebot_simulation.py만
+- **backup_data.py**: 8개 테이블의 DELETE + INSERT를 순차 수행하면서 마지막에 `conn2.commit()` 한 번만 호출. 중간 오류 시 rollback 코드 없음
 
-### 3.5 중복 주문 방지 로직 부재 — CRITICAL
+### 3.8 중복 주문 방지 로직 부재 — CRITICAL
 
 kis_trading_trail_vol.py, kis_auto_proc.py에서 **주문 중복 방지 로직이 없음**.
 스크립트 크래시 후 재시작 시 동일 주문이 재전송될 위험.
+
+`terrabot.py`에 `sell_order_cancel_proc()` (line 1481)이 존재하여 매도 잔여주문 취소 기능은 있으나, 매도 주문 전 자동 호출 로직 없음 (수동 호출에 의존).
+
+### 3.9 API 인증 재시도 로직 부재 — HIGH
+
+`auth()` 함수에서 토큰 발급 실패 시 재시도 없이 즉시 KeyError 크래시:
+```python
+def auth(APP_KEY, APP_SECRET):
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    ACCESS_TOKEN = res.json()["access_token"]  # 실패 시 KeyError
+```
+**유일한 예외**: `kis_trading_backup.py:15-27`에만 DB 연결 재시도(3회, 5초 간격) 존재.
+
+### 3.10 Rate Limit 대응 미흡 — MEDIUM
+
+`time.sleep()` 기반의 원시적 rate limiting은 있으나 일관성 없음:
+- kis_api_prod*.py: `sleep(0.2)`, kis_auto_proc.py: `sleep(0.3)`, reservebot.py: `sleep(0.5)`
+- **429 응답(Too Many Requests) 수신 시 대응 로직 없음**. 고정 sleep만 사용.
 
 ---
 
@@ -276,12 +313,16 @@ trail_vol.py 대비 추가된 기능:
 
 | # | 항목 | 영향도 |
 |---|------|--------|
-| 1 | DB 비밀번호를 환경변수/.env로 분리 | CRITICAL |
-| 2 | SQL 파라미터화 쿼리 전환 (30개+ 취약점) | CRITICAL |
-| 3 | 중복 주문 방지 로직 추가 (주문번호 체크) | CRITICAL |
-| 4 | DB 커서를 with문 또는 try-finally로 보호 | CRITICAL |
-| 5 | API 호출에 timeout=10 추가 (40개+ 미설정) | HIGH |
-| 6 | bare except → except Exception as e 전환 | HIGH |
+| 1 | DB 비밀번호(3종)를 환경변수/.env로 분리, AWS RDS 포함 | CRITICAL |
+| 2 | `.gitignore` 생성, YAML 설정 및 민감 파일 제외 | CRITICAL |
+| 3 | SQL 파라미터화 쿼리 전환 (30개+ 취약점) | CRITICAL |
+| 4 | 중복 주문 방지 로직 추가 (주문번호 체크) | CRITICAL |
+| 5 | DB 커서를 with문 또는 try-finally로 보호 | CRITICAL |
+| 6 | API 호출에 timeout=10 추가 (100개+ 미설정) | CRITICAL |
+| 7 | `verify=False` 제거, 적절한 CA 인증서 설정 | HIGH |
+| 8 | bare except → except Exception as e 전환 | HIGH |
+| 9 | auth() 함수에 재시도 로직 추가 (네트워크 오류 대응) | HIGH |
+| 10 | backup_data.py에 try-except + rollback 추가 | HIGH |
 
 ### 코드 품질
 
