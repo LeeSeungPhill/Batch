@@ -152,9 +152,91 @@ res = requests.post(url, headers=headers, data=json.dumps(params), verify=False,
 | **matplotlib_dir.py** | 미사용 | matplotlib 경로 출력용 디버그 스크립트. 어디에서도 import 안 됨 |
 | **reservebot_simulation.py** | 독립실행 | 134KB, 어디에서도 import 안 됨. 단독 CLI 실행 전용 |
 
-### 2.3 반복되는 auth()/account() 패턴
+### 2.3 미사용 함수 — HIGH
 
-거의 모든 스크립트에 동일한 `auth()`, `account()` 함수가 반복 정의됨. 공통 모듈로 추출 가능.
+#### kis_api_prod*.py 내 미사용 함수 (6개 파일 × 14개 함수 = 84건)
+
+코드베이스 전체에서 **한 번도 호출되지 않는 함수들**:
+
+| 함수명 | 라인 | 설명 |
+|--------|------|------|
+| `do_buy()` | 434 | 매수 주문 |
+| `do_sell()` | 426 | 매도 주문 |
+| `do_revise()` | 512 | 정정 주문 |
+| `do_cancel_all()` | 519 | 전체 취소 |
+| `do_order_OS()` | 787 | 해외 주문 |
+| `getEnv()` | 156 | 환경 조회 |
+| `getResponse()` | 212 | 응답 파싱 |
+| `get_acct_balance_sell()` | 334 | 매도용 잔고 조회 |
+| `get_buyable_cash()` | 584 | 매수 가능 금액 |
+| `get_current_price_OS()` | 734 | 해외 현재가 |
+| `get_stock_completed()` | 613 | 체결 내역 |
+| `get_stock_history_OS()` | 756 | 해외 주가 이력 |
+| `get_stock_history_by_ohlcv()` | 657 | OHLCV 이력 |
+| `get_stock_investor()` | 686 | 투자자별 매매 |
+
+#### 기타 미사용 함수
+
+| 파일 | 함수 | 설명 |
+|------|------|------|
+| kis_api_resp.py | `getResponse()` (line 35) | 어디서도 호출 안 됨 |
+| terrabot.py | `get_acct_balance_sell()` (line 1133) | 어디서도 호출 안 됨 |
+| kis_interest_item.py | `fund_marketLevel_proc()` (line 233) | 호출부(line 566)가 주석 처리됨 |
+
+### 2.4 미사용 import — MEDIUM
+
+21개 파일에서 import했지만 사용하지 않는 모듈 발견:
+
+| 파일 | 미사용 import |
+|------|---------------|
+| kis_auto_proc.py | `asyncio` |
+| kis_cash_proc.py | `timedelta`, `asyncio` |
+| kis_holding_item.py | `asyncio` |
+| kis_interest_item.py | `asyncio` |
+| kis_stock_search.py | `asyncio` |
+| kis_stock_search_title.py | `telegram`, `sys`, `math`, `asyncio` |
+| kis_subject_subtotal.py | `math` |
+| kis_stock_order_complete.py | `timedelta` |
+| kis_trading_set.py | `telegram.Bot` |
+| kis_trading_simulation.py | `telegram.Bot` |
+| kis_trading_simulation_day.py | `telegram.Bot` |
+| kis_trading_trail_vol.py | `relativedelta`, `telegram.Bot` |
+| kis_trading_trail_vol_day.py | `relativedelta`, `telegram.Bot` |
+| kis_trading_trail_vol_state.py | `relativedelta`, `telegram.Bot` |
+| main.py | `kis_stock_search_api` (모든 호출이 주석 처리됨) |
+| reservebot_simulation.py | `time` |
+| terrabot.py | `io.StringIO` |
+| kis_simulation(volumn).py | `relativedelta` |
+| kis_simulation(돌파 후 오종전저).py | `relativedelta` |
+| kis_simulation(돌파 후 이탈).py | `relativedelta` |
+| kis_simulation(돌파시 거래량).py | `relativedelta` |
+
+### 2.5 데드 코드 (주석 처리된 대형 블록) — LOW
+
+| 파일 | 위치 | 줄 수 | 내용 |
+|------|------|-------|------|
+| kis_trading_simulation.py | Line 340~453 | **103줄** | else 블록 전체 주석 처리 (trading_trail 생성 로직) |
+| kis_balance_save.py | Line 148~174, 186~212 | **54줄** | "파워급등주", "파워종목" 검색 코드 주석 처리 |
+| kis_interest_item.py | Line 1273~1340 | **28줄** | 2개 블록 주석 처리 |
+| kw_fast_stock_search.py | Line 287~334 | **26줄** | 2개 블록 주석 처리 |
+
+### 2.6 반복되는 auth()/account() 패턴 — HIGH
+
+- `auth()` 함수: **33개 파일**에서 반복 정의
+- `account()` 함수: **21개 파일**에서 반복 정의
+- 공통 유틸리티 모듈로 추출 가능
+
+### 2.7 절감 가능 코드량 요약
+
+| 구분 | 절감 가능 |
+|------|-----------|
+| kis_api_prod*.py 통합 (5개 삭제) | ~4,240줄 |
+| kis_balance_*_save.py 통합 (4개 삭제) | ~768줄 |
+| _day.py 파일 통합 (2개 삭제) | ~1,495줄 |
+| 미사용 함수 제거 (14개 × 6파일) | ~2,400줄 |
+| 주석 처리 데드 코드 삭제 | ~222줄 |
+| 미사용 import 정리 | ~25줄 |
+| **합계** | **~9,150줄** |
 
 ---
 
