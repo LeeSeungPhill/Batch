@@ -45,11 +45,61 @@ with conn.cursor() as cur:
     cur.execute(query)
 ```
 
-### 1.2 API 타임아웃 미설정 — HIGH
+### 1.2 모듈 레벨 전역 커넥션 미종료 — HIGH
 
-**40개 이상**의 `requests.get()`/`requests.post()` 호출에서 `timeout` 파라미터가 누락되어 있습니다. 서버 무응답 시 봇이 무한 대기 상태에 빠집니다.
+거의 모든 스크립트가 모듈 레벨에서 `conn = db.connect(conn_string)`을 실행하지만, 프로세스 종료 시까지 `conn.close()`를 호출하지 않습니다. **장시간 실행되는 텔레그램 봇에서 특히 심각**.
 
-**해당 파일:** kis_api_prod*.py (6개 모두), kis_auto_proc.py, kis_cash_proc.py, kis_trading_trail_vol*.py 등
+| 파일 | 종류 | 커넥션 정리 |
+|------|------|-------------|
+| terrabot.py:37 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
+| reservebot.py:26 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
+| fnguidePerformbot.py:56 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
+| kis_trading_trail_vol.py:20 | 배치 스크립트 | conn.close() 없음 |
+| kis_auto_proc.py:16 | 배치 스크립트 | conn.close() 없음 |
+| (기타 20개+ 파일) | 배치/유틸리티 | conn.close() 없음 |
+
+PostgreSQL 기본 `max_connections = 100`이므로, 여러 스크립트가 동시 실행될 때 **커넥션 풀 고갈** 가능.
+
+### 1.3 kis_api_prod*.py auth() 함수 커넥션/커서 누수 — CRITICAL
+
+6개 kis_api_prod 파일 모두의 `auth()` 함수(line 137-148)에서 **호출될 때마다 새 커넥션+커서를 생성하지만 둘 다 닫지 않음**:
+```python
+conn = db.connect(conn_string)    # line 137 - 새 커넥션 생성
+cur0 = conn.cursor()              # line 138 - 새 커서 생성
+cur0.execute(update_query, ...)   # line 144
+conn.commit()                     # line 145
+# cur0.close() 없음! conn.close() 없음!
+```
+토큰이 만료될 때마다(보통 24시간마다) 누수 발생. 장시간 운영 시 커넥션 고갈.
+
+### 1.4 except 후 rollback 미호출 — HIGH
+
+psycopg2에서 INSERT/UPDATE 실패 시 트랜잭션이 `InFailedSqlTransaction` 상태가 되어 **이후 모든 쿼리가 실패**합니다. `rollback()`을 호출하지 않으므로 해당 커넥션이 사용 불가 상태가 됩니다.
+
+대표적 파일: kis_stock_minute_save.py:219, kis_trading_backup.py:111
+
+### 1.5 파일 핸들 누수 — MEDIUM
+
+`terrabot.py:8629, 8646`에서 `open()`으로 파일을 열지만 `with`문 없이 `send_photo`에 직접 전달:
+```python
+context.bot.send_photo(chat_id=user_id, photo=open('/path/save1.png', 'rb'))
+# 파일 디스크립터가 GC에 의존하여 해제됨
+```
+fnguidePerformbot.py:264에서도 동일 패턴.
+
+### 1.6 requests.Session() 미종료 — MEDIUM
+
+`fnguidePerformbot.py:82`에서 종목 조회마다 `requests.Session()`을 생성하지만 `session.close()` 없음. 사용자 조회마다 미종료 세션 누적.
+
+### 1.7 matplotlib figure 누수 — MEDIUM
+
+terrabot.py에서 차트 생성 시 `plt.figure()` 호출 후 `plt.close()` 미호출 가능성. matplotlib은 figure를 명시적으로 닫지 않으면 메모리에 유지. 장시간 봇 실행 시 메모리 점진적 증가.
+
+### 1.8 API 타임아웃 미설정 — CRITICAL
+
+**100개 이상**의 `requests.get()`/`requests.post()` 호출에서 `timeout` 파라미터가 누락되어 있습니다. 서버 무응답 시 봇이 무한 대기 상태에 빠집니다.
+
+**해당 파일:** kis_api_prod*.py (6개 모두), kis_auto_proc.py, kis_cash_proc.py, kis_trading_trail_vol*.py, terrabot.py, reservebot.py 등 전체
 
 ```python
 # Before
@@ -58,6 +108,8 @@ res = requests.post(url, headers=headers, data=json.dumps(params), verify=False)
 # After
 res = requests.post(url, headers=headers, data=json.dumps(params), verify=False, timeout=10)
 ```
+
+**권장:** `psycopg2.pool.SimpleConnectionPool`이나 `ThreadedConnectionPool`을 도입하여 커넥션 재사용
 
 ---
 
