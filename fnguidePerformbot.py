@@ -58,6 +58,7 @@ cur001 = conn.cursor()
 cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
 result_001 = cur001.fetchone()
 cur001.close()
+conn.close()
 token = result_001[0]
 
 # 텔레그램봇 updater(토큰, 입력값)

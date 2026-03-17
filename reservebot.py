@@ -2727,8 +2727,7 @@ def echo(update, context):
 
                 def process_nick_71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
-                    t_buy_qty = buy_qty
-                    t_buy_amt = buy_amt
+                    t_buy_qty = int(buy_qty)
 
                     # 계좌잔고 조회
                     c = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
@@ -2913,7 +2912,6 @@ def echo(update, context):
                 def process_nick_72(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_buy_price = buy_price
                     t_buy_qty = buy_qty
-                    t_buy_amt = buy_amt
 
                     # 계좌잔고 조회
                     c = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
