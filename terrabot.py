@@ -43,7 +43,7 @@ plt.rcParams["font.family"] = "NanumGothic"
 # 다운로드와 동시에 Pandas에 excel 파일이 load가 되는 구조입니다.
 krx_url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download'
 # requests로 먼저 가져오기, 인코딩 지정
-krx_res = requests.get(krx_url)
+krx_res = requests.get(krx_url, timeout=10)
 krx_res.encoding = 'EUC-KR'  # KRX는 EUC-KR로 인코딩됨
 # pandas로 읽기
 stock_code = pd.read_html(krx_res.text, header=0)[0]
@@ -116,7 +116,7 @@ g_hldg_qty = 0
 def format_number(value):
     try:
         return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
-    except:
+    except Exception:
         return str(value)
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
@@ -478,7 +478,7 @@ def get_ngrok_url(retries=5, delay=2):
     url = "http://localhost:4040/api/tunnels"
     for _ in range(retries):
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             tunnels = response.json()['tunnels']
             for tunnel in tunnels:
                 if tunnel['proto'] == 'https':
@@ -639,7 +639,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret":APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -696,7 +696,7 @@ def inquire_price(access_token, app_key, app_secret, code):
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output
@@ -716,7 +716,7 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output1
@@ -748,7 +748,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
             'FID_PW_DATA_INCU_YN': 'N',
             'FID_ETC_CLS_CODE': ""
         }
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
         return ar.getBody().output2  # 원본 dict 리스트
 
@@ -833,7 +833,7 @@ def inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, 
     URL = f"{URL_BASE}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output2이 있는지 확인
@@ -867,7 +867,7 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-order"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output['nrcvb_buy_amt']
@@ -888,7 +888,7 @@ def inquire_psbl_sell(access_token, app_key, app_secret, acct_no, code):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-sell"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output
@@ -922,7 +922,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -950,7 +950,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -984,7 +984,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-daily-ccld"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output1
@@ -1014,7 +1014,7 @@ def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt,
     URL = f"{URL_BASE}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output1이 있는지 확인
@@ -1051,7 +1051,7 @@ def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-resv"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -1079,7 +1079,7 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
     }
     PATH = "uapi/domestic-stock/v1/trading/order-resv-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -1124,7 +1124,7 @@ def order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, r
     }
     PATH = "uapi/domestic-stock/v1/trading/order-resv-ccnl"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -1152,7 +1152,7 @@ def get_acct_balance_sell(access_token, app_key, app_secret, acct_no):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     if ar.isOK():
@@ -1186,7 +1186,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
    
     if rtFlag == "all" and ar.isOK():
@@ -5753,7 +5753,7 @@ def get_date_str(s):
 def get_dividiend(code):
 
     url = f'http://companyinfo.stock.naver.com/company/cF1001.aspx?cmp_cd={code}&finGubun=IFRSS'
-    df = requests.get(url)
+    df = requests.get(url, timeout=10)
     financial_stmt = pd.read_html(df.text)
     dfs = financial_stmt[0]
 
@@ -5774,7 +5774,7 @@ def get_dividiend(code):
 def get_dividend_yield(code):
     url = f'https://finance.naver.com/item/main.naver?code={code}'
     headers = {'User-Agent': 'Mozilla/5.0'}
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(res.text, 'html.parser')
 
     table = soup.select_one('table.per_table')
@@ -8654,4 +8654,8 @@ dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, short_tra
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo), group=1)
 
 # 텔레그램봇 polling
-updater.start_polling()
+try:
+    updater.start_polling()
+    updater.idle()
+finally:
+    conn.close()

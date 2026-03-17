@@ -26,7 +26,7 @@ def auth(APP_KEY, APP_SECRET):
     body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     return res.json()["access_token"]
 
 def account(nickname):
@@ -86,7 +86,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
    
     if rtFlag == "all" and ar.isOK():

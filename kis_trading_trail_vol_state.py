@@ -35,7 +35,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret":APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{BASE_URL}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -107,7 +107,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
     URL = f"{BASE_URL}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output1이 있는지 확인
@@ -141,7 +141,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{BASE_URL}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     if ar.isOK():
         return ar.getBody().output
@@ -221,7 +221,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{BASE_URL}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     if ar.isOK():
         return ar.getBody().output
@@ -252,7 +252,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{BASE_URL}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
    
     if rtFlag == "all" and ar.isOK():
@@ -294,7 +294,7 @@ def get_kis_daily_chart(
         "FID_ORG_ADJ_PRC": adjust_price,
     }
 
-    res = requests.get(url, headers=headers, params=params)
+    res = requests.get(url, headers=headers, params=params, timeout=10)
     data = res.json()
 
     if "output" not in data or not data["output"]:
@@ -355,7 +355,7 @@ def get_kis_1min_dailychart(
         "FID_FAKE_TICK_INCU_YN": include_fake_tick
     }
 
-    res = requests.get(url, headers=headers, params=params)
+    res = requests.get(url, headers=headers, params=params, timeout=10)
     data = res.json()
 
     if "output2" not in data or not data["output2"]:
@@ -735,20 +735,18 @@ def volume_rate_chk(current_time, vol_ratio):
     # ===============================
     is_volume_satisfied = False
     
-    # 1. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
-    if int(current_time) < 1000 and vol_ratio >= 50:
-        is_volume_satisfied = True
-        
-    # 2. 09:00 ~ 09:20 사이: 20% 이상
-    elif 900 <= int(current_time) <= 920:
+    # 1. 09:00 ~ 09:20 사이: 20% 이상
+    if 900 <= int(current_time) <= 920:
         if vol_ratio >= 20:
             is_volume_satisfied = True
             
-    # 3. 09:21 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
+    # 2. 09:21 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
     elif 921 <= int(current_time) <= 930:
         if vol_ratio >= 25:
             is_volume_satisfied = True
-            
+    # 3. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
+    elif int(current_time) < 1000 and vol_ratio >= 50:
+        is_volume_satisfied = True
     # 4. 15:00 ~ 15:30 사이: 25% 이상
     elif 1500 <= int(current_time) <= 1530:
         if vol_ratio >= 25:
@@ -1162,26 +1160,32 @@ def get_kis_1min_from_datetime(
                             safety_margin = int(basic_price + basic_price * 0.05)
                             PEAK_RETRACEMENT_RATE = 0.5  # 고점~안전마진 구간 중 허용 되돌림 비율 (50%)
 
-                            # 방향 1: 기준봉 저가 이탈 + 안전마진 미확보 → 즉시 매도
-                            # if tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
-                            #     sell_trigger = True
-                            #     sell_reason = f"안전마진 미확보 이탈 (기준봉저가:{tenmin_state['base_low']:,}, 안전마진:{safety_margin:,})"
+                            # 조건 A: 기준봉 저가 이탈 + 안전마진 이하 → 즉시 매도 (손절)
+                            # base_low <= safety_margin 구간에서 기준봉을 이탈하면 반드시 매도
+                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
+                                sell_trigger = True
+                                sell_reason = f"안전마진({safety_margin:,}) 이하 기준봉 저가({tenmin_state['base_low']:,}) 이탈"
 
-                            # 방향 2: 고점~안전마진 구간의 50% 이상 되돌림 → 즉시 매도 (동적 임계값)
-                            # peak_to_safety = tenmin_state["peak_high"] - safety_margin
-                            # if not sell_trigger and tenmin_state["peak_high"] > 0 and peak_to_safety > 0:
-                            #     peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * PEAK_RETRACEMENT_RATE)
-                            #     if tenmin_low < peak_sell_threshold:
-                            #         sell_trigger = True
-                            #         sell_reason = f"고점({tenmin_state['peak_high']:,}) 되돌림 임계({peak_sell_threshold:,}) 이탈"
+                            # 조건 B: 고점 대비 되돌림 → 수익 구간 동적 청산 (peak retracement)
+                            # 활성화 조건: safety_margin 초과(수익 확보) + 최소 2% 이상 상승폭
+                            # 14:30 이후 수익 보호 강화: 되돌림 허용 비율 50% → 30%
+                            peak_to_safety = tenmin_state["peak_high"] - safety_margin
+                            effective_retracement_rate = 0.3 if current_time >= dt_time(14, 30) else PEAK_RETRACEMENT_RATE
+                            if not sell_trigger and tenmin_state["peak_high"] > safety_margin and peak_to_safety >= int(basic_price * 0.02):
+                                peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * effective_retracement_rate)
+                                if tenmin_low < peak_sell_threshold:
+                                    sell_trigger = True
+                                    sell_reason = f"고점({tenmin_state['peak_high']:,}) 되돌림 임계({peak_sell_threshold:,}) 이탈"
 
-                            # 기존: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
-                            # 거래량 초과 OR 연속 2회 이상 이탈 시 매도 (저거래량 지속 하락 방어)
+                            # 조건 C: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
+                            # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
+                            # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
                             if tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin:
                                 tenmin_state["consecutive_down"] += 1
                             else:
                                 tenmin_state["consecutive_down"] = 0
-                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= 2):
+                            late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
+                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= late_day_consec_threshold):
                                 sell_trigger = True
                                 sell_reason = f"기준봉 저가({tenmin_state['base_low']:,}) 이탈"
 
@@ -1240,10 +1244,10 @@ def get_kis_1min_from_datetime(
                                 return signals
 
                             # 10분봉 완성 시 기준봉 갱신                                                                                   
-                            if tenmin_high > tenmin_low:                                                                                   
+                            if tenmin_high > tenmin_low:
                                 if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
                                     tenmin_state.update({
-                                        "base_low": tenmin_low,
+                                        "base_low": max(tenmin_low, tenmin_state["base_low"]),  # 트레일링 스탑은 위로만 이동
                                         "base_high": tenmin_high,
                                         "base_vol": tenmin_vol,
                                         "consecutive_down": 0,  # 기준봉 갱신 시 카운터 리셋
@@ -1411,5 +1415,7 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(f"\n⚠️ [{i[1]}-{i[0]}] 처리 중 오류 (건너뜀): {e}")
 
-            time.sleep(0.3)                        
+            time.sleep(0.3)
+
+    conn.close()                        
                     

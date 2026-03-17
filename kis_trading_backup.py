@@ -31,7 +31,7 @@ def auth(APP_KEY, APP_SECRET):
     body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     return res.json()["access_token"]
 
 def account(nickname):

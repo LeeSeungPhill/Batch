@@ -56,7 +56,7 @@ def kis_auth(APP_KEY, APP_SECRET):
             "appsecret": APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{KIS_BASE_URL}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     return res.json()["access_token"]
 
 # KIS 당일 분봉 조회 (최대 30건 페이징 처리)
@@ -99,7 +99,7 @@ def get_kis_1min_chart(
             "FID_PW_DATA_INCU_YN": "Y"
         }
 
-        res = requests.get(url, headers=headers, params=params)
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         data = res.json()
 
         if "output2" not in data or not data["output2"]:
@@ -190,7 +190,7 @@ def auth(APP_KEY, APP_SECRET):
 	}
 
 	# 3. http POST 요청
-    response  = requests.post(url, headers=headers, json=params)
+    response  = requests.post(url, headers=headers, json=params, timeout=10)
 
     return response.json()["token"]
 
@@ -626,7 +626,10 @@ async def main():
 
 	# WebSocketClient 전역 변수 선언
     websocket_client = WebSocketClient(SOCKET_URL, access_token, bot_token, kis_access_token, kis_app_key, kis_app_secret)
-    await websocket_client.run()
+    try:
+        await websocket_client.run()
+    finally:
+        conn.close()
 
 # asyncio로 프로그램을 실행합니다.
 if __name__ == '__main__':

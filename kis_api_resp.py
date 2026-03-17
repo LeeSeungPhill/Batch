@@ -41,7 +41,7 @@ class APIResp:
                 return True
             else:
                 return False
-        except:
+        except Exception:
             return False
 
     def getErrorCode(self):
