@@ -26,7 +26,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret": APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -81,7 +81,7 @@ def inquire_time_itemchartprice(access_token, app_key, app_secret, code, time):
         'FID_PW_DATA_INCU_YN': 'Y'}  # 과거 데이터 포함 여부(Y/N) * 업종(U) 조회시에만 동작하는 구분값 N : 당일데이터만 조회 Y : 이후데이터도 조회(조회시점이 083000(오전8:30)일 경우 전일자 업종 시세 데이터도 같이 조회됨)
     PATH = "uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     # ar.printAll()
     return ar.getBody().output2

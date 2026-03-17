@@ -80,9 +80,9 @@ def get_date_str(s):
 # FnGuide 재무정보 조회
 def get_dividiend(code):
 
-    session = requests.Session()
     URL = "https://comp.fnguide.com/SVO2/asp/SVD_Finance.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=B&NewMenuID=103&stkGb=701" % (code)
-    r = session.get(URL)
+    with requests.Session() as session:
+        r = session.get(URL, timeout=10)
     r.encoding='utf-8'
     data = pd.read_html(r.text)
 
@@ -229,6 +229,7 @@ def echo(update, context):
         ax_bottom.grid()
 
         plt.savefig('/home/terra/Public/Batch/save2.png')
+        plt.close(fig)
 
     def get_sales_sum(col):
 
@@ -262,7 +263,8 @@ def echo(update, context):
 
     if len(code) > 0 and dividend is not None:
         get_chart(code)
-        context.bot.send_photo(chat_id=user_id, photo=open('/home/terra/Public/Batch/save2.png', 'rb'))
+        with open('/home/terra/Public/Batch/save2.png', 'rb') as f:
+            context.bot.send_photo(chat_id=user_id, photo=f)
 
         text0 = return_print("<" + company + ">")
         text1 = return_print("[매출액]")

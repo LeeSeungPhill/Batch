@@ -4,7 +4,6 @@ import kis_api_resp as resp
 import requests
 import json
 import telegram
-import asyncio
 import pandas as pd
 import time
 
@@ -29,7 +28,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret":APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -80,7 +79,7 @@ def inquire_price(access_token, app_key, app_secret, code):
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output
@@ -108,7 +107,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
             }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     
     if rtFlag == "all" and ar.isOK():

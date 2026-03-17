@@ -33,7 +33,7 @@ def search(access_token, app_key, app_secret, user_token, search_choice):
         search_name = "파워종목"        
 
     cur001 = conn.cursor()
-    cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = '" + user_token + "'")
+    cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = %s", (user_token,))
     result_001 = cur001.fetchone()
     cur001.close()
     token = result_001[0]
@@ -55,7 +55,7 @@ def search(access_token, app_key, app_secret, user_token, search_choice):
         }
         PATH = "/uapi/domestic-stock/v1/quotations/psearch-result"
         URL = f"{URL_BASE}/{PATH}"
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
         #ar.printAll()
         return ar.getBody().output2

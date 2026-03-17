@@ -44,7 +44,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret":APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -69,13 +69,13 @@ def inquire_subtotal(access_token, app_key, app_secret, market_name, tr_gubun, m
     }
     PATH = "/uapi/domestic-stock/v1/quotations/foreign-institution-total"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
 
 cur01 = conn.cursor()
-cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day from \"stockAccount_stock_account\" where nick_name = %s", (arguments[1],))
 result_one = cur01.fetchone()
 cur01.close()
 

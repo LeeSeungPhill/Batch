@@ -4,7 +4,6 @@ import kis_api_resp as resp
 import requests
 import json
 import telegram
-import asyncio
 import pandas as pd
 from decimal import Decimal
 import time
@@ -30,7 +29,7 @@ def auth(APP_KEY, APP_SECRET):
             "appsecret":APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     ACCESS_TOKEN = res.json()["access_token"]
 
     return ACCESS_TOKEN
@@ -81,7 +80,7 @@ def inquire_price(access_token, app_key, app_secret, code):
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output
@@ -109,7 +108,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
             }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     
     if rtFlag == "all" and ar.isOK():
@@ -152,7 +151,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
     URL = f"{URL_BASE}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output1이 있는지 확인
@@ -186,7 +185,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -216,7 +215,7 @@ def inquire_period_profit_loss(access_token, app_key, app_secret, code, strt_dt,
     URL = f"{URL_BASE}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output1이 있는지 확인
@@ -303,7 +302,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False)
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
     return ar.getBody().output
@@ -335,7 +334,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
             'FID_PW_DATA_INCU_YN': 'N',
             'FID_ETC_CLS_CODE': ""
         }
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
         return ar.getBody().output2  # 원본 dict 리스트
 

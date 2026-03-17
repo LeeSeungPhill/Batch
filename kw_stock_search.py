@@ -73,7 +73,7 @@ def auth(APP_KEY, APP_SECRET):
 	}
 
 	# 3. http POST 요청
-    response  = requests.post(url, headers=headers, json=params)
+    response  = requests.post(url, headers=headers, json=params, timeout=10)
 
     return response.json()["token"]
 
@@ -353,7 +353,10 @@ async def main():
 
 	# WebSocketClient 전역 변수 선언
     websocket_client = WebSocketClient(SOCKET_URL, access_token, bot_token)
-    await websocket_client.run()
+    try:
+        await websocket_client.run()
+    finally:
+        conn.close()
 
 # asyncio로 프로그램을 실행합니다.
 if __name__ == '__main__':

@@ -19,7 +19,7 @@ today = datetime.now().strftime("%Y%m%d")
 def format_number(value):
     try:
         return f"{float(value):,.2f}" if isinstance(value, float) else f"{int(value):,}"
-    except:
+    except Exception:
         return str(value)
     
 def auth(APP_KEY, APP_SECRET):
@@ -27,7 +27,7 @@ def auth(APP_KEY, APP_SECRET):
     body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
     PATH = "oauth2/tokenP"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
     return res.json()["access_token"]
 
 def account(nickname):
@@ -84,7 +84,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
     
     if rtFlag == "all" and ar.isOK():
@@ -108,7 +108,7 @@ def inquire_price(access_token, app_key, app_secret, code):
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output
@@ -130,7 +130,7 @@ def inquire_daily_indexchartprice(access_token, app_key, app_secret, market, sto
         'FID_PERIOD_DIV_CODE': 'D'}
     PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output1
@@ -159,7 +159,7 @@ def inquire_period_trade_profit_sum(access_token, app_key, app_secret, acct_no, 
     URL = f"{URL_BASE}/{PATH}"
 
     try:
-        res = requests.get(URL, headers=headers, params=params, verify=False)
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
 
         # 응답에 output2이 있는지 확인
@@ -192,7 +192,7 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-psbl-order"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False)
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
     ar = resp.APIResp(res)
 
     return ar.getBody().output['nrcvb_buy_amt']
