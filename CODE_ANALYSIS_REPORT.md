@@ -1,528 +1,497 @@
 # 코드 분석 및 전략 검토 보고서
 
-> 분석일: 2026-03-16
-> 분석 대상: /home/user/Batch/ 전체 Python 코드베이스 (44개 파일)
+> 분석일: 2026-03-16 (소스 정리 후 재분석)
+> 분석 대상: claude/code-analysis-strategy-review-s1qRY 브랜치
+> 대상 파일: **19개 파일, 20,482줄**
 
 ---
 
 ## 목차
 
-1. [리소스 누수 (Resource Leak)](#1-리소스-누수-resource-leak)
-2. [중복 코드 및 미사용 코드](#2-중복-코드-및-미사용-코드)
-3. [보안 취약점 및 에러 처리](#3-보안-취약점-및-에러-처리)
-4. [매매 전략 심층 분석](#4-매매-전략-심층-분석)
-5. [종합 개선 권고사항](#5-종합-개선-권고사항)
+1. [프로젝트 현황](#1-프로젝트-현황)
+2. [깨진 참조 분석 (CRITICAL)](#2-깨진-참조-분석)
+3. [보안 취약점](#3-보안-취약점)
+4. [리소스 누수](#4-리소스-누수)
+5. [중복 코드 및 미사용 코드](#5-중복-코드-및-미사용-코드)
+6. [에러 핸들링](#6-에러-핸들링)
+7. [매매 전략 분석](#7-매매-전략-분석)
+8. [개선 권고사항](#8-개선-권고사항)
+9. [결론](#9-결론)
 
 ---
 
-## 1. 리소스 누수 (Resource Leak)
+## 1. 프로젝트 현황
 
-### 1.1 DB 커서 누수 — CRITICAL
+### 1.1 파일 목록 (라인 수 내림차순)
 
-대부분의 파일에서 psycopg2 cursor를 `try-finally`나 `with`문 없이 사용하고 있어, 예외 발생 시 커서가 닫히지 않습니다.
+| # | 파일명 | 라인 수 | 역할 | 정상 작동? |
+|---|--------|--------|------|-----------|
+| 1 | terrabot.py | 8,656 | 메인 텔레그램 봇 | **X** (깨진 import) |
+| 2 | reservebot.py | 3,209 | 예약매매 보조 봇 | **X** (깨진 import) |
+| 3 | kis_holding_item.py | 2,073 | 보유종목 동기화 | O |
+| 4 | kis_trading_trail_vol_state.py | 1,415 | 상태 기반 트레일링 스탑 | **X** (깨진 import) |
+| 5 | kis_interest_item.py | 1,381 | 관심종목 동기화 | O |
+| 6 | kis_auto_proc.py | 743 | 자동 매매 프로세스 | **X** (깨진 import) |
+| 7 | kw_fast_stock_search.py | 634 | 키움 고속 종목검색 | O |
+| 8 | kw_stock_search.py | 361 | 키움 종목검색 | O |
+| 9 | kis_trading_save.py | 360 | 매매내역 저장 | **X** (깨진 import) |
+| 10 | kis_trading_set.py | 353 | 매매 설정 | **X** (깨진 import) |
+| 11 | fnguidePerformbot.py | 294 | FnGuide 성과 분석 | O |
+| 12 | kis_trading_backup.py | 271 | 매매 백업 | **X** (깨진 import) |
+| 13 | kis_stock_minute_save.py | 226 | 분봉 데이터 저장 | **X** (깨진 import) |
+| 14 | kis_cash_proc.py | 223 | 현금 비중 관리 | **X** (깨진 import) |
+| 15 | kis_subject_subtotal.py | 154 | 업종별 소계 | **X** (깨진 import) |
+| 16 | kis_api_resp.py | 64 | API 응답 파서 | O |
+| 17 | call_sync_total_item.py | 23 | 동기화 호출 | **X** (깨진 import) |
+| 18 | call_sync_holding_item.py | 23 | 동기화 호출 | **X** (깨진 import) |
+| 19 | call_upd_dly_stock_item.py | 19 | 일별 업데이트 호출 | **X** (깨진 import) |
 
-| 파일 | 심각도 | 문제 |
-|------|--------|------|
-| **backup_data.py** | CRITICAL | 예외 처리 전무. 16개 커서(cur100~cur107, cur200~cur207) 생성 후, 에러 시 모든 커서+연결 누수 |
-| **kis_trading_backup.py:264-269** | CRITICAL | except 블록에서 remote_conn만 닫고, 5개 로컬 커서(cur1~cur5) 미정리 |
-| **kis_stock_order_complete.py:199-487** | CRITICAL | 중첩 커서(cur101, cur302, cur401, cur600) try-finally 없음 |
-| **kis_balance_save.py:378-386** | HIGH | except 블록에서 모든 커서 close() 시도하지만, 아직 생성되지 않은 커서 close() 시 NameError 발생 → 후속 커서/conn도 미정리 |
-| **kis_holding_item.py:2015-2068** | HIGH | 중첩 커서 500/501이 except 핸들러에서 미정리 |
-| **kis_interest_item.py:1305-1376** | HIGH | 동일한 패턴의 커서 누수 |
-| **kis_auto_proc.py:317-738** | HIGH | 광범위한 try 블록 내 다수 커서, except에서 정리 없음 |
-| **kis_trading_set.py:121-350** | HIGH | except에서 커서 정리 없음 |
-| **kis_stock_minute_save.py:134-220** | HIGH | 루프 내 예외 시 cur1 미정리 |
-
-**권장 수정:**
-```python
-# Before (문제)
-cur = conn.cursor()
-cur.execute(query)
-cur.close()
-
-# After (권장)
-with conn.cursor() as cur:
-    cur.execute(query)
-```
-
-### 1.2 모듈 레벨 전역 커넥션 미종료 — HIGH
-
-거의 모든 스크립트가 모듈 레벨에서 `conn = db.connect(conn_string)`을 실행하지만, 프로세스 종료 시까지 `conn.close()`를 호출하지 않습니다. **장시간 실행되는 텔레그램 봇에서 특히 심각**.
-
-| 파일 | 종류 | 커넥션 정리 |
-|------|------|-------------|
-| terrabot.py:37 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
-| reservebot.py:26 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
-| fnguidePerformbot.py:56 | 텔레그램 봇 (무한 실행) | conn.close() 없음 |
-| kis_trading_trail_vol.py:20 | 배치 스크립트 | conn.close() 없음 |
-| kis_auto_proc.py:16 | 배치 스크립트 | conn.close() 없음 |
-| (기타 20개+ 파일) | 배치/유틸리티 | conn.close() 없음 |
-
-PostgreSQL 기본 `max_connections = 100`이므로, 여러 스크립트가 동시 실행될 때 **커넥션 풀 고갈** 가능.
-
-### 1.3 kis_api_prod*.py auth() 함수 커넥션/커서 누수 — CRITICAL
-
-6개 kis_api_prod 파일 모두의 `auth()` 함수(line 137-148)에서 **호출될 때마다 새 커넥션+커서를 생성하지만 둘 다 닫지 않음**:
-```python
-conn = db.connect(conn_string)    # line 137 - 새 커넥션 생성
-cur0 = conn.cursor()              # line 138 - 새 커서 생성
-cur0.execute(update_query, ...)   # line 144
-conn.commit()                     # line 145
-# cur0.close() 없음! conn.close() 없음!
-```
-토큰이 만료될 때마다(보통 24시간마다) 누수 발생. 장시간 운영 시 커넥션 고갈.
-
-### 1.4 except 후 rollback 미호출 — HIGH
-
-psycopg2에서 INSERT/UPDATE 실패 시 트랜잭션이 `InFailedSqlTransaction` 상태가 되어 **이후 모든 쿼리가 실패**합니다. `rollback()`을 호출하지 않으므로 해당 커넥션이 사용 불가 상태가 됩니다.
-
-대표적 파일: kis_stock_minute_save.py:219, kis_trading_backup.py:111
-
-### 1.5 파일 핸들 누수 — MEDIUM
-
-`terrabot.py:8629, 8646`에서 `open()`으로 파일을 열지만 `with`문 없이 `send_photo`에 직접 전달:
-```python
-context.bot.send_photo(chat_id=user_id, photo=open('/path/save1.png', 'rb'))
-# 파일 디스크립터가 GC에 의존하여 해제됨
-```
-fnguidePerformbot.py:264에서도 동일 패턴.
-
-### 1.6 requests.Session() 미종료 — MEDIUM
-
-`fnguidePerformbot.py:82`에서 종목 조회마다 `requests.Session()`을 생성하지만 `session.close()` 없음. 사용자 조회마다 미종료 세션 누적.
-
-### 1.7 matplotlib figure 누수 — MEDIUM
-
-terrabot.py에서 차트 생성 시 `plt.figure()` 호출 후 `plt.close()` 미호출 가능성. matplotlib은 figure를 명시적으로 닫지 않으면 메모리에 유지. 장시간 봇 실행 시 메모리 점진적 증가.
-
-### 1.8 API 타임아웃 미설정 — CRITICAL
-
-**100개 이상**의 `requests.get()`/`requests.post()` 호출에서 `timeout` 파라미터가 누락되어 있습니다. 서버 무응답 시 봇이 무한 대기 상태에 빠집니다.
-
-**해당 파일:** kis_api_prod*.py (6개 모두), kis_auto_proc.py, kis_cash_proc.py, kis_trading_trail_vol*.py, terrabot.py, reservebot.py 등 전체
-
-```python
-# Before
-res = requests.post(url, headers=headers, data=json.dumps(params), verify=False)
-
-# After
-res = requests.post(url, headers=headers, data=json.dumps(params), verify=False, timeout=10)
-```
-
-**권장:** `psycopg2.pool.SimpleConnectionPool`이나 `ThreadedConnectionPool`을 도입하여 커넥션 재사용
+**14개 파일이 깨진 import로 실행 불가 상태.**
 
 ---
 
-## 2. 중복 코드 및 미사용 코드
+## 2. 깨진 참조 분석
 
-### 2.1 극심한 코드 중복 — CRITICAL
+### 2.1 삭제된 파일을 import하는 코드 — CRITICAL
 
-#### kis_api_prod*.py (6개 파일, 각 25KB)
-- **99.9% 동일한 복사본**
-- 차이점: **오직 2줄** (YAML 파일 경로 line 12, 이름 line 95)
-- 총 **~150KB**의 중복 코드
+소스 정리로 `kis_api_prod*.py` 6개 파일이 삭제되었으나, 이를 import하는 코드가 14개 파일에 남아 있음.
 
-| 파일 | 차이점 (line 12) | 차이점 (line 95) |
-|------|------------------|------------------|
-| kis_api_prod.py | `kisdev_vi.yaml` | `이승필` |
-| kis_api_prod_chichipa.py | `kis_chichipa.yaml` | `김미옥` |
-| kis_api_prod_mama.py | `kis_mama.yaml` | `phillseungkorea` |
-| kis_api_prod_phills13.py | `kis_phills13.yaml` | `이재용` |
-| kis_api_prod_phills15.py | `kis_phills15.yaml` | `이수지` |
-| kis_api_prod_phills75.py | `kis_phills75.yaml` | `phillseungkorea` |
+**kis_api_prod (기본 모듈) — 삭제됨:**
 
-**권장:** 하나의 파일로 통합, 계좌 닉네임을 파라미터로 받아 YAML 동적 로드
+| 파일 | 라인 | import 구문 |
+|------|------|------------|
+| kis_auto_proc.py | 14 | `import kis_api_prod as kb` |
+| kis_cash_proc.py | 15 | `import kis_api_prod as kb` |
+| kis_trading_trail_vol_state.py | 13 | `import kis_api_prod as kb` |
+| kis_stock_minute_save.py | 13 | `import kis_api_prod as ka` |
+| kis_trading_save.py | 14 | `import kis_api_prod as ka` |
+| kis_trading_set.py | 13 | `import kis_api_prod as ka` |
+| kis_trading_backup.py | 13 | `import kis_api_prod as ka` |
+| kis_subject_subtotal.py | 14 | `import kis_api_prod as ka` |
+| call_sync_holding_item.py | 4 | `import kis_api_prod as ka` |
+| call_sync_total_item.py | 4 | `import kis_api_prod as ka` |
+| call_upd_dly_stock_item.py | 4 | `import kis_api_prod as ka` |
 
-#### kis_balance_*_save.py (6개 파일, 각 ~15KB)
-- 계좌별 변형이지만 핵심 로직 동일
-- kis_balance_save.py에만 종목검색 로직(192줄) 추가 포함
+**kis_api_prod_{계좌별} — 삭제됨:**
 
-#### kis_trading_trail_vol.py vs _day.py
-- 1031줄 vs 1032줄, 차이점: 날짜 하드코딩(`20260213`), 계좌 리스트만 다름
-- _day.py는 테스트/디버깅 용도로 추정
+| 파일 | 라인 | import 구문 |
+|------|------|------------|
+| terrabot.py | 19-23 | `import kis_api_prod_phills75 as ka_phills75` 외 4개 |
+| reservebot.py | 19-23 | `import kis_api_prod_phills75 as ka_phills75` 외 4개 |
 
-#### kis_trading_simulation.py vs _day.py
-- 474줄 vs 463줄, 유사한 차이 패턴
-- _day.py에서 VOLUMN 필드 제거, JOIN 타입 변경(LEFT → FULL OUTER)
+**kis_stock_search_api 모듈도 삭제됨:**
 
-### 2.2 미사용 파일
+| 파일 | 라인 | import 구문 |
+|------|------|------------|
+| terrabot.py | 22 | `import kis_stock_search_api as search` |
 
-| 파일 | 상태 | 설명 |
-|------|------|------|
-| **matplotlib_dir.py** | 미사용 | matplotlib 경로 출력용 디버그 스크립트. 어디에서도 import 안 됨 |
-| **reservebot_simulation.py** | 독립실행 | 134KB, 어디에서도 import 안 됨. 단독 CLI 실행 전용 |
+- terrabot.py:5643, 5657, 5671, 5685, 5699에서 `search.search()` 호출 → 런타임 에러
+- 종목 검색 기능 완전 마비
 
-### 2.3 미사용 함수 — HIGH
-
-#### kis_api_prod*.py 내 미사용 함수 (6개 파일 × 14개 함수 = 84건)
-
-코드베이스 전체에서 **한 번도 호출되지 않는 함수들**:
-
-| 함수명 | 라인 | 설명 |
-|--------|------|------|
-| `do_buy()` | 434 | 매수 주문 |
-| `do_sell()` | 426 | 매도 주문 |
-| `do_revise()` | 512 | 정정 주문 |
-| `do_cancel_all()` | 519 | 전체 취소 |
-| `do_order_OS()` | 787 | 해외 주문 |
-| `getEnv()` | 156 | 환경 조회 |
-| `getResponse()` | 212 | 응답 파싱 |
-| `get_acct_balance_sell()` | 334 | 매도용 잔고 조회 |
-| `get_buyable_cash()` | 584 | 매수 가능 금액 |
-| `get_current_price_OS()` | 734 | 해외 현재가 |
-| `get_stock_completed()` | 613 | 체결 내역 |
-| `get_stock_history_OS()` | 756 | 해외 주가 이력 |
-| `get_stock_history_by_ohlcv()` | 657 | OHLCV 이력 |
-| `get_stock_investor()` | 686 | 투자자별 매매 |
-
-#### 기타 미사용 함수
-
-| 파일 | 함수 | 설명 |
-|------|------|------|
-| kis_api_resp.py | `getResponse()` (line 35) | 어디서도 호출 안 됨 |
-| terrabot.py | `get_acct_balance_sell()` (line 1133) | 어디서도 호출 안 됨 |
-| kis_interest_item.py | `fund_marketLevel_proc()` (line 233) | 호출부(line 566)가 주석 처리됨 |
-
-### 2.4 미사용 import — MEDIUM
-
-21개 파일에서 import했지만 사용하지 않는 모듈 발견:
-
-| 파일 | 미사용 import |
-|------|---------------|
-| kis_auto_proc.py | `asyncio` |
-| kis_cash_proc.py | `timedelta`, `asyncio` |
-| kis_holding_item.py | `asyncio` |
-| kis_interest_item.py | `asyncio` |
-| kis_stock_search.py | `asyncio` |
-| kis_stock_search_title.py | `telegram`, `sys`, `math`, `asyncio` |
-| kis_subject_subtotal.py | `math` |
-| kis_stock_order_complete.py | `timedelta` |
-| kis_trading_set.py | `telegram.Bot` |
-| kis_trading_simulation.py | `telegram.Bot` |
-| kis_trading_simulation_day.py | `telegram.Bot` |
-| kis_trading_trail_vol.py | `relativedelta`, `telegram.Bot` |
-| kis_trading_trail_vol_day.py | `relativedelta`, `telegram.Bot` |
-| kis_trading_trail_vol_state.py | `relativedelta`, `telegram.Bot` |
-| main.py | `kis_stock_search_api` (모든 호출이 주석 처리됨) |
-| reservebot_simulation.py | `time` |
-| terrabot.py | `io.StringIO` |
-| kis_simulation(volumn).py | `relativedelta` |
-| kis_simulation(돌파 후 오종전저).py | `relativedelta` |
-| kis_simulation(돌파 후 이탈).py | `relativedelta` |
-| kis_simulation(돌파시 거래량).py | `relativedelta` |
-
-### 2.5 데드 코드 (주석 처리된 대형 블록) — LOW
-
-| 파일 | 위치 | 줄 수 | 내용 |
-|------|------|-------|------|
-| kis_trading_simulation.py | Line 340~453 | **103줄** | else 블록 전체 주석 처리 (trading_trail 생성 로직) |
-| kis_balance_save.py | Line 148~174, 186~212 | **54줄** | "파워급등주", "파워종목" 검색 코드 주석 처리 |
-| kis_interest_item.py | Line 1273~1340 | **28줄** | 2개 블록 주석 처리 |
-| kw_fast_stock_search.py | Line 287~334 | **26줄** | 2개 블록 주석 처리 |
-
-### 2.6 반복되는 auth()/account() 패턴 — HIGH
-
-- `auth()` 함수: **33개 파일**에서 반복 정의
-- `account()` 함수: **21개 파일**에서 반복 정의
-- 공통 유틸리티 모듈로 추출 가능
-
-### 2.7 절감 가능 코드량 요약
-
-| 구분 | 절감 가능 |
-|------|-----------|
-| kis_api_prod*.py 통합 (5개 삭제) | ~4,240줄 |
-| kis_balance_*_save.py 통합 (4개 삭제) | ~768줄 |
-| _day.py 파일 통합 (2개 삭제) | ~1,495줄 |
-| 미사용 함수 제거 (14개 × 6파일) | ~2,400줄 |
-| 주석 처리 데드 코드 삭제 | ~222줄 |
-| 미사용 import 정리 | ~25줄 |
-| **합계** | **~9,150줄** |
+**합계: 14개 파일에서 22건의 깨진 import. 이 파일들은 실행 시 즉시 `ModuleNotFoundError`로 종료됨.**
 
 ---
 
-## 3. 보안 취약점 및 에러 처리
+## 3. 보안 취약점
 
-### 3.1 하드코딩된 DB 비밀번호 — CRITICAL
+### 3.1 하드코딩 비밀번호 — CRITICAL
 
-| 파일 | 라인 | 비밀번호 |
-|------|------|----------|
-| main.py | 11 | `sktl2389!1` |
-| kis_auto_proc.py | 14 | `sktl2389!1` |
-| kis_interest_item.py | 15 | `sktl2389!1` |
-| kis_trading_trail_vol.py | 18 | `asdf1234` (원격 DB) |
-| backup_data.py | 8-9 | `sktl2389!1` (로컬) + `gr971499#1` (AWS RDS) |
-| kis_balance_*_save.py | 7-9 | `sktl2389!1` |
+**2종의 DB 비밀번호가 소스코드에 직접 포함:**
 
-**전체 노출 현황:**
-| 비밀번호 | 사용처 | 대상 |
-|----------|--------|------|
-| `sktl2389!1` | 30개+ 파일 | 로컬 PostgreSQL (localhost:5432) |
-| `asdf1234` | 8개 파일 | 원격 PostgreSQL (192.168.50.81:5432) |
-| `gr971499#1` | backup_data.py:9 | AWS RDS (ap-northeast-2) |
+| 비밀번호 | 용도 | 파일 수 |
+|---------|------|--------|
+| localhost 비밀번호 | localhost:5432 | **16개 파일** |
+| 원격 DB 비밀번호 | 192.168.50.81:5432 | 1개 파일 (kis_trading_backup.py:40) |
 
-**권장:** 환경변수 또는 별도 설정 파일(.env)로 분리, .gitignore에 추가
+해당 파일: terrabot.py:108, reservebot.py:104, kis_holding_item.py:46, kis_interest_item.py:44, kis_auto_proc.py:56, kis_cash_proc.py:40, kis_trading_trail_vol_state.py:40, kis_stock_minute_save.py:40, kis_trading_save.py:40, kis_trading_set.py:37, kis_trading_backup.py:38, kis_subject_subtotal.py:40, kw_stock_search.py:30, kw_fast_stock_search.py:25, fnguidePerformbot.py:18
 
-### 3.2 .gitignore 부재 — HIGH
+### 3.2 SQL Injection — CRITICAL
 
-프로젝트 루트에 `.gitignore` 파일이 존재하지 않음. YAML 설정 파일(API 키/시크릿 포함)이나 비밀번호가 담긴 소스 코드가 git에 그대로 커밋될 위험.
+**CLI 인자 직접 삽입 (가장 위험):**
+```python
+# kis_subject_subtotal.py:78
+cur01.execute("... where nick_name = '" + arguments[1] + "'")
+```
+
+**f-string SQL (광범위):**
+
+14개 파일에서 **150건+ SQL 쿼리**가 f-string 또는 문자열 연결 사용:
+- terrabot.py: 447, 1066, 1260, 2150, 3400, 5000+ 등
+- reservebot.py: 330, 580, 890, 1200+ 등
+- kis_holding_item.py: 116, 153, 209, 374, 458, 580, 660+ 등
+- kis_interest_item.py: 93, 127, 164, 280, 320+ 등
+- kis_trading_trail_vol_state.py: 65, 100, 200, 350, 500+ 등
+- 기타 9개 파일
 
 ### 3.3 SSL 검증 비활성화 — HIGH
 
-**100건 이상**의 API 호출에서 `verify=False`로 SSL 인증서 검증이 비활성화됨. MITM(중간자 공격)에 취약.
-- kis_api_prod*.py, kis_auto_proc.py, kis_trading_trail_vol.py, terrabot.py, reservebot.py 등 전체 파일 해당
+**40건+ API 호출에서 `verify=False`:**
+- terrabot.py: ~10건, reservebot.py: ~8건
+- kis_auto_proc.py: ~5건, kis_trading_trail_vol_state.py: ~5건
+- kw_fast_stock_search.py: ~5건, 기타: ~7건
 
-### 3.4 SQL Injection 취약점 — CRITICAL
+### 3.4 Bare Except — HIGH
 
-**30개 이상**의 SQL 쿼리에서 문자열 연결(concatenation) 사용:
-
-```python
-# 가장 위험 (커맨드라인 인자 직접 삽입)
-# kis_subject_subtotal.py:78
-cur01.execute("... where nick_name = '" + arguments[1] + "'")
-
-# reservebot_simulation.py:28, 309
-"... where nick_name = '" + arguments[1] + "'"
-```
-
-**권장:** 파라미터화된 쿼리 사용
-```python
-cur01.execute("... where nick_name = %s", (arguments[1],))
-```
-
-### 3.6 Bare Except 패턴 — HIGH
-
-11개 인스턴스에서 `except:` (타입 미지정) 사용:
-- kis_api_resp.py:44, kis_api_prod*.py:221 (6개 모두)
-- terrabot.py:119, reservebot.py:120, kis_trading_save.py:22, reservebot_simulation.py:102
-
-SystemExit, KeyboardInterrupt까지 삼켜서 프로그램 종료 불가 상태 유발 가능.
-
-특히 `kis_api_prod.py:221`의 bare except는 API 인증/응답 파싱 실패 시 원인 추적 불가. `False`만 반환하므로 네트워크 오류인지 데이터 오류인지 구분 불가.
-
-### 3.7 트랜잭션 무결성 — HIGH
-
-- **251개** `conn.commit()` 호출 vs **7개** `conn.rollback()` 호출
-- 대부분의 commit이 에러 핸들링 없이 실행됨
-- rollback이 있는 파일: terrabot.py, reservebot.py, reservebot_simulation.py만
-- **backup_data.py**: 8개 테이블의 DELETE + INSERT를 순차 수행하면서 마지막에 `conn2.commit()` 한 번만 호출. 중간 오류 시 rollback 코드 없음
-
-### 3.8 중복 주문 방지 로직 부재 — CRITICAL
-
-kis_trading_trail_vol.py, kis_auto_proc.py에서 **주문 중복 방지 로직이 없음**.
-스크립트 크래시 후 재시작 시 동일 주문이 재전송될 위험.
-
-`terrabot.py`에 `sell_order_cancel_proc()` (line 1481)이 존재하여 매도 잔여주문 취소 기능은 있으나, 매도 주문 전 자동 호출 로직 없음 (수동 호출에 의존).
-
-### 3.9 API 인증 재시도 로직 부재 — HIGH
-
-`auth()` 함수에서 토큰 발급 실패 시 재시도 없이 즉시 KeyError 크래시:
-```python
-def auth(APP_KEY, APP_SECRET):
-    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False)
-    ACCESS_TOKEN = res.json()["access_token"]  # 실패 시 KeyError
-```
-**유일한 예외**: `kis_trading_backup.py:15-27`에만 DB 연결 재시도(3회, 5초 간격) 존재.
-
-### 3.10 Rate Limit 대응 미흡 — MEDIUM
-
-`time.sleep()` 기반의 원시적 rate limiting은 있으나 일관성 없음:
-- kis_api_prod*.py: `sleep(0.2)`, kis_auto_proc.py: `sleep(0.3)`, reservebot.py: `sleep(0.5)`
-- **429 응답(Too Many Requests) 수신 시 대응 로직 없음**. 고정 sleep만 사용.
+| 파일 | 라인 | 영향 |
+|------|------|------|
+| kis_api_resp.py | :44 | SystemExit/KeyboardInterrupt 삼킴, `return False` |
+| terrabot.py | :119 | `except: pass` — 예외 무시 |
+| reservebot.py | :120 | `except: pass` — 예외 무시 |
+| kis_trading_save.py | :22 | 예외 무시 |
 
 ---
 
-## 4. 매매 전략 심층 분석
+## 4. 리소스 누수
 
-### 4.1 시스템 구조 요약
+### 4.1 DB 커넥션 누수 — CRITICAL
 
-```
-[진입 신호] kis_auto_proc.py → 10분봉 고가 돌파 시 매수
-     ↓
-[청산 관리] kis_trading_trail_vol.py → 10분봉 기반 트레일링 스탑
-     ↓
-[상태 관리] kis_trading_trail_vol_state.py → 상태 전이 기반 청산 (개선판)
-     ↓
-[현금 관리] kis_cash_proc.py → 포트폴리오 현금 비중 조절
-```
+**16개 파일**에서 글로벌 스코프로 `psycopg2.connect()` 호출, **`conn.close()` 없음**:
 
-### 4.2 진입 전략 (kis_auto_proc.py)
+| 파일 | 라인 | 비고 |
+|------|------|------|
+| terrabot.py | 110-113 | 글로벌, 미종료 |
+| reservebot.py | 106-109 | 글로벌, 미종료 |
+| kis_holding_item.py | 48-50 | 글로벌, 미종료 |
+| kis_interest_item.py | 46-48 | 글로벌, 미종료 |
+| kis_auto_proc.py | 58-60 | 글로벌, 미종료 |
+| kis_cash_proc.py | 42-44 | 글로벌, 미종료 |
+| kis_trading_trail_vol_state.py | 42-44 | 글로벌, 미종료 |
+| kis_stock_minute_save.py | 42-44 | 글로벌, 미종료 |
+| kis_trading_save.py | 42-44 | 글로벌, 미종료 |
+| kis_trading_set.py | 39-41 | 글로벌, 미종료 |
+| kis_trading_backup.py | 40-43 | **2개 커넥션** (로컬+원격) 모두 미종료 |
+| kis_subject_subtotal.py | 42-44 | 글로벌, 미종료 |
+| kw_stock_search.py | 32-34 | 글로벌, 미종료 |
+| kw_fast_stock_search.py | 27-29 | 글로벌, 미종료 |
+| fnguidePerformbot.py | 20-22 | 글로벌, 미종료 |
 
-**매수 조건:**
-- `현재가 > 기준 10분봉 고가` (line 556-603)
-- 기준 봉은 최대 거래량 봉으로 동적 갱신 (line 388-390)
-- 매수 수량: `round(trade_sum / current_price)`
+**합계: 17개 커넥션 (16파일) 미종료**
 
-**캔들 분류:** (line 395-401)
-- L(Long): 캔들 실체 > 20일 평균의 1.5배
-- S(Short): 캔들 실체 < 20일 평균의 0.5배
-- M(Medium): 그 사이
+### 4.2 API 타임아웃 미설정 — CRITICAL
 
-### 4.3 청산 전략 (kis_trading_trail_vol.py)
+**48건+ `requests.get/post` 호출**에 `timeout` 파라미터 없음:
+- terrabot.py: ~15건, reservebot.py: ~10건
+- kis_auto_proc.py: ~5건, kis_trading_trail_vol_state.py: ~5건
+- kw_fast_stock_search.py: ~5건, 기타: ~8건
 
-**경로 A: trail_tp='L' (장기 보유 모니터링)**
-1. **수익 후 이탈 매도** (line 619-654): 종가 ≤ 스탑가 AND 종가 < 전일 저가 → 전량 매도
-2. **장 마감 일봉 이탈** (line 659-693): 15:10 이후, 종가 < 전일 저가 AND 누적거래량 > 전일의 50% → 전량 매도
-
-**경로 B: trail_tp='1'/'2' (능동적 트레일링 스탑)**
-3. **돌파 전 이탈** (line 761-796): 목표가 도달 전 스탑가 도달 → 100% 매도
-4. **목표가 돌파 → 기준봉 생성** (line 798-837): 고가 > 목표가 시 현재 10분봉을 기준봉으로 설정 → trail_tp='1'→'2' 전이
-5. **기준봉 저가 이탈 → 부분/전량 매도** (line 843-879): 이후 저가 < 기준봉 저가 시 매도. trail_plan에 따라 50%/100%
-6. **기준봉 갱신 (트레일링)** (line 884-917): 새 10분봉의 고가 또는 거래량이 기준봉을 초과하면 기준봉 교체
-
-**거래량 비율 체크** (line 494-523):
-| 시간대 | 요구 거래량 비율 |
-|--------|-----------------|
-| ~10:00 | 전일 대비 50% 이상 |
-| 09:00~09:20 | 20% 이상 |
-| 09:21~09:30 | 25% 이상 |
-| 15:00~15:30 | 25% 이상 |
-| 09:30~15:00 | **무조건 통과 (허점)** |
-
-> **주의**: 09:30~15:00 (거래 시간의 대부분)에서 거래량 필터가 비활성화됨. 이 시간대에 저거래량 허봉으로 잘못된 신호가 발생할 수 있음.
-
-### 4.4 상태 기반 개선 전략 (kis_trading_trail_vol_state.py)
-
-trail_vol.py 대비 추가된 기능:
-- **실제 주문 실행**: `order_cash()` 직접 호출 (trail_vol.py는 DB 갱신만)
-- **연속 하락 카운터** (line 969-978): 10분봉 저가가 기준봉 저가를 2회 연속 하회 시 매도 (저거래량 느린 하락 대응)
-- **피크 추적** (line 970): 모든 기준봉 갱신 시 최고가 기록
-- **5% 안전마진** (line 1162): basic_price * 1.05 이하 하락 시 추가 청산 로직 (현재 일부 주석 처리)
-
-### 4.5 현금 비중 관리 (kis_cash_proc.py)
-
-- 목표 현금 부족분 = `(총평가 × (100 - 시장비율%) × 0.01) - 현재현금`
-- 매도 비율 = `현금부족분 / 전체포지션가치`
-- 모든 포지션을 **동일 비율**로 축소
-- `trading_plan IN ('i','h')` 종목은 리밸런싱에서 제외
-
-### 4.6 전략 강점
-
-1. **체계적 청산 로직**: 10분봉 기반 트레일링 스탑 + 거래량 확인은 기술적으로 건전한 접근
-2. **다층 방어**: 거래량 필터 + 시간대 필터 + 연속하락 카운터 + 일봉 이탈 체크
-3. **부분 익절**: 50%/66%/100% 등 단계적 익절로 추가 상승 여지 보존
-4. **포트폴리오 레벨 현금 관리**: 개인투자자 시스템에서 보기 드문 리스크 관리 체계
-5. **텔레그램 연동**: 시그널 → 확인 → 실행의 반자동 파이프라인
-
-### 4.7 전략 약점 및 취약점
-
-#### 시장을 "해킹"하지 못하는 이유:
-
-1. **진입 신호가 너무 단순**: `현재가 > 10분봉 고가` 돌파 매수는 가장 기본적이고 과밀(crowded)한 전략. 모든 HTS/MTS에서 기본 알림으로 제공하는 수준.
-
-2. **정보/속도 우위 없음**: KIS API를 수초~수분 간격으로 폴링. 기관/HFT는 밀리초 단위. 이 시스템이 돌파를 감지할 때쯤 이미 빠른 참여자들이 가격을 움직인 후.
-
-3. **고정 파라미터**: 20%, 25%, 50% 거래량 비율, 5% 안전마진, 10분봉 타임프레임 등이 모두 하드코딩. 시장 레짐(추세/횡보/고변동/저변동)에 따라 적응하지 못함.
-
-4. **시뮬레이션-실전 괴리**: kis_simulation(volumn).py에서 트레일링 갱신 로직이 주석 처리되어 있어 백테스트와 실전 로직이 불일치. 전략 검증 불가.
-
-5. **시장 레짐 필터 없음**: KOSPI/KOSDAQ 지수 추세와 무관하게 돌파 매수. 하락장에서 돌파 전략은 체계적으로 실패.
-
-6. **비대칭 리스크**: 스탑로스가 기준봉 저가에 설정되어, 넓은 레인지의 10분봉은 큰 손실폭을 의미. 리스크/리워드 비율이 불리한 진입 가능.
-
-8. **슬리피지 무시**: 매도 시 종가 기준 지정가 주문(`trail_amt = close_price * trail_qty`)으로 계산하지만, 스탑이 발동하는 급락 상황에서 실제 체결가는 훨씬 불리할 수 있음.
-
-9. **유동성 체크 없음**: 소형주에 매도 주문 시 호가창 유동성을 확인하지 않아 미체결 위험.
-
-10. **장 초반 10분 스킵의 역효과**: 09:00~09:10을 스킵하는데, 갭업 후 즉시 반락하는 종목의 기준봉이 인위적으로 높은 수준에 설정될 수 있음.
-
-7. **포지션 사이징 미흡**: 켈리 기준, 변동성 기반 사이징, 포트폴리오 레벨 리스크 예산 없이 단순 금액 기반 매수.
-
-### 4.8 전략 실행 상 추가 취약점
-
-1. **허봉에 의한 조기 청산**: trail_vol.py는 1분봉 저가 기준으로 기준봉 이탈을 판단하므로, 순간 스파이크(허봉)에 의해 조기 청산될 가능성이 높음. state.py는 10분봉 완성 시점에서만 판단하여 일부 개선되었으나, 둘 사이의 로직 불일치가 존재
-2. **갭 하락 방어 미구현**: `kis_simulation(volumn).py`에는 시가 갭 하락 시 기준봉 무효화 로직이 있으나, 실전 코드(trail_vol.py, state.py)에는 이 로직이 미이식
-3. **매도 실패 시 재시도 없음**: state.py의 `update_trading_close()`에서 매도 실패 시 `return False`만 하고 재주문 로직 부재
-4. **동시호가 처리 미흡**: 장 마감 동시호가(15:20~15:30) 시간대의 변동성에 대한 별도 처리가 없음
-5. **state.py에 주석 처리된 실험 코드 다수**: 고점 되돌림 매도(`PEAK_RETRACEMENT_RATE=0.5`), 안전마진 확보 시 즉시 매도 등이 주석 상태로 활성/비활성 경계가 불분명
-
-### 4.9 전략이 실패하는 시장 환경
-
-| 시장 상황 | 취약 정도 | 실패 원인 |
-|-----------|----------|-----------|
-| **하락장** | 높음 | 돌파가 거짓 신호 → 스탑 연속 적중 → 손실 누적 |
-| **횡보장** | 높음 | 돌파 후 즉시 기준봉 저가 이탈 반복 (왕복 손실) |
-| **갭다운** | 중간 | 야간 뉴스로 스탑가 이하 시초가 → 스탑 무력화 (시뮬에만 방어 로직 존재) |
-| **저변동 횡보** | 중간 | 돌파 발생 안 함 → 유휴 상태에서 보유 종목 느린 하락 |
-| **급등 후 급락** | 중간 | 10분봉 완성 전 급락 시 대응 지연 |
-| **강한 상승 추세** | 강함 | 기준봉 갱신으로 이익 극대화 — 전략이 가장 잘 작동하는 환경 |
-| **HFT 조작** | 높음 | 돌파 레벨 근처 스푸핑/레이어링 → 거짓 진입 유발 |
+API 서버 행(hang) 시 프로세스 무한 대기 → 봇 무응답, 매매 신호 누락 가능.
 
 ---
 
-## 5. 종합 개선 권고사항
+## 5. 중복 코드 및 미사용 코드
 
-### 긴급 (보안/안정성)
+### 5.1 중복 코드
 
-| # | 항목 | 영향도 |
+| 패턴 | 파일 수 | 중복 라인 |
+|------|--------|----------|
+| auth() 함수 | 12개 | ~210줄 |
+| account() 함수 | 12개 | ~360줄 |
+| stock_balance() 함수 | 8개 | ~240줄 |
+| format_number() 함수 | 3개 | ~15줄 |
+| DB 연결 패턴 | 16개 | ~80줄 |
+| **합계** | - | **~905줄 (전체의 4.4%)** |
+
+**account() 중복 상세:**
+kis_cash_proc.py:37-67, kis_auto_proc.py:37-67, kis_trading_set.py:32-64, kis_trading_backup.py:37-65, kis_trading_save.py:33-62, kis_stock_minute_save.py:35-66, kis_holding_item.py:38-68, kis_interest_item.py:38-68, kis_trading_trail_vol_state.py:43-68, terrabot.py:648-682, reservebot.py:326-359
+
+**stock_balance() 중복 상세:**
+kis_cash_proc.py:89-119, kis_auto_proc.py:111-141, kis_holding_item.py:90-120, kis_trading_set.py:67-100, kis_stock_minute_save.py:49-79, kis_trading_save.py:65-95, kis_trading_trail_vol_state.py:60-86, kis_interest_item.py 포함
+
+### 5.2 미사용 import
+
+| 파일 | 라인 | import | 상태 |
+|------|------|--------|------|
+| kis_auto_proc.py | 7 | `import asyncio` | 미사용 (await/async 없음) |
+| kis_cash_proc.py | 7 | `import asyncio` | 미사용 |
+| kis_holding_item.py | 7 | `import asyncio` | 미사용 |
+| kis_interest_item.py | 7 | `import asyncio` | 미사용 |
+
+### 5.3 비기능 스크립트 (실행 불가)
+
+| 파일 | 라인 | 이유 |
+|------|------|------|
+| call_sync_holding_item.py | 23 | kis_api_prod import 깨짐 |
+| call_sync_total_item.py | 23 | kis_api_prod import 깨짐 |
+| call_upd_dly_stock_item.py | 19 | kis_api_prod import 깨짐 |
+
+이 3개 파일은 삭제하거나 import를 수정해야 함.
+
+---
+
+## 6. 에러 핸들링
+
+### 6.1 트랜잭션 관리
+
+| 항목 | 건수 |
+|------|------|
+| conn.commit() | ~165건 |
+| conn.rollback() | **0건** |
+| **비율** | **165:0** |
+
+**rollback이 단 한 건도 없음.** 예외 발생 시 불완전한 트랜잭션이 커밋될 수 있음.
+
+참고: `kis_trading_set.py:303`에서 `ON CONFLICT DO NOTHING` 사용 (DB 레벨 중복 방지는 일부 존재)
+
+### 6.2 중복 주문 방지 — CRITICAL (부재)
+
+5개 핵심 매매 파일에 중복 주문 방지 메커니즘 **없음**:
+- kis_trading_trail_vol_state.py: `order_cash()` 호출 전 기존 주문 확인 없음
+- kis_auto_proc.py: 시그널 생성/주문 실행 시 중복 체크 없음
+- kis_cash_proc.py, terrabot.py, reservebot.py: 동일
+
+---
+
+## 7. 매매 전략 분석
+
+### 7.1 현재 남은 유일한 트레일링 전략: kis_trading_trail_vol_state.py
+
+소스 정리로 `kis_trading_trail_vol.py`, `kis_trading_trail_vol_day.py`, 모든 `kis_simulation*.py`가 삭제됨.
+**현재 남은 유일한 트레일링 스탑 전략이자 시뮬레이션 없이 운용 중.**
+
+### 7.2 상태 전이 다이어그램
+
+```
+trail_tp='1' (신규 포지션, 돌파 대기)
+  ├── 저가 ≤ 스탑가 → 전량 매도 (조기 종료)
+  └── 고가 ≥ 목표가 → 10분 기준봉 생성 → trail_tp='2'
+
+trail_tp='2' (돌파 후, 기준봉 활성)
+  ├── 저가 < 기준봉 저가 → trail_plan에 따라 부분/전량 매도
+  ├── 연속 하락 2회 → 매도
+  └── 신규 고가 > 기준봉 고가 OR 신규 거래량 > 기준봉 거래량 → 기준봉 갱신 (트레일링)
+
+trail_tp='L' (장기 보유)
+  ├── 종가 ≤ 스탑가 AND 종가 < 전일저가 → 전량 매도
+  └── 15:10 이후, 종가 < 전일저가 AND 거래량 > 전일 50% → 전량 매도
+
+trade_tp='S': 종가 ≤ exit_price → 전량 매도
+trade_tp='M': 종가 ≤ stop_price → 전량 매도
+```
+
+### 7.3 거래량 비율 체크 — 로직 버그 발견
+
+**kis_trading_trail_vol_state.py:494-523**
+
+```python
+def volume_rate_chk(cur_time, acml_vol, prev_volume):
+    if cur_time <= '10:00:00':           # 조건1: 10시 이전 → 50% 요구
+        return acml_vol >= prev_volume * 0.5
+    elif cur_time >= '09:00:00' and cur_time <= '09:20:00':   # 조건2: 09:00~09:20 → 20%
+        return acml_vol >= prev_volume * 0.2
+    elif cur_time >= '09:21:00' and cur_time <= '09:30:00':   # 조건3: 09:21~09:30 → 25%
+        return acml_vol >= prev_volume * 0.25
+    elif cur_time >= '15:00:00' and cur_time <= '15:30:00':   # 조건4: 15:00~15:30 → 25%
+        return acml_vol >= prev_volume * 0.25
+    else:
+        return True                       # 조건5: 그 외 → 무조건 통과
+```
+
+**버그: 조건2, 조건3은 실행 불가능한 데드 코드(dead code)**
+
+- 09:00~09:30은 `cur_time <= '10:00:00'` (조건1)에 먼저 걸림
+- 따라서 조건1의 50% 기준이 적용되고, 조건2의 20%와 조건3의 25%는 **절대 실행되지 않음**
+- 개발자 의도는 09:00~09:20에 20%, 09:21~09:30에 25%였겠지만 실제로는 10:00 이전 전체가 50%
+
+**실제 동작:**
+| 시간대 | 의도한 기준 | 실제 동작 |
+|--------|-----------|----------|
+| 09:00~09:20 | 20% | **50%** (조건1에 먼저 걸림) |
+| 09:21~09:30 | 25% | **50%** (조건1에 먼저 걸림) |
+| 09:31~10:00 | - | 50% (조건1) |
+| 10:01~14:59 | - | **무조건 통과** (조건5) |
+| 15:00~15:30 | 25% | 25% (조건4) |
+| 15:31~ | - | **무조건 통과** (조건5) |
+
+### 7.4 기준봉 갱신 — 설계 결함
+
+**kis_trading_trail_vol_state.py:893**
+
+```python
+if int(new_high) > int(tenmin_state["base_high"]) or int(new_vol) > int(tenmin_state["base_vol"]):
+    tenmin_state["base_low"] = new_low      # ← 문제
+    tenmin_state["base_high"] = new_high
+    tenmin_state["base_vol"] = new_vol
+```
+
+**결함:** 거래량만 증가하고(new_vol > base_vol) 가격은 하락한 경우(new_low < base_low), 기준봉이 갱신되면서 **트레일링 스탑(base_low)이 하향 이동**함. 트레일링 스탑의 핵심 원칙(스탑은 위로만 이동)을 위반.
+
+**예시:**
+```
+기존 기준봉: base_low=10,000, base_high=10,500, base_vol=50,000
+신규 10분봉: new_low=9,800, new_high=10,300, new_vol=60,000 (거래량만 증가)
+→ 갱신 후: base_low=9,800 (스탑이 10,000에서 9,800으로 하락!)
+```
+
+### 7.5 자동매매 프로세스 (kis_auto_proc.py)
+
+**매수 시그널 (trade_tp='B', line ~556):**
+- 조건: `현재가 > 기준봉 고가` (10분봉 돌파)
+- 포지션 사이징: `round(trade_sum / 현재가)` — 고정 금액, 변동성 무시
+- 실행: 텔레그램 알림만 (수동 확인 필요)
+
+**매도 시그널 (trade_tp='S', line ~606):**
+- 조건: `현재가 < 기준봉 저가`
+- 비율: as(100%), 66s(66%), 50s(50%), 33s(33%), 25s(25%), 20s(20%)
+- AUTO_FUND_UP_SELL 표시 종목만 자동 실행
+
+### 7.6 현금 비중 관리 (kis_cash_proc.py)
+
+```
+목표 현금 = 총평가 × (100 - market_ratio%) / 100
+현금 부족분 = 목표 현금 - 현재 현금
+매도 비율 = 현금 부족분 / 전체 포지션 가치
+각 종목: 매도수량 = int(평가금액 × 매도비율 / 현재가)
+```
+- 전 포지션 동일 비율 축소 (승자/패자 구분 없음)
+- `trading_plan IN ('i','h')` 종목 제외
+- 텔레그램 명령 발송 (자동 실행 아님)
+
+### 7.7 고정 파라미터 목록
+
+| 파라미터 | 값 | 위치 | 시장 적응? |
+|---------|---|------|----------|
+| 기준봉 주기 | 10분 | trail_vol_state.py:~800 | X |
+| 거래량 기준(<10:00) | 전일 50% | :~500 | X |
+| 거래량 기준(15:00~30) | 전일 25% | :~518 | X |
+| 안전마진 | 매수가 × 1.05 | :~1162 | X |
+| 연속 하락 트리거 | 2회 | :~1185 | X |
+| 장 초반 스킵 | 09:00~09:10 | :~750 | X |
+| EOD 체크 시간 | 15:10 | :~659 | X |
+| API 폴링 간격 | 0.5초 | 전체 | X |
+
+### 7.8 전략 강점
+
+1. **다층 청산 구조**: 스탑로스(trail_tp='1') + 트레일링(trail_tp='2') + EOD 체크(trail_tp='L') + 연속하락 카운터
+2. **동적 트레일링**: 10분 기준봉이 가격/거래량에 따라 상향 조정 (단, 하향 이동 결함 있음)
+3. **부분 익절**: 20%~100% 단계적 청산
+4. **연속 하락 대응**: 저거래량 느린 하락에 2회 연속 하락 시 매도
+5. **반자동 파이프라인**: 텔레그램 알림 → 수동 확인 → 실행의 안전장치
+6. **기존 주문 취소**: `sell_order_cancel_proc()`로 신규 매도 전 기존 주문 정리
+
+### 7.9 전략 약점
+
+**코드 결함:**
+1. **시스템 현재 비기능**: 22건 깨진 import로 14개 파일 실행 불가
+2. **volume_rate_chk 데드코드**: 09:00~09:30 기준이 실행되지 않아 의도보다 높은 50% 기준 적용
+3. **기준봉 갱신 결함**: 거래량 조건만으로 갱신 시 스탑이 하향 이동 가능
+4. **안전마진 로직 모순**: `safety_margin = basic_price * 1.05`인데 기준봉 저가 이탈 조건에서 `tenmin_low > safety_margin` 요구. 기준봉 저가가 매수가 근처이면 `9,500 > 10,500`이 False → **매도 신호가 발생하지 않음**
+5. **연속하락 카운터 리셋 과다**: 단 한 봉이라도 `tenmin_low >= base_low`이면 카운터 0으로 리셋. 1봉 반등 후 재하락 시 다시 처음부터 카운트 → threshold 2 도달 어려움
+
+**전략 구조적 문제:**
+6. **후향적 신호(Lagging)**: 기준봉 저가 이탈이 "확인"되어야 매도 → 이미 하락한 후 반응
+7. **거래량 역설**: 하락 시 거래량 증가 = 패닉 매도의 증거이지 반전 신호가 아님. 거래량 초과를 매도 트리거로 쓰면 가장 나쁜 타이밍에 매도
+8. **09:30~15:00 거래량 필터 없음**: 거래일 대부분에서 거래량 무검증
+9. **진입 신호 부재**: 시스템은 청산만 관리, 진입은 외부/수동
+10. **시뮬레이션 전부 삭제**: 전략 검증 수단 없음
+11. **시장 레짐 필터 없음**: KOSPI/KOSDAQ 지수 추세와 무관하게 매매
+12. **중복 주문 방지 없음**: 스크립트 재실행 시 동일 주문 중복 가능
+13. **슬리피지 무시**: 급락 시 지정가 주문 미체결 위험
+
+### 7.10 시장 상황별 실패 시나리오
+
+| 시장 상황 | 시스템 동작 | 결과 |
+|---------|----------|------|
+| **급락장** | 기준봉 저가 이탈 → 매도 | 이미 큰 손실 발생 후 확정 |
+| **V자 반등** | 저가 이탈 → 매도 → 즉시 상승 | 손절 후 수익 기회 상실 |
+| **강보합** (저거래량) | volume_rate_chk 필터 미통과 | 신호 없음 (기회 손실) |
+| **갭 다운** | 시가 < 기준봉 저가 (큰 차이) | 재난적 손실 |
+| **고변동성 횡보** | 연속하락 카운터 반복 리셋 | 신호 미발생 |
+| **테마주 급등 후 급락** | 거래량 급증 → 기준봉 갱신 → 스탑 하향 | 손절 깊어짐 |
+
+### 7.11 시장을 해킹할 수 있는가?
+
+**아니요. 구조적으로 불가능합니다.**
+
+1. **시스템이 현재 작동하지 않음**: kis_api_prod 삭제로 모든 API 호출, 주문 실행이 불가
+2. **후향적 신호**: 모든 매도 신호가 이미 하락한 후에 발생 → 타이밍 손실이 구조적
+3. **거래량 역설**: 하락+거래량 증가를 매도 트리거로 사용하면 패닉 매도 바닥에서 매도
+4. **안전마진 모순**: 기준봉 저가 < 안전마진인 경우 매도 신호가 영원히 발생하지 않음
+5. **정보/속도 우위 없음**: REST API 0.5초 폴링은 기관/HFT 대비 수천 배 느림
+6. **과밀 전략**: 10분봉 고가 돌파 매수는 모든 HTS/MTS에서 기본 제공
+7. **리스크 관리 부족**: 포트폴리오 레벨 최대 손실 한도, 섹터 집중도 제한 없음
+
+**예상 성과 (시스템 정상 작동 가정 시):**
+| 시나리오 | 연간 수익률 |
+|---------|-----------|
+| 최선 | +5% ~ +10% (시장 수익률 동등 또는 미만) |
+| 평균 | -5% ~ 0% (거래 비용과 슬리피지 차감) |
+| 최악 | -15% ~ -30% (테일 리스크 1회) |
+
+---
+
+## 8. 개선 권고사항
+
+### Phase 1: 시스템 복구 (즉시)
+
+| # | 항목 | 심각도 | 영향 |
+|---|------|--------|------|
+| 1 | **kis_api_prod 모듈 복원 또는 재구성** — 14개 파일의 21건 깨진 import 해결 | CRITICAL | 시스템 작동 불가 |
+| 2 | call_*.py 3개 파일 import 수정 또는 삭제 | CRITICAL | 비기능 스크립트 |
+| 3 | volume_rate_chk() 조건 순서 수정 (조건2,3을 조건1 앞으로) | HIGH | 데드코드/로직 버그 |
+| 4 | 기준봉 갱신 시 base_low 하향 방지 (`new_low = max(new_low, old_base_low)`) | HIGH | 트레일링 결함 |
+| 5 | 중복 주문 방지 메커니즘 추가 | CRITICAL | 중복 주문 위험 |
+
+### Phase 2: 보안/안정성 (단기)
+
+| # | 항목 | 심각도 |
 |---|------|--------|
-| 1 | DB 비밀번호(3종)를 환경변수/.env로 분리, AWS RDS 포함 | CRITICAL |
-| 2 | `.gitignore` 생성, YAML 설정 및 민감 파일 제외 | CRITICAL |
-| 3 | SQL 파라미터화 쿼리 전환 (30개+ 취약점) | CRITICAL |
-| 4 | 중복 주문 방지 로직 추가 (주문번호 체크) | CRITICAL |
-| 5 | DB 커서를 with문 또는 try-finally로 보호 | CRITICAL |
-| 6 | API 호출에 timeout=10 추가 (100개+ 미설정) | CRITICAL |
-| 7 | `verify=False` 제거, 적절한 CA 인증서 설정 | HIGH |
-| 8 | bare except → except Exception as e 전환 | HIGH |
-| 9 | auth() 함수에 재시도 로직 추가 (네트워크 오류 대응) | HIGH |
-| 10 | backup_data.py에 try-except + rollback 추가 | HIGH |
+| 6 | DB 비밀번호를 환경변수로 분리 (16개 파일) | CRITICAL |
+| 7 | SQL Injection → 파라미터화 쿼리 전환 (150건+) | CRITICAL |
+| 8 | API 호출에 `timeout=10` 추가 (48건+) | CRITICAL |
+| 9 | DB 커넥션 `try/finally` + `conn.close()` (16개 파일) | CRITICAL |
+| 10 | bare except → `except Exception as e:` + 로깅 (4건) | HIGH |
+| 11 | .gitignore 생성 | HIGH |
+| 12 | 트랜잭션 rollback 추가 (commit:rollback = **165:0**) | HIGH |
+| 13 | 미사용 `import asyncio` 제거 (4개 파일) | LOW |
 
-### 코드 품질
+### Phase 3: 코드 품질 (중기)
 
 | # | 항목 | 효과 |
 |---|------|------|
-| 7 | kis_api_prod*.py 6개 → 1개 통합 (파라미터화) | ~125KB 코드 삭제 |
-| 8 | kis_balance_*_save.py 공통 모듈 추출 | ~60KB 중복 제거 |
-| 9 | _day.py 변형 제거 (설정 파라미터화) | ~62KB 중복 제거 |
-| 10 | auth()/account() 공통 모듈화 | 유지보수성 향상 |
-| 11 | matplotlib_dir.py 삭제 | 미사용 파일 정리 |
+| 14 | auth()/account()/stock_balance() 공통 모듈화 (kis_common.py) | ~810줄 절감 |
+| 15 | DB 연결 패턴 공통화 (16개 파일) | ~80줄 절감 + 보안 |
+| 16 | format_number() 공통화 (3개 파일) | ~15줄 절감 |
 
-### 전략 개선
+### Phase 4: 전략 개선 (중장기)
 
 | # | 항목 | 기대 효과 |
 |---|------|-----------|
-| 12 | KOSPI/KOSDAQ 지수 추세 필터 추가 | 하락장 거짓 돌파 필터링 |
-| 13 | ATR 기반 동적 스탑로스 | 변동성 적응형 리스크 관리 |
-| 14 | 거래량 비율 파라미터를 20일 이동평균 대비로 전환 | 레짐 적응형 거래량 필터 |
-| 15 | 시뮬레이션 코드를 실전 로직과 동기화 | 전략 검증 가능 |
-| 16 | 변동성 기반 포지션 사이징 도입 | 리스크 조절 개선 |
-| 17 | 슬리피지/수수료 모델링 추가 | 현실적 백테스트 |
-| 18 | 허봉 방어: 1분봉 저가 이탈 → N분 연속 이탈 또는 종가 기준으로 전환 | 조기 청산 방지 |
-| 19 | 시뮬레이션의 갭 하락 무효화 로직을 실전 코드에 이식 | 갭 리스크 방어 |
-| 20 | 매도 실패 시 재시도 로직 추가 (state.py) | 주문 누락 방지 |
-| 21 | state.py 주석 처리된 실험 코드 정리 (활성/비활성 명확화) | 코드 가독성 |
-| 22 | 09:30~15:00 거래량 필터 허점 보완 (현재 무조건 통과) | 저거래량 허봉 방어 |
-| 23 | 매도 주문 시 슬리피지 버퍼 적용 (지정가 → 시장가 or 하한 지정가) | 체결률 향상 |
-| 24 | 소형주 유동성 체크 추가 (호가창 확인 후 주문) | 미체결 방지 |
-| 25 | 백테스트에 Walk-Forward 검증 프레임워크 도입 | 과적합 방지 |
+| 15 | 시뮬레이션 프레임워크 재구축 | 전략 검증 가능 |
+| 16 | KOSPI/KOSDAQ 지수 추세 필터 | 하락장 거짓 돌파 필터링 |
+| 17 | ATR 기반 동적 스탑로스 | 변동성 적응형 리스크 관리 |
+| 18 | 09:30~15:00 거래량 필터 보완 | 저거래량 허봉 방어 |
+| 19 | 변동성 기반 포지션 사이징 | 리스크 조절 개선 |
+| 20 | 슬리피지/수수료 모델링 | 현실적 백테스트 |
 
 ---
 
-## 결론
+## 9. 결론
 
-### 현재 시스템의 본질
+### 9.1 현재 상태
 
-이 시스템은 **알파(초과수익)를 생성하는 전략이라기보다는, 규율 있는 매매 실행을 강제하는 리스크 관리 프레임워크**입니다. 개인투자자가 손실 종목을 끝까지 보유하거나 감정적으로 매매하는 것을 방지하는 데 실질적인 가치가 있습니다.
+**소스 정리 후 시스템이 대부분 비기능 상태입니다.** 19개 파일 중 14개가 삭제된 `kis_api_prod` 모듈을 참조하여 실행 불가. 정상 동작하는 파일은 5개뿐 (kis_holding_item.py, kis_interest_item.py, kw_*.py, fnguidePerformbot.py, kis_api_resp.py).
 
-### "시장을 해킹"하지 못하는 근본적 이유
+### 9.2 핵심 수치
 
-1. **정보/속도 우위 없음**: KIS REST API 폴링은 기관/HFT 대비 수천 배 느림
-2. **과밀 전략**: 10분봉 고가 돌파 매수는 모든 HTS/MTS에서 기본 제공하는 수준
-3. **검증 불가**: 시뮬레이션과 실전 로직이 불일치하여 과거 성과 확인 불가
+| 항목 | 수치 |
+|------|------|
+| 총 파일/라인 | 19개 / 20,482줄 |
+| 깨진 import | **22건 (14개 파일)** |
+| 하드코딩 비밀번호 | 16개 파일 (2종) |
+| SQL Injection | 150건+ (14개 파일) |
+| SSL verify=False | 49건 |
+| DB 커넥션 누수 | 17개 (16파일) |
+| API 타임아웃 미설정 | 49건 |
+| commit vs rollback | **165:0** |
+| 중복 주문 방지 | 없음 |
+| 중복 코드 | ~905줄 (4.4%) |
+| 미사용 import | 4건 (asyncio) |
+| 전략 로직 버그 | 2건 (volume_rate_chk 데드코드, 기준봉 하향 이동) |
 
-### 시장을 해킹하기 위한 로드맵
+### 9.3 시장을 해킹하려면
 
-**Phase 1: 생존 (코드 안정성)**
-- DB 누수, 중복 주문, SQL injection, API 타임아웃 해결
-- 시스템이 예기치 않게 죽거나 잘못된 주문을 내지 않도록 보장
-
-**Phase 2: 방어 (리스크 관리 강화)**
-- 시장 레짐 필터 (KOSPI/KOSDAQ 지수 추세)
-- ATR 기반 동적 스탑로스 + 변동성 기반 포지션 사이징
-- 포트폴리오 레벨 최대 손실 한도 설정
-
-**Phase 3: 공격 (알파 생성)**
-- 진입 신호 다양화: 거래량 프로파일, 수급 분석, 섹터 모멘텀
-- 머신러닝 기반 시장 레짐 분류 (추세/횡보/고변동)
-- Walk-Forward 백테스트로 전략 검증 가능한 구조 구축
-
-현재 가장 큰 리스크는 전략 자체보다 **코드 버그로 인한 의도치 않은 손실**(중복 주문, 커서 누수로 인한 시스템 다운, API 타임아웃 무한 대기 등)입니다.
+1. **먼저 시스템을 복구** — kis_api_prod 모듈 복원이 최우선
+2. **로직 버그 수정** — volume_rate_chk 데드코드, 기준봉 하향 이동 결함
+3. **보안/안정성 확보** — DB 비밀번호, SQL Injection, 커넥션 누수, 타임아웃
+4. **전략 검증 체계 구축** — 시뮬레이션 프레임워크 재구축
+5. **진입 전략 고도화** — 시장 레짐 필터, 다양한 진입 시그널, 변동성 기반 사이징
