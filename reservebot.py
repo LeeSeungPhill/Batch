@@ -676,6 +676,8 @@ def order_reserve_cancel_revice(access_token, app_key, app_secret, acct_no, rese
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
+    if not ar.isOK():
+        raise Exception(f"{ar.getErrorCode()} {ar.getErrorMessage()}")
     return ar.getBody().output
 
 # 주식예약주문조회 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
