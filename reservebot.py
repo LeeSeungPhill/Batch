@@ -1172,6 +1172,7 @@ def callback_get(update, context) :
     elif command == "진행" and "trail71" in data_selected:
         # 추적등록(손절금액) 미리보기 → 실제 주문 + 매매추적 처리
         cb_user_id = query.message.chat_id
+        cb_bot = context.bot          # 스레드에서 안전하게 사용하기 위해 bot 참조 분리
         cb_code = g_trail71_code
         cb_company = g_trail71_company
         cb_buy_price = g_trail71_buy_price
@@ -1179,107 +1180,112 @@ def callback_get(update, context) :
         cb_buy_qty = g_trail71_buy_qty
         cb_year_day = g_trail71_year_day
         cb_hour_minute = g_trail71_hour_minute
-        target_nicks = g_selected_accounts if g_selected_accounts else [None]
+        target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
         ac_default = account()
 
         def process_trail71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-            t_buy_price = cb_buy_price
-            t_buy_qty = cb_buy_qty
+            try:
+                t_buy_price = cb_buy_price
+                t_buy_qty = cb_buy_qty
 
-            c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
-            hold_price = 0
-            hldg_qty = 0
-            hold_amt = 0
-            for i, _ in enumerate(c_bal.index):
-                if cb_code == c_bal['pdno'][i]:
-                    hold_price = float(c_bal['pchs_avg_pric'][i])
-                    hldg_qty = int(c_bal['hldg_qty'][i])
-                    hold_amt = int(c_bal['pchs_amt'][i])
+                c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                hold_price = 0
+                hldg_qty = 0
+                hold_amt = 0
+                for i, _ in enumerate(c_bal.index):
+                    if cb_code == c_bal['pdno'][i]:
+                        hold_price = float(c_bal['pchs_avg_pric'][i])
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        hold_amt = int(c_bal['pchs_amt'][i])
 
-            buy_expect_sum = t_buy_price * t_buy_qty
-            b = inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no)
-            d_order_no = None
-            d_order_type = None
-            d_order_dt = None
-            d_order_tmd = None
-            d_order_price = 0
-            d_order_amount = 0
-            d_order_complete_qty = 0
-            d_order_remain_qty = 0
+                buy_expect_sum = t_buy_price * t_buy_qty
+                b = inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no)
+                d_order_no = None
+                d_order_type = None
+                d_order_dt = None
+                d_order_tmd = None
+                d_order_price = 0
+                d_order_amount = 0
+                d_order_complete_qty = 0
+                d_order_remain_qty = 0
 
-            if int(b) > int(buy_expect_sum):
-                try:
-                    c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
-                    if c_ord['ODNO'] != "":
-                        time.sleep(0.5)
-                        output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'])
-                        tdf = pd.DataFrame(output1)
-                        tdf.set_index('odno')
-                        d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-                        for i, _ in enumerate(d_ord.index):
-                            d_order_no = int(d_ord['odno'][i])
-                            d_order_type = d_ord['sll_buy_dvsn_cd_name'][i]
-                            d_order_dt = d_ord['ord_dt'][i]
-                            d_order_tmd = d_ord['ord_tmd'][i]
-                            d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
-                            d_order_amount = d_ord['ord_qty'][i]
-                            d_order_complete_qty = d_ord['tot_ccld_qty'][i]
-                            d_order_remain_qty = d_ord['rmn_qty'][i]
-                            context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
-                    else:
-                        context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(t_buy_price), ',d') + "원, 매수량 : " + format(int(t_buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
-                except Exception as e:
-                    context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] [매수주문 오류] - " + str(e), parse_mode='HTML')
-            else:
-                context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') + "원 부족")
+                if int(b) > int(buy_expect_sum):
+                    try:
+                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
+                        if c_ord is not None and c_ord['ODNO'] != "":
+                            time.sleep(0.5)
+                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'])
+                            tdf = pd.DataFrame(output1)
+                            tdf.set_index('odno')
+                            d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                            for i, _ in enumerate(d_ord.index):
+                                d_order_no = int(d_ord['odno'][i])
+                                d_order_type = d_ord['sll_buy_dvsn_cd_name'][i]
+                                d_order_dt = d_ord['ord_dt'][i]
+                                d_order_tmd = d_ord['ord_tmd'][i]
+                                d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
+                                d_order_amount = d_ord['ord_qty'][i]
+                                d_order_complete_qty = d_ord['tot_ccld_qty'][i]
+                                d_order_remain_qty = d_ord['rmn_qty'][i]
+                                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
+                        else:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(t_buy_price), ',d') + "원, 매수량 : " + format(int(t_buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
+                    except Exception as e:
+                        cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] [매수주문 오류] - " + str(e), parse_mode='HTML')
+                else:
+                    cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') + "원 부족")
 
-            if int(d_order_price) > 0 and int(d_order_amount) > 0:
-                t_buy_price = int(d_order_price)
-                t_buy_qty = int(d_order_amount)
-                t_buy_amt = t_buy_price * t_buy_qty
-                safe_margin_price = int(t_buy_price + t_buy_price * 0.05)
-                base_price = hold_price if hold_price > 0 else t_buy_price
-                base_qty = hldg_qty
-                base_amt = hold_amt
-                sum_base_qty = base_qty + t_buy_qty
-                avg_base_price = int(round((base_amt + t_buy_amt) / sum_base_qty))
+                if int(d_order_price) > 0 and int(d_order_amount) > 0:
+                    t_buy_price = int(d_order_price)
+                    t_buy_qty = int(d_order_amount)
+                    t_buy_amt = t_buy_price * t_buy_qty
+                    safe_margin_price = int(t_buy_price + t_buy_price * 0.05)
+                    base_price = hold_price if hold_price > 0 else t_buy_price
+                    base_qty = hldg_qty
+                    base_amt = hold_amt
+                    sum_base_qty = base_qty + t_buy_qty
+                    avg_base_price = int(round((base_amt + t_buy_amt) / sum_base_qty))
 
-                thread_conn = db.connect(conn_string)
-                try:
-                    cur400 = thread_conn.cursor()
-                    merge_query = """
-                        WITH ins AS (
-                            INSERT INTO trading_trail (
-                                order_no, order_type, order_dt, order_tmd,
-                                order_price, order_amount, complete_qty, remain_qty,
-                                acct_no, code, name, trail_day, trail_dtm, trail_tp,
-                                stop_price, target_price, basic_price, basic_qty, basic_amt,
-                                proc_min, trade_tp, exit_price, crt_dt, mod_dt
+                    thread_conn = db.connect(conn_string)
+                    try:
+                        cur400 = thread_conn.cursor()
+                        merge_query = """
+                            WITH ins AS (
+                                INSERT INTO trading_trail (
+                                    order_no, order_type, order_dt, order_tmd,
+                                    order_price, order_amount, complete_qty, remain_qty,
+                                    acct_no, code, name, trail_day, trail_dtm, trail_tp,
+                                    stop_price, target_price, basic_price, basic_qty, basic_amt,
+                                    proc_min, trade_tp, exit_price, crt_dt, mod_dt
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                RETURNING 1 AS flag
                             )
-                            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                            RETURNING 1 AS flag
-                        )
-                        SELECT flag FROM ins;
-                    """
-                    cur400.execute(merge_query, (
-                        str(d_order_no), d_order_type, d_order_dt, d_order_tmd,
-                        int(d_order_price), int(d_order_amount), int(d_order_complete_qty), int(d_order_remain_qty),
-                        t_acct_no, cb_code, cb_company, cb_year_day, cb_hour_minute, "1",
-                        cb_loss_price, safe_margin_price,
-                        avg_base_price if base_price > 0 else t_buy_price,
-                        sum_base_qty if base_qty > 0 else t_buy_qty,
-                        avg_base_price * sum_base_qty if base_qty > 0 else t_buy_amt,
-                        cb_hour_minute, 'S', cb_loss_price, datetime.now(), datetime.now()
-                    ))
-                    was_updated = cur400.fetchone() is not None
-                    thread_conn.commit()
-                    cur400.close()
-                    if was_updated:
-                        context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else t_buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else t_buy_qty, ',d') + "주, 이탈가 : " + format(cb_loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
-                    else:
-                        context.bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매매추적 미처리")
-                finally:
-                    thread_conn.close()
+                            SELECT flag FROM ins;
+                        """
+                        cur400.execute(merge_query, (
+                            str(d_order_no), d_order_type, d_order_dt, d_order_tmd,
+                            int(d_order_price), int(d_order_amount), int(d_order_complete_qty), int(d_order_remain_qty),
+                            t_acct_no, cb_code, cb_company, cb_year_day, cb_hour_minute, "1",
+                            cb_loss_price, safe_margin_price,
+                            avg_base_price if base_price > 0 else t_buy_price,
+                            sum_base_qty if base_qty > 0 else t_buy_qty,
+                            avg_base_price * sum_base_qty if base_qty > 0 else t_buy_amt,
+                            cb_hour_minute, 'S', cb_loss_price, datetime.now(), datetime.now()
+                        ))
+                        was_updated = cur400.fetchone() is not None
+                        thread_conn.commit()
+                        cur400.close()
+                        if was_updated:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 평균보유가 : " + format(avg_base_price if base_price > 0 else t_buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else t_buy_qty, ',d') + "주, 이탈가 : " + format(cb_loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
+                        else:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매매추적 미처리")
+                    finally:
+                        thread_conn.close()
+
+            except Exception as top_e:
+                print(f"process_trail71 오류 [{nick}]: {top_e}")
+                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] [추적등록 오류] " + str(top_e))
 
         query.edit_message_text(text="[" + cb_company + "] 주문 처리 중...")
         threads_t71 = []
@@ -1290,12 +1296,14 @@ def callback_get(update, context) :
                 t_access_token = ac_t['access_token']
                 t_app_key = ac_t['app_key']
                 t_app_secret = ac_t['app_secret']
+                t_nick = nick
             else:
                 t_acct_no = ac_default['acct_no']
                 t_access_token = ac_default['access_token']
                 t_app_key = ac_default['app_key']
                 t_app_secret = ac_default['app_secret']
-            t = threading.Thread(target=process_trail71, args=(nick if nick is not None else ac_default['acct_no'], t_acct_no, t_access_token, t_app_key, t_app_secret))
+                t_nick = arguments[1]
+            t = threading.Thread(target=process_trail71, args=(t_nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
             threads_t71.append(t)
             t.start()
         for t in threads_t71:
