@@ -1156,21 +1156,21 @@ def get_kis_1min_from_datetime(
                         if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
                             if completed_key == tenmin_state["base_key"]:
                                 continue
-                            tenmin_low = tenmin_df["저가"].astype(int).min()                                                               
-                            tenmin_high = tenmin_df["고가"].astype(int).max()                                                              
+                            tenmin_low = tenmin_df["저가"].astype(int).min()          # 기준봉 갱신용
+                            tenmin_high = tenmin_df["고가"].astype(int).max()
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
+                            tenmin_close = close_price                                 # 이탈 판단: 10분봉 종가(마지막 1분봉 종가)
 
-                             # ── 매도 조건 판단 ──────────────────────────────────────────
+                             # ── 매도 조건 판단 (이탈 기준: 10분봉 종가) ─────────────────
                             sell_trigger = False
                             sell_reason = ""
                             safety_margin = int(basic_price + basic_price * 0.05)
                             PEAK_RETRACEMENT_RATE = 0.5  # 고점~안전마진 구간 중 허용 되돌림 비율 (50%)
 
-                            # 조건 A: 기준봉 저가 이탈 + 안전마진 이하 → 즉시 매도 (손절)
-                            # base_low <= safety_margin 구간에서 기준봉을 이탈하면 반드시 매도
-                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low <= safety_margin:
+                            # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 즉시 매도 (손절)
+                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
                                 sell_trigger = True
-                                sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 이탈"
+                                sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
                             # 조건 B: 고점 대비 되돌림 → 수익 구간 동적 청산 (peak retracement)
                             # 활성화 조건: safety_margin 초과(수익 확보) + 최소 2% 이상 상승폭
@@ -1179,21 +1179,21 @@ def get_kis_1min_from_datetime(
                             effective_retracement_rate = 0.3 if current_time >= dt_time(14, 30) else PEAK_RETRACEMENT_RATE
                             if not sell_trigger and tenmin_state["peak_high"] > safety_margin and peak_to_safety >= int(basic_price * 0.02):
                                 peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * effective_retracement_rate)
-                                if tenmin_low < peak_sell_threshold:
+                                if tenmin_close < peak_sell_threshold:
                                     sell_trigger = True
-                                    sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 이탈"
+                                    sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈"
 
-                            # 조건 C: 기준봉 저가 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
+                            # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
                             # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                             # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
-                            if tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin:
+                            if tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin:
                                 tenmin_state["consecutive_down"] += 1
                             else:
                                 tenmin_state["consecutive_down"] = 0
                             late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
-                            if not sell_trigger and tenmin_low < tenmin_state["base_low"] and tenmin_low > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= late_day_consec_threshold):
+                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= late_day_consec_threshold):
                                 sell_trigger = True
-                                sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 이탈"
+                                sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
                             if sell_trigger:
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
@@ -1209,7 +1209,7 @@ def get_kis_1min_from_datetime(
                                         if result:
                                             if verbose:
                                                 message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                 )
                                                 print(message)
                                                 bot.send_message(
@@ -1226,7 +1226,7 @@ def get_kis_1min_from_datetime(
                                         if result:
                                             if verbose:
                                                 message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
+                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                 )
                                                 print(message)
                                                 bot.send_message(
