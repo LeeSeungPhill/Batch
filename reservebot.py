@@ -3039,7 +3039,7 @@ def echo(update, context):
                 hour_minute = datetime.now().strftime('%H%M%S')                                             # 시간-6자리(HHMMSS, 현재일시:0)
                 buy_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매수가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[2] == '0' else int(commandBot[2])                 # 이탈가(저가:0)
-                sell_rate = int(commandBot[3])                                                              # 비중(%)
+                buy_rate = int(commandBot[3])                                                               # 비중(%)
                 
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
@@ -3049,6 +3049,7 @@ def echo(update, context):
 
                     hold_price = 0
                     hldg_qty = 0
+                    hold_amt = 0
 
                     for i, _ in enumerate(c.index):
                         if code == c['pdno'][i]:
@@ -3059,19 +3060,17 @@ def echo(update, context):
                     # 매매추적 보유가, 보유수량, 추적유형 조회 (스레드별 별도 DB 연결)
                     thread_conn = db.connect(conn_string)
                     try:
-                        sell_qty = int(hldg_qty * sell_rate * 0.01)
+                        buy_qty = int(hldg_qty * buy_rate * 0.01)
 
-                        if sell_qty > 0:
+                        if buy_qty > 0:
                             try:
                                 with thread_conn.cursor() as cur:
 
-                                    t_buy_price = buy_price
-                                    t_buy_qty = sell_qty
-                                    t_buy_amt = t_buy_price * t_buy_qty
-                                    safe_margin_price = int(t_buy_price + t_buy_price * 0.05)  # 안전마진가(매수가 대비 5%)
+                                    buy_amt = buy_price * buy_qty
+                                    safe_margin_price = int(buy_price + buy_price * 0.05)  # 안전마진가(매수가 대비 5%)
 
                                     # 보유가
-                                    base_price = int(hold_price) if hold_price > 0 else t_buy_price
+                                    base_price = int(hold_price)
                                     # 보유량 (신규 매수 시 hldg_qty=0이므로 fallback 없이 그대로 사용)
                                     base_qty = hldg_qty
                                     # 보유금액 (신규 매수 시 hold_amt=0이므로 fallback 없이 그대로 사용)
@@ -3104,15 +3103,15 @@ def echo(update, context):
                                         SELECT flag FROM ins;
                                         """
                                     cur.execute(merge_query, (
-                                        t_acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, base_price, base_qty, base_amt, hour_minute, 'M', loss_price, datetime.now(), datetime.now()
+                                        t_acct_no, code, company, year_day, hour_minute, "1", loss_price, safe_margin_price, buy_price, buy_qty, buy_amt, hour_minute, 'M', loss_price, datetime.now(), datetime.now()
                                     ))
                                     was_updated = cur.fetchone() is not None
                                     thread_conn.commit()
 
                                     if was_updated:
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(base_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 보유금액 : " + format(base_amt, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
+                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 보유가 : " + format(base_price, ',d') + "원, 보유량 : " + format(base_qty, ',d') + "주, 보유금액 : " + format(base_amt, ',d') + "원, 매수가 : " + format(buy_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_amt, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
                                     else:
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(t_buy_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원, 매수량 : " + format(t_buy_qty, ',d') + "주, 매수금액 : " + format(t_buy_amt, ',d') + "원 매매추적 미처리")
+                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 매수가 : " + format(buy_price, ',d') + "원, 매수량 : " + format(buy_qty, ',d') + "주, 매수금액 : " + format(buy_amt, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 안전마진가 : " + format(safe_margin_price, ',d') + "원 매매추적 미처리")
                             
                             except Exception as e:
                                 thread_conn.rollback()
