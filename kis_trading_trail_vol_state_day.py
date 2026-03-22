@@ -874,6 +874,8 @@ def get_kis_1min_from_datetime(
         # 시간 오름차순 정렬 (필수)
         df = df.sort_values("dt").reset_index(drop=True)
 
+        # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
+        current_10min_key = get_completed_10min_key(datetime.now())
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
@@ -1027,6 +1029,9 @@ def get_kis_1min_from_datetime(
                         if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
                             if completed_key == tenmin_state["base_key"]:
                                 continue
+                            # [버그1 수정] 현재 형성 중인 10분봉 스킵 — 완성된 봉만 처리
+                            if completed_key >= current_10min_key:
+                                continue
                             tenmin_low = tenmin_df["저가"].astype(int).min()          # 기준봉 갱신용
                             tenmin_high = tenmin_df["고가"].astype(int).max()
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
@@ -1054,15 +1059,20 @@ def get_kis_1min_from_datetime(
                                     sell_trigger = True
                                     sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈"
 
-                            # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
+                            # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                             # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                             # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
-                            if tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin:
-                                tenmin_state["consecutive_down"] += 1
+                            # [버그3 수정] consecutive_down은 run 간 리셋되므로 df에서 직접 이전 봉 종가 조회
+                            prev_key = completed_key - timedelta(minutes=10)
+                            prev_tenmin_df = df[df["dt"].apply(get_completed_10min_key) == prev_key]
+                            if not prev_tenmin_df.empty:
+                                prev_close = int(prev_tenmin_df.loc[prev_tenmin_df["dt"].idxmax(), "종가"])
+                                consecutive_breaks = (1 if tenmin_close < tenmin_state["base_low"] else 0) + \
+                                                     (1 if prev_close < tenmin_state["base_low"] else 0)
                             else:
-                                tenmin_state["consecutive_down"] = 0
+                                consecutive_breaks = 1 if tenmin_close < tenmin_state["base_low"] else 0
                             late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
-                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= late_day_consec_threshold):
+                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or consecutive_breaks >= late_day_consec_threshold):
                                 sell_trigger = True
                                 sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
@@ -1120,16 +1130,17 @@ def get_kis_1min_from_datetime(
                                 })
                                 return signals
 
-                            # 10분봉 완성 시 기준봉 갱신                                                                                   
+                            # 10분봉 완성 시 기준봉 갱신
+                            base_updated = False
                             if tenmin_high > tenmin_low:
                                 if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
                                     tenmin_state.update({
                                         "base_low": max(tenmin_low, tenmin_state["base_low"]),  # 트레일링 스탑은 위로만 이동
                                         "base_high": tenmin_high,
                                         "base_vol": tenmin_vol,
-                                        "consecutive_down": 0,  # 기준봉 갱신 시 카운터 리셋
                                         "peak_high": max(tenmin_state["peak_high"], tenmin_high),  # 고점 갱신
                                     })
+                                    base_updated = True
 
                                     if verbose:
                                         reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
@@ -1139,6 +1150,11 @@ def get_kis_1min_from_datetime(
                                         print(message)
 
                                     update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
+
+                            # [버그2 수정] 매도/갱신 없이 완성된 봉 처리 시에도 proc_min 전진
+                            # → 다음 1분 실행 시 이미 처리한 봉 재처리 방지
+                            if not base_updated:
+                                update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["base_high"]), int(tenmin_state["base_vol"]), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
 
     return signals
 
