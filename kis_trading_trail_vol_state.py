@@ -437,6 +437,59 @@ def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret)
         app_secret=app_secret
     )
 
+def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
+    """최근 30거래일 일봉 데이터 전체 조회 (ATR 계산용)"""
+    url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appkey": app_key,
+        "appsecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P"
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": stock_code,
+        "FID_PERIOD_DIV_CODE": "D",
+        "FID_ORG_ADJ_PRC": "1",
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=10)
+        data = res.json()
+        if "output" not in data or not data["output"]:
+            return []
+        result = []
+        for item in data["output"]:
+            if item.get("stck_bsop_date") and item.get("acml_vol") and int(item["acml_vol"]) > 0:
+                result.append({
+                    "date": item["stck_bsop_date"],
+                    "high_price": int(item["stck_hgpr"]),
+                    "low_price": int(item["stck_lwpr"]),
+                    "close_price": int(item["stck_clpr"]),
+                    "volume": int(item["acml_vol"]),
+                })
+        return sorted(result, key=lambda x: x["date"])
+    except Exception as e:
+        print(f"일봉 전체 조회 오류: {e}")
+        return []
+
+def calculate_atr(daily_data, period=14):
+    """ATR(Average True Range) 계산 - 일봉 데이터 기반"""
+    if len(daily_data) < 2:
+        return None
+    trs = []
+    for i in range(1, len(daily_data)):
+        h = daily_data[i]['high_price']
+        l = daily_data[i]['low_price']
+        prev_c = daily_data[i-1]['close_price']
+        tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+        trs.append(tr)
+    if len(trs) < period:
+        # 데이터 부족 시 가용한 전체 TR 평균 사용
+        return int(sum(trs) / len(trs)) if trs else None
+    return int(sum(trs[-period:]) / period)
+
 def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result):
     
     d_order_price = 0
@@ -831,6 +884,14 @@ def get_kis_1min_from_datetime(
         # 시간 오름차순 정렬 (필수)
         df = df.sort_values("dt").reset_index(drop=True)
 
+        # ATR 기반 동적 트레일링 스탑 초기화
+        daily_data = get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret)
+        atr_value = calculate_atr(daily_data, period=14)
+        if atr_value is None:
+            # ATR 계산 불가 시 매수가의 3% 사용
+            atr_value = int(basic_price * 0.03)
+        day_high_close = basic_price  # 보유 기간 중 최고 종가 추적
+
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
@@ -843,18 +904,48 @@ def get_kis_1min_from_datetime(
                 breakdown_check = low_price if breakdown_type == "low" else close_price
 
                 # ===============================
-                # 09:10 이전 미처리
+                # 09:10 또는 10:10 이전 미처리
                 # ===============================
-                if row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
+                if trade_date.endswith("0102") and row["dt"].time() < datetime.strptime("10:10", "%H:%M").time():
+                    continue
+                elif not trade_date.endswith("0102") and row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
                     continue
 
                 # 현재 분봉 시간
                 current_time = row["시간"].replace(":", "")
                 vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
-                # 손절매수 대상 최종이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
-                if trade_tp is not None and trade_tp == 'S' and close_price <= exit_price and volume_rate_chk(current_time, vol_ratio):
-                    
+                # 일중 최고 종가 갱신 (동적 트레일링용)
+                day_high_close = max(day_high_close, close_price)
+
+                # ===============================
+                # 동적 트레일링 스탑 (ATR + 수익구간별 차등)
+                # ===============================
+                gain_pct = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
+
+                # 수익 구간별 ATR 멀티플라이어 및 최소 보호가 설정
+                if gain_pct >= 10:
+                    # 고수익 구간: 타이트한 트레일 + 최소 7% 수익 보호
+                    effective_stop = max(int(basic_price * 1.07), day_high_close - int(atr_value * 1.5))
+                elif gain_pct >= 5:
+                    # 중수익 구간: 중간 트레일 + 최소 2% 수익 보호
+                    effective_stop = max(int(basic_price * 1.02), day_high_close - int(atr_value * 2.0))
+                elif gain_pct >= 0:
+                    # 소수익/본전 구간: 넓은 트레일, 원래 이탈가 유지
+                    if trade_tp == 'S':
+                        base_stop = int(exit_price) if exit_price else int(stop_price)
+                    else:
+                        base_stop = int(stop_price)
+                    effective_stop = max(base_stop, day_high_close - int(atr_value * 2.5))
+                else:
+                    # 손실 구간: 원래 이탈가 (기존 로직 유지)
+                    if trade_tp == 'S':
+                        effective_stop = int(exit_price) if exit_price else int(stop_price)
+                    else:
+                        effective_stop = int(stop_price)
+
+                # 동적 스탑 이탈 체크 (시간대별 거래량 조건 포함)
+                if close_price <= effective_stop and volume_rate_chk(current_time, vol_ratio):
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                     i_trail_plan = trail_plan if trail_plan else "100"
                     trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -862,10 +953,12 @@ def get_kis_1min_from_datetime(
                     u_basic_qty = basic_qty - trail_qty
                     u_basic_amt = basic_price * u_basic_qty
 
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '손절매수 대상 최종이탈가 매도'):
+                    sell_reason = f"동적스탑({effective_stop:,})원 이탈 [수익률:{gain_pct:.1f}%, ATR:{atr_value:,}]"
+
+                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', sell_reason):
                         if verbose:
                             message = (
-                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
+                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason}, 최고종가:{day_high_close:,}원, 현재가:{close_price:,}원"
                             )
                             print(message)
                             bot.send_message(
@@ -875,52 +968,23 @@ def get_kis_1min_from_datetime(
                             )
 
                     signals.append({
-                        "signal_type": "BREAKDOWN_AFTER_PROFIT",
+                        "signal_type": "DYNAMIC_TRAIL_STOP",
                         "종목명": stock_name,
                         "종목코드": stock_code,
                         "발생일자": row["일자"],
                         "발생시간": row["시간"],
-                        "이탈가격": breakdown_check
-                    })
-                    return signals
-                
-                # 매수금액 대상 이탈가 이탈하고 시간대별 거래량 비율 체크 → 즉시 종료
-                elif trade_tp is not None and trade_tp == 'M' and close_price <= stop_price and volume_rate_chk(current_time, vol_ratio):
-                   
-                    trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
-                    i_trail_plan = trail_plan if trail_plan else "100"
-                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                    trail_amt = close_price * trail_qty
-                    u_basic_qty = basic_qty - trail_qty
-                    u_basic_amt = basic_price * u_basic_qty
-
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '매수금액 대상 이탈가 매도'):
-                        if verbose:
-                            message = (
-                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 수익 후 이탈가 : {stop_price:,}원 이탈, 거래량 비율 : {int(vol_ratio):,}%"
-                            )
-                            print(message)
-                            bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode='HTML'
-                            )
-
-                    signals.append({
-                        "signal_type": "BREAKDOWN_AFTER_PROFIT",
-                        "종목명": stock_name,
-                        "종목코드": stock_code,
-                        "발생일자": row["일자"],
-                        "발생시간": row["시간"],
-                        "이탈가격": breakdown_check
+                        "이탈가격": close_price,
+                        "동적스탑": effective_stop,
+                        "수익률": gain_pct,
+                        "ATR": atr_value,
                     })
                     return signals
 
                 # ===============================
-                # 1️⃣ 15:10 이후 일봉 이탈 감시
+                # 15:10 이후 전일저가 이탈 감시 (손실 구간만 적용)
+                # 수익 구간에서는 동적 트레일링으로 이미 보호됨
                 # ===============================
-                if current_time >= "151000" and prev_low is not None:
-                    # 전일저가 금일 종가 이탈 및 전일 거래량 대비 50% 이상 거래량
+                if current_time >= "151000" and prev_low is not None and gain_pct < 0:
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
                         trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                         i_trail_plan = trail_plan if trail_plan else "100"
@@ -944,7 +1008,7 @@ def get_kis_1min_from_datetime(
                                     )
 
                         except Exception as e:
-                            print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")                            
+                            print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
                         signals.append({
                             "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
@@ -1003,6 +1067,8 @@ def get_kis_1min_from_datetime(
         # 시간 오름차순 정렬 (필수)
         df = df.sort_values("dt").reset_index(drop=True)
 
+        # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
+        current_10min_key = get_completed_10min_key(datetime.now())
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
@@ -1017,20 +1083,19 @@ def get_kis_1min_from_datetime(
                 current_time = row["dt"].time()
 
                 if high_price > low_price:
+                    if trade_date.endswith("0102"):
+                        pre_market = current_time < datetime.strptime("10:10", "%H:%M").time()
+                    else:
+                        pre_market = current_time < datetime.strptime("09:10", "%H:%M").time()                            
+
                     # ===============================
-                    # 09:10 이전 미처리
-                    # ===============================
-                    if current_time < datetime.strptime("09:10", "%H:%M").time():
-                        continue
-                    
-                    # ===============================
-                    # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성
+                    # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성 (09:10 또는 10:10 이전에도 수행)
                     # ===============================
                     if tenmin_state["base_low"] is None:
                         chk_vol = volumn if volumn else 0
                         if trail_tp == '1':
-                            # 손절매수 대상 돌파 이전 최종이탈가 이탈 및 누적거래량 초과 → 즉시 종료
-                            if trade_tp is not None and trade_tp == 'S' and breakdown_check <= exit_price and acml_vol > chk_vol:
+                            # 손절매수 대상 돌파 이전 최종이탈가 이탈 및 누적거래량 초과 → 즉시 종료 (09:10 이후)
+                            if not pre_market and trade_tp is not None and trade_tp == 'S' and breakdown_check <= exit_price and acml_vol > chk_vol:
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -1065,8 +1130,8 @@ def get_kis_1min_from_datetime(
                                 })
                                 return signals
                         
-                            # 매수금액 대상 돌파 이전 이탈가 이탈 및 누적거래량 초과 → 즉시 종료
-                            elif trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:    
+                            # 매수금액 대상 돌파 이전 이탈가 이탈 및 누적거래량 초과 → 즉시 종료 (09:10 또는 10:100 이후)
+                            elif not pre_market and trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:    
                                 trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "100"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -1156,6 +1221,9 @@ def get_kis_1min_from_datetime(
                         if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
                             if completed_key == tenmin_state["base_key"]:
                                 continue
+                            # [버그1 수정] 현재 형성 중인 10분봉 스킵 — 완성된 봉만 처리
+                            if completed_key >= current_10min_key:
+                                continue
                             tenmin_low = tenmin_df["저가"].astype(int).min()          # 기준봉 갱신용
                             tenmin_high = tenmin_df["고가"].astype(int).max()
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
@@ -1183,15 +1251,20 @@ def get_kis_1min_from_datetime(
                                     sell_trigger = True
                                     sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈"
 
-                            # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 카운터 증가
+                            # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                             # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                             # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
-                            if tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin:
-                                tenmin_state["consecutive_down"] += 1
+                            # [버그3 수정] consecutive_down은 run 간 리셋되므로 df에서 직접 이전 봉 종가 조회
+                            prev_key = completed_key - timedelta(minutes=10)
+                            prev_tenmin_df = df[df["dt"].apply(get_completed_10min_key) == prev_key]
+                            if not prev_tenmin_df.empty:
+                                prev_close = int(prev_tenmin_df.loc[prev_tenmin_df["dt"].idxmax(), "종가"])
+                                consecutive_breaks = (1 if tenmin_close < tenmin_state["base_low"] else 0) + \
+                                                     (1 if prev_close < tenmin_state["base_low"] else 0)
                             else:
-                                tenmin_state["consecutive_down"] = 0
+                                consecutive_breaks = 1 if tenmin_close < tenmin_state["base_low"] else 0
                             late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
-                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or tenmin_state["consecutive_down"] >= late_day_consec_threshold):
+                            if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or consecutive_breaks >= late_day_consec_threshold):
                                 sell_trigger = True
                                 sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
@@ -1249,16 +1322,17 @@ def get_kis_1min_from_datetime(
                                 })
                                 return signals
 
-                            # 10분봉 완성 시 기준봉 갱신                                                                                   
+                            # 10분봉 완성 시 기준봉 갱신
+                            base_updated = False
                             if tenmin_high > tenmin_low:
                                 if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
                                     tenmin_state.update({
                                         "base_low": max(tenmin_low, tenmin_state["base_low"]),  # 트레일링 스탑은 위로만 이동
                                         "base_high": tenmin_high,
                                         "base_vol": tenmin_vol,
-                                        "consecutive_down": 0,  # 기준봉 갱신 시 카운터 리셋
                                         "peak_high": max(tenmin_state["peak_high"], tenmin_high),  # 고점 갱신
                                     })
+                                    base_updated = True
 
                                     if verbose:
                                         reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
@@ -1268,6 +1342,11 @@ def get_kis_1min_from_datetime(
                                         print(message)
 
                                     update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
+
+                            # [버그2 수정] 매도/갱신 없이 완성된 봉 처리 시에도 proc_min 전진
+                            # → 다음 1분 실행 시 이미 처리한 봉 재처리 방지
+                            if not base_updated:
+                                update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["base_high"]), int(tenmin_state["base_vol"]), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
 
     return signals
 
