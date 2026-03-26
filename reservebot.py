@@ -1228,21 +1228,21 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "63")
         
     elif command == "추적등록":
-        button_list = build_button(["추적매수주문", "주적주문제외"], data_selected)
+        button_list = build_button(["매수주문등록", "주문제외등록"], data_selected)
         show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
 
-        context.bot.edit_message_text(text="추적등록 매수방식을 선택해 주세요.",
+        context.bot.edit_message_text(text="추적등록 방식을 선택해 주세요.",
                                         chat_id=update.callback_query.message.chat_id,
                                         message_id=update.callback_query.message.message_id,
                                         reply_markup=show_markup)
 
-    elif command == "추적매수주문" and "추적등록" in data_selected:
+    elif command == "매수주문등록" and "추적등록" in data_selected:
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "71")
 
-    elif command == "주적주문제외" and "추적등록" in data_selected:
+    elif command == "주문제외등록" and "추적등록" in data_selected:
         g_selected_accounts.clear()
-        show_account_selection_keyboard(query, "73")
+        show_account_selection_keyboard(query, "72")
 
     elif command in ("손절금액", "매수금액") and "trail71" in data_selected:
         # 손절금액/매수금액 선택에 따라 매수량·매수금액 설정
@@ -1425,7 +1425,7 @@ def callback_get(update, context) :
             "62": "예약정정할 종목코드(종목명), 정정가(시장가:0), 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
             "63": "예약철회할 종목코드(종목명)를 입력하세요.",
             "71": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
-            "73": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 비중(%)을 입력하세요.",
+            "72": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 비중(%)을 입력하세요.",
             "81": "종목코드(종목명), 매도가(현재가:0), 이탈가(저가:0), 비중(%)을 입력하세요.",
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
@@ -2798,7 +2798,7 @@ def echo(update, context):
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')         
 
-        elif menuNum == '73':
+        elif menuNum == '72':
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
@@ -2817,7 +2817,7 @@ def echo(update, context):
                 
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
-                def process_nick_73(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                def process_nick_72(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     # 계좌잔고 조회
                     c = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
 
@@ -2898,7 +2898,7 @@ def echo(update, context):
                     finally:
                         thread_conn.close()
 
-                threads_73 = []
+                threads_72 = []
                 for nick in target_nicks:
                     if nick is not None:
                         ac = account(nick)
@@ -2911,10 +2911,10 @@ def echo(update, context):
                         t_access_token = access_token
                         t_app_key = app_key
                         t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_73, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_73.append(t)
+                    t = threading.Thread(target=process_nick_72, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
+                    threads_72.append(t)
                     t.start()
-                for t in threads_73:
+                for t in threads_72:
                     t.join()
 
             else:
