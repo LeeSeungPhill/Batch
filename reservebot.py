@@ -2049,7 +2049,7 @@ def echo(update, context):
                         "  매수금액: " + format(loss_buy_amt_21, ',d') + "원 | 매수량: " + format(loss_buy_qty_21, ',d') + "주 | 손실금액: " + format(item_loss_sum_21, ',d') + "원\n"
                         "─────────────────\n"
                         "  매수금액 기준\n"
-                        "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_buy_amt_21 - amt_item_loss_21, ',d') + "원"
+                        "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_item_loss_21, ',d') + "원"
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
@@ -2792,7 +2792,7 @@ def echo(update, context):
                         "  매수금액: " + format(loss_buy_amt_71, ',d') + "원 | 매수량: " + format(loss_buy_qty_71, ',d') + "주 | 손실금액: " + format(item_loss_sum_71, ',d') + "원\n"
                         "─────────────────\n"
                         "  매수금액 기준\n"
-                        "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_buy_amt_71 - amt_item_loss_71, ',d') + "원"
+                        "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
