@@ -311,7 +311,7 @@ def get_command(update, context) :
                                  "전체예약", "예약주문", "예약정정", "예약철회", 
                                  "전체주문", "보유종목", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "손절계산"], callback_header="menu")
+                                 "손실금액계산"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
