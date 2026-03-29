@@ -104,7 +104,6 @@ def get_completed_L_trades(conn):
                trade_tp, trade_result, trail_tp, order_price, proc_min
         FROM trading_trail
         WHERE trail_tp IN ('3', '4')
-          AND trade_result IS NOT NULL
         ORDER BY trail_day DESC
     """)
     columns = [
@@ -273,10 +272,10 @@ def simulate_strategy_D(trade, bars_from_entry):
         close = bar["close"]
         gain = (close - basic_price) / basic_price
 
-        if gain >= 0.10:
+        if gain >= 0.20:
+            effective_stop = basic_price * 1.15
+        elif gain >= 0.10:
             effective_stop = basic_price * 1.07
-        elif gain >= 0.05:
-            effective_stop = basic_price * 1.02
         else:
             effective_stop = stop_price if stop_price > 0 else basic_price * 0.95
 
@@ -305,10 +304,10 @@ def simulate_strategy_E(trade, bars_from_entry, all_bars):
         highest_close = max(highest_close, close)
         gain = (close - basic_price) / basic_price
 
-        if gain >= 0.10:
-            effective_stop = max(basic_price * 1.07, highest_close - atr * 1.5)
-        elif gain >= 0.05:
-            effective_stop = max(basic_price * 1.02, highest_close - atr * 2.0)
+        if gain >= 0.20:
+            effective_stop = max(basic_price * 1.15, highest_close - atr * 1.5)
+        elif gain >= 0.10:
+            effective_stop = max(basic_price * 1.07, highest_close - atr * 2.0)
         elif gain >= 0.0:
             base_stop = stop_price if stop_price > 0 else basic_price * 0.95
             effective_stop = max(base_stop, highest_close - atr * 2.5)
