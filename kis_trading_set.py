@@ -297,9 +297,10 @@ for nick in nickname_list:
                         proc_min,
                         trade_tp,
                         exit_price,
+                        loss_amt,
                         crt_dt,
                         mod_dt
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
                 """
                 
@@ -308,7 +309,7 @@ for nick in nickname_list:
                     acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt = row
                     try:
                         cur201.execute(insert_query1, (
-                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt
+                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
                         ))
                         inserted_count += cur201.rowcount
                     except Exception as e:
