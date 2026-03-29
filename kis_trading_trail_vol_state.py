@@ -915,37 +915,57 @@ def get_kis_1min_from_datetime(
                 current_time = row["시간"].replace(":", "")
                 vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
-                # 일중 최고 종가 갱신 (동적 트레일링용)
+                # 일중 최고 종가 갱신 (20%+ 구간 동적 트레일링용)
                 day_high_close = max(day_high_close, close_price)
 
-                # ===============================
-                # 동적 트레일링 스탑 (ATR + 수익구간별 차등)
-                # ===============================
                 gain_pct = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
 
-                # 수익 구간별 ATR 멀티플라이어 및 최소 보호가 설정
-                if gain_pct >= 10:
-                    # 고수익 구간: 타이트한 트레일 + 최소 7% 수익 보호
-                    effective_stop = max(int(basic_price * 1.07), day_high_close - int(atr_value * 1.5))
-                elif gain_pct >= 5:
-                    # 중수익 구간: 중간 트레일 + 최소 2% 수익 보호
-                    effective_stop = max(int(basic_price * 1.02), day_high_close - int(atr_value * 2.0))
-                elif gain_pct >= 0:
-                    # 소수익/본전 구간: 넓은 트레일, 원래 이탈가 유지
-                    if trade_tp == 'S':
-                        base_stop = int(exit_price) if exit_price else int(stop_price)
-                    else:
-                        base_stop = int(stop_price)
-                    effective_stop = max(base_stop, day_high_close - int(atr_value * 2.5))
-                else:
-                    # 손실 구간: 원래 이탈가 (기존 로직 유지)
-                    if trade_tp == 'S':
-                        effective_stop = int(exit_price) if exit_price else int(stop_price)
-                    else:
-                        effective_stop = int(stop_price)
+                # ===============================
+                # 매도 조건 판단
+                # ===============================
+                sell_trigger = False
+                sell_reason = ""
+                sell_signal_type = ""
 
-                # 동적 스탑 이탈 체크 (시간대별 거래량 조건 포함)
-                if close_price <= effective_stop and volume_rate_chk(current_time, vol_ratio):
+                if gain_pct >= 20:
+                    # ===============================
+                    # 20%+ 고수익 구간: 하이브리드 ATR 동적 트레일링
+                    # 최소 15% 수익 보호 + ATR×1.5 트레일
+                    # ===============================
+                    effective_stop = max(int(basic_price * 1.15), day_high_close - int(atr_value * 1.5))
+
+                    if close_price <= effective_stop and volume_rate_chk(current_time, vol_ratio):
+                        sell_trigger = True
+                        sell_reason = f"동적스탑({effective_stop:,})원 이탈 [수익률:{gain_pct:.1f}%, ATR:{atr_value:,}]"
+                        sell_signal_type = "DYNAMIC_TRAIL_STOP"
+
+                else:
+                    # ===============================
+                    # 20% 미만: 기존 고정 이탈가 로직
+                    # ===============================
+                    if trade_tp == 'S':
+                        fixed_stop = int(exit_price) if exit_price else int(stop_price)
+                    else:
+                        fixed_stop = int(stop_price)
+
+                    if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio):
+                        sell_trigger = True
+                        sell_reason = f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]"
+                        sell_signal_type = "FIXED_STOP"
+
+                    # ===============================
+                    # 15:10 이후 전일저가 이탈 감시 (손실 구간만 적용)
+                    # ===============================
+                    if not sell_trigger and current_time >= "151000" and prev_low is not None and gain_pct < 0:
+                        if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                            sell_trigger = True
+                            sell_reason = '금일종가 전일저가 이탈'
+                            sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
+
+                # ===============================
+                # 매도 실행 (공통)
+                # ===============================
+                if sell_trigger:
                     trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                     i_trail_plan = trail_plan if trail_plan else "100"
                     trail_qty = basic_qty * int(i_trail_plan) * 0.01
@@ -953,65 +973,41 @@ def get_kis_1min_from_datetime(
                     u_basic_qty = basic_qty - trail_qty
                     u_basic_amt = basic_price * u_basic_qty
 
-                    sell_reason = f"동적스탑({effective_stop:,})원 이탈 [수익률:{gain_pct:.1f}%, ATR:{atr_value:,}]"
-
-                    if update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', sell_reason):
-                        if verbose:
-                            message = (
-                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason}, 최고종가:{day_high_close:,}원, 현재가:{close_price:,}원"
-                            )
+                    try:
+                        result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', sell_reason)
+                        if result and verbose:
+                            if sell_signal_type == "DYNAMIC_TRAIL_STOP":
+                                message = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason}, 최고종가:{day_high_close:,}원, 현재가:{close_price:,}원"
+                                )
+                            elif sell_signal_type == "DAILY_BREAKDOWN_AFTER_1510":
+                                message = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
+                                )
+                            else:
+                                message = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason}, 현재가:{close_price:,}원"
+                                )
                             print(message)
-                            bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode='HTML'
-                            )
+                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                    except Exception as e:
+                        print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
 
-                    signals.append({
-                        "signal_type": "DYNAMIC_TRAIL_STOP",
-                        "종목명": stock_name,
-                        "종목코드": stock_code,
-                        "발생일자": row["일자"],
-                        "발생시간": row["시간"],
-                        "이탈가격": close_price,
-                        "동적스탑": effective_stop,
-                        "수익률": gain_pct,
-                        "ATR": atr_value,
-                    })
-                    return signals
-
-                # ===============================
-                # 15:10 이후 전일저가 이탈 감시 (손실 구간만 적용)
-                # 수익 구간에서는 동적 트레일링으로 이미 보호됨
-                # ===============================
-                if current_time >= "151000" and prev_low is not None and gain_pct < 0:
-                    if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                        trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
-                        i_trail_plan = trail_plan if trail_plan else "100"
-                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                        trail_amt = close_price * trail_qty
-                        u_basic_qty = basic_qty - trail_qty
-                        u_basic_amt = basic_price * u_basic_qty
-
-                        try:
-                            result = update_trading_daily_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '금일종가 전일저가 이탈')
-                            if result:
-                                if verbose:
-                                    message = (
-                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 전일 저가 : {prev_low:,}원 이탈 및 전일 거래량 대비 50% : {int(prev_volume/2):,}주 돌파"
-                                    )
-                                    print(message)
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode='HTML'
-                                    )
-
-                        except Exception as e:
-                            print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
-
+                    if sell_signal_type == "DYNAMIC_TRAIL_STOP":
                         signals.append({
-                            "signal_type": "DAILY_BREAKDOWN_AFTER_1510",
+                            "signal_type": sell_signal_type,
+                            "종목명": stock_name,
+                            "종목코드": stock_code,
+                            "발생일자": row["일자"],
+                            "발생시간": row["시간"],
+                            "이탈가격": close_price,
+                            "동적스탑": effective_stop,
+                            "수익률": gain_pct,
+                            "ATR": atr_value,
+                        })
+                    elif sell_signal_type == "DAILY_BREAKDOWN_AFTER_1510":
+                        signals.append({
+                            "signal_type": sell_signal_type,
                             "종목코드": stock_code,
                             "발생일자": row["일자"],
                             "발생시간": row["시간"],
@@ -1019,7 +1015,16 @@ def get_kis_1min_from_datetime(
                             "전일저가": prev_low,
                             "전일거래량 대비 50%": int(prev_volume/2),
                         })
-                        return signals
+                    else:
+                        signals.append({
+                            "signal_type": sell_signal_type,
+                            "종목코드": stock_code,
+                            "발생일자": row["일자"],
+                            "발생시간": row["시간"],
+                            "이탈가격": close_price,
+                            "수익률": gain_pct,
+                        })
+                    return signals
 
     else:
 
