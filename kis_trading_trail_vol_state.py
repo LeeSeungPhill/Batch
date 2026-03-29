@@ -476,7 +476,8 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
 
 def calculate_atr(daily_data, period=14):
     """ATR(Average True Range) 계산 - 일봉 데이터 기반"""
-    if len(daily_data) < 2:
+    if len(daily_data) < period + 1:
+        print(f"ATR 계산 불가: 일봉 데이터 {len(daily_data)}건 (최소 {period + 1}건 필요)")
         return None
     trs = []
     for i in range(1, len(daily_data)):
@@ -485,9 +486,6 @@ def calculate_atr(daily_data, period=14):
         prev_c = daily_data[i-1]['close_price']
         tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
         trs.append(tr)
-    if len(trs) < period:
-        # 데이터 부족 시 가용한 전체 TR 평균 사용
-        return int(sum(trs) / len(trs)) if trs else None
     return int(sum(trs[-period:]) / period)
 
 def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result):
@@ -887,8 +885,8 @@ def get_kis_1min_from_datetime(
         # ATR 기반 동적 트레일링 스탑 초기화
         daily_data = get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret)
         atr_value = calculate_atr(daily_data, period=14)
-        if atr_value is None:
-            # ATR 계산 불가 시 매수가의 3% 사용
+        if atr_value is None or atr_value < int(basic_price * 0.01):
+            print(f"ATR fallback 적용: 원래값={atr_value}, 매수가={basic_price:,}, fallback={int(basic_price * 0.03):,}")
             atr_value = int(basic_price * 0.03)
         day_high_close = basic_price  # 보유 기간 중 최고 종가 추적
 
