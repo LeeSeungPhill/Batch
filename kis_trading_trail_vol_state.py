@@ -969,13 +969,13 @@ def get_kis_1min_from_datetime(
                                 breakdown_wait["tenmin_vol_ok"] = _is_tenmin_vol_surge(trigger_key)
                                 if not breakdown_wait["tenmin_vol_ok"]:
                                     # 거래량 미충족 → 이탈 조건 무효화
-                                    if verbose:
-                                        msg_vol = (
-                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" 이탈 감지됐으나 10분봉 거래량 미충족 → 매도 취소"
-                                        )
-                                        print(msg_vol)
-                                        bot.send_message(chat_id=chat_id, text=msg_vol, parse_mode='HTML')
+                                    # if verbose:
+                                    #     msg_vol = (
+                                    #         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    #         f" 이탈 감지됐으나 10분봉 거래량 미충족 → 매도 취소"
+                                    #     )
+                                    #     print(msg_vol)
+                                    #     bot.send_message(chat_id=chat_id, text=msg_vol, parse_mode='HTML')
                                     breakdown_wait["active"] = False
 
                     if breakdown_wait["active"] and breakdown_wait["tenmin_low"] is not None:
@@ -1042,28 +1042,29 @@ def get_kis_1min_from_datetime(
                                 "signal_type": "FIXED_STOP",
                                 "effective_stop": fixed_stop,
                             })
-                            if verbose:
-                                msg_wait = (
-                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                    f" 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
-                                )
-                                print(msg_wait)
-                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                            # if verbose:
+                            #     msg_wait = (
+                            #         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                            #         f" 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
+                            #     )
+                            #     print(msg_wait)
+                            #     bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
 
                         # ===============================
                         # 15:00 전일저가 이탈 사전 경고 알림 (매도 10분 전)
                         # ===============================
                         if not prevlow_warn_sent and current_time >= "150000" and current_time < "151000" and prev_low is not None:
-                            prevlow_warn_sent = True
-                            gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
-                            msg_warn = (
-                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                f" [사전경고] 15:10 전일저가 이탈 감시 시작 예정"
-                                f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
-                                f" | 수익률:{gain_pct_warn:+.1f}%"
-                            )
-                            print(msg_warn)
-                            bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
+                            if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                                prevlow_warn_sent = True
+                                gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
+                                msg_warn = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    f" [사전경고] 15:10 전일저가 이탈 감시 시작 예정"
+                                    f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
+                                    f" | 수익률:{gain_pct_warn:+.1f}%"
+                                )
+                                print(msg_warn)
+                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
 
                         # ===============================
                         # 15:10 이후 전일저가 이탈 감시
@@ -1257,13 +1258,13 @@ def get_kis_1min_from_datetime(
                                             breakdown_wait_1["tenmin_low"] = trigger_bars_1["저가"].astype(int).min()
                                             breakdown_wait_1["tenmin_vol_ok"] = _is_tenmin_vol_surge_1(trigger_key_1)
                                             if not breakdown_wait_1["tenmin_vol_ok"]:
-                                                if verbose:
-                                                    msg_vol = (
-                                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                                        f" 이탈 감지됐으나 10분봉 거래량 미충족 → 매도 취소"
-                                                    )
-                                                    print(msg_vol)
-                                                    bot.send_message(chat_id=chat_id, text=msg_vol, parse_mode='HTML')
+                                                # if verbose:
+                                                #     msg_vol = (
+                                                #         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                                #         f" 이탈 감지됐으나 10분봉 거래량 미충족 → 매도 취소"
+                                                #     )
+                                                #     print(msg_vol)
+                                                #     bot.send_message(chat_id=chat_id, text=msg_vol, parse_mode='HTML')
                                                 breakdown_wait_1["active"] = False
 
                                 if breakdown_wait_1["active"] and breakdown_wait_1["tenmin_low"] is not None:
@@ -1309,13 +1310,13 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "손절매도",
                                     })
-                                    if verbose:
-                                        msg_wait = (
-                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" 돌파 전 이탈가({exit_price:,}) 이탈 감지 → 10분봉 저가·거래량 확인 대기"
-                                        )
-                                        print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                    # if verbose:
+                                    #     msg_wait = (
+                                    #         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    #         f" 돌파 전 이탈가({exit_price:,}) 이탈 감지 → 10분봉 저가·거래량 확인 대기"
+                                    #     )
+                                    #     print(msg_wait)
+                                    #     bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
 
                                 # 매수금액 대상: 손절가(stop_price) 이탈
                                 elif not pre_market and trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:
@@ -1327,13 +1328,13 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "이탈매도",
                                     })
-                                    if verbose:
-                                        msg_wait = (
-                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" 돌파 전 이탈가({stop_price:,}) 이탈 감지 → 10분봉 저가·거래량 확인 대기"
-                                        )
-                                        print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                    # if verbose:
+                                    #     msg_wait = (
+                                    #         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    #         f" 돌파 전 이탈가({stop_price:,}) 이탈 감지 → 10분봉 저가·거래량 확인 대기"
+                                    #     )
+                                    #     print(msg_wait)
+                                    #     bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
 
                             # 목표가 돌파
                             if breakout_check >= target_price:
