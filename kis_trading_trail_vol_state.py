@@ -1381,6 +1381,7 @@ def get_kis_1min_from_datetime(
                             tenmin_high = tenmin_df["고가"].astype(int).max()
                             tenmin_vol = tenmin_df["거래량"].astype(int).sum()
                             tenmin_close = close_price                                 # 이탈 판단: 10분봉 종가(마지막 1분봉 종가)
+                            sell_price = close_price
 
                              # ── 매도 조건 판단 (이탈 기준: 10분봉 종가) ─────────────────
                             sell_trigger = False
@@ -1391,6 +1392,7 @@ def get_kis_1min_from_datetime(
                             # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 즉시 매도 (손절)
                             if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
                                 sell_trigger = True
+                                sell_price = tenmin_state['base_low']
                                 sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
                             # 조건 B: 고점 대비 되돌림 → 수익 구간 동적 청산 (peak retracement)
@@ -1402,6 +1404,7 @@ def get_kis_1min_from_datetime(
                                 peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * effective_retracement_rate)
                                 if tenmin_close < peak_sell_threshold:
                                     sell_trigger = True
+                                    sell_price = peak_sell_threshold
                                     sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈"
 
                             # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
@@ -1422,16 +1425,16 @@ def get_kis_1min_from_datetime(
                                 sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
 
                             if sell_trigger:
-                                trail_rate = round((100 - (close_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                                trail_rate = round((100 - (sell_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "50"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                                trail_amt = close_price * trail_qty
+                                trail_amt = sell_price * trail_qty
                                 u_basic_qty = basic_qty - trail_qty
                                 u_basic_amt = basic_price * u_basic_qty
 
                                 if basic_qty == trail_qty:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료')
+                                        result = update_trading_close(nick, sell_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료')
                                         if result:
                                             if verbose:
                                                 message = (
@@ -1448,7 +1451,7 @@ def get_kis_1min_from_datetime(
 
                                 else:
                                     try:
-                                        result = update_trading_close(nick, close_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진')
+                                        result = update_trading_close(nick, sell_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진')
                                         if result:
                                             if verbose:
                                                 message = (
