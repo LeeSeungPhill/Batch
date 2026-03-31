@@ -874,8 +874,8 @@ def callback_get(update, context) :
             g_holding_sell_price = h_price
             menuNum = "92"
             query.edit_message_text(
-                text=f"[{h_name}(<code>{h_code}</code>)]\n"
-                     f"현재가: {format(h_price, ',d')}원, 보유량: {format(h_qty, ',d')}주, 매도 비율(%)을 입력하세요.", parse_mode='HTML'
+                text=f"[{h_name}(<code>{h_code}</code>)] 현재가: {format(h_price, ',d')}원, 보유량: {format(h_qty, ',d')}주\n"
+                     f"종목코드(종목명), 매도 비율(%)을 입력하세요.", parse_mode='HTML'
             )
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
