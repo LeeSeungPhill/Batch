@@ -124,6 +124,12 @@ g_buy21_loss_buy_amt = 0     # 손절금액 기준 매수금액
 g_buy21_amt_buy_qty = 0      # 매수금액 기준 매수량
 g_buy21_amt_buy_amt = 0      # 매수금액 기준 매수금액
 
+# 보유종목 매도 상태
+g_holding_sell_code = ""
+g_holding_sell_name = ""
+g_holding_sell_qty = 0
+g_holding_sell_price = 0
+
 # 추적등록(손절금액) 미리보기 → 진행 콜백 공유 상태
 g_trail71_code = ""
 g_trail71_company = ""
@@ -849,6 +855,33 @@ def callback_get(update, context) :
                                       message_id=query.message.message_id)
         return
 
+    elif command.startswith("holding_"):
+        # 보유종목 종목 선택 → 잔고 재조회 후 매도 비율 입력 안내
+        h_code = command[len("holding_"):]
+        ac_h = account()
+        try:
+            c_h = stock_balance(ac_h['access_token'], ac_h['app_key'], ac_h['app_secret'], ac_h['acct_no'], "")
+            matched = [(c_h['prdt_name'][i], int(c_h['hldg_qty'][i]), int(c_h['prpr'][i]))
+                       for i, _ in enumerate(c_h.index) if c_h['pdno'][i] == h_code and int(c_h['hldg_qty'][i]) > 0]
+            if not matched:
+                query.edit_message_text(text=f"[{h_code}] 보유 수량이 없습니다.")
+                return
+            h_name, h_qty, h_price = matched[0]
+            global g_holding_sell_code, g_holding_sell_name, g_holding_sell_qty, g_holding_sell_price
+            g_holding_sell_code = h_code
+            g_holding_sell_name = h_name
+            g_holding_sell_qty = h_qty
+            g_holding_sell_price = h_price
+            menuNum = "92"
+            query.edit_message_text(
+                text=f"[{h_name}(<code>{h_code}</code>)]\n"
+                     f"현재가: {format(h_price, ',d')}원 | 보유량: {format(h_qty, ',d')}주\n"
+                     f"매도 비율(%)을 입력하세요. (예: 50 → {h_qty//2}주, 100 → {h_qty}주)",
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
+
     elif command == "보유종목":
 
         ac = account()
@@ -904,7 +937,7 @@ def callback_get(update, context) :
 
                 for idx, chunk in enumerate(chunks):
                     final_message = "\n\n".join(chunk) # 가독성을 위해 두 줄 바꿈 사용
-                    
+
                     if idx == 0:
                         # 첫 번째 묶음은 기존 메뉴 메시지를 수정해서 출력
                         context.bot.edit_message_text(
@@ -920,12 +953,36 @@ def callback_get(update, context) :
                             parse_mode='HTML',
                             chat_id=query.message.chat_id
                         )
+
+                # 보유종목 매도 선택 버튼 (종목별 1개씩)
+                if len(c.index) > 0:
+                    hold_buttons = []
+                    for i, name in enumerate(c.index):
+                        h_code = c['pdno'][i]
+                        h_name = c['prdt_name'][i]
+                        h_qty = int(c['hldg_qty'][i])
+                        if h_qty > 0:
+                            hold_buttons.append(
+                                InlineKeyboardButton(
+                                    f"{h_name}({h_code})",
+                                    callback_data=f"menu,holding_{h_code}"
+                                )
+                            )
+                    if hold_buttons:
+                        hold_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                        # 한 행에 2개씩
+                        rows = [hold_buttons[i:i+2] for i in range(0, len(hold_buttons), 2)]
+                        context.bot.send_message(
+                            text="매도할 종목을 선택하세요:",
+                            chat_id=query.message.chat_id,
+                            reply_markup=InlineKeyboardMarkup(rows)
+                        )
             else:
                 context.bot.edit_message_text(
                     text="보유종목 조회 대상이 존재하지 않습니다.",
                     chat_id=query.message.chat_id,
                     message_id=query.message.message_id
-                )  
+                )
 
         except Exception as e:
             print('보유종목 조회 오류.', e)
@@ -3071,7 +3128,52 @@ def echo(update, context):
             
             else:
                 print("매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")                             
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
+
+        elif menuNum == '92':
+            initMenuNum()
+            ratio_text = user_text.strip()
+            if not ratio_text.isdecimal() or not (1 <= int(ratio_text) <= 100):
+                context.bot.send_message(chat_id=user_id, text=f"[{g_holding_sell_name}] 매도 비율은 1~100 사이 정수로 입력하세요.")
+            else:
+                sell_ratio = int(ratio_text)
+                sell_qty = max(1, int(g_holding_sell_qty * sell_ratio / 100))
+                sell_price_92 = g_holding_sell_price
+
+                def process_sell_92():
+                    try:
+                        ac_s = account()
+                        c_ord = order_cash(False, ac_s['access_token'], ac_s['app_key'], ac_s['app_secret'],
+                                           str(ac_s['acct_no']), g_holding_sell_code, "00",
+                                           str(sell_qty), str(sell_price_92))
+                        if c_ord is not None and c_ord['ODNO'] != "":
+                            time.sleep(0.5)
+                            output1 = daily_order_complete(ac_s['access_token'], ac_s['app_key'], ac_s['app_secret'],
+                                                           ac_s['acct_no'], g_holding_sell_code, c_ord['ODNO'])
+                            tdf = pd.DataFrame(output1)
+                            tdf.set_index('odno')
+                            d_ord = tdf[['odno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'tot_ccld_amt', 'rmn_qty']]
+                            for i, _ in enumerate(d_ord.index):
+                                d_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
+                                d_qty = d_ord['ord_qty'][i]
+                                d_no = int(d_ord['odno'][i])
+                                context.bot.send_message(
+                                    chat_id=user_id,
+                                    text=f"[{g_holding_sell_name}(<code>{g_holding_sell_code}</code>)] "
+                                         f"매도가:{format(int(d_price), ',d')}원 | 매도량:{format(int(d_qty), ',d')}주 "
+                                         f"({sell_ratio}%) 매도주문 완료, 주문번호:<code>{d_no}</code>",
+                                    parse_mode='HTML'
+                                )
+                        else:
+                            context.bot.send_message(
+                                chat_id=user_id,
+                                text=f"[{g_holding_sell_name}] 매도가:{format(sell_price_92, ',d')}원 | "
+                                     f"매도량:{format(sell_qty, ',d')}주 매도주문 실패"
+                            )
+                    except Exception as e:
+                        context.bot.send_message(chat_id=user_id, text=f"[{g_holding_sell_name}] 매도주문 오류: {str(e)}")
+
+                threading.Thread(target=process_sell_92).start()
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
