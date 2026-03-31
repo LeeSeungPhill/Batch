@@ -875,9 +875,7 @@ def callback_get(update, context) :
             menuNum = "92"
             query.edit_message_text(
                 text=f"[{h_name}(<code>{h_code}</code>)]\n"
-                     f"현재가: {format(h_price, ',d')}원 | 보유량: {format(h_qty, ',d')}주\n"
-                     f"매도 비율(%)을 입력하세요. (예: 50 → {h_qty//2}주, 100 → {h_qty}주)",
-                parse_mode='HTML'
+                     f"현재가: {format(h_price, ',d')}원, 보유량: {format(h_qty, ',d')}주, 매도 비율(%)을 입력하세요.", parse_mode='HTML'
             )
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
@@ -3132,7 +3130,11 @@ def echo(update, context):
 
         elif menuNum == '92':
             initMenuNum()
-            ratio_text = user_text.strip()
+            ratio_text = 0
+            if len(user_text.split(",")) > 0:
+                commandBot = user_text.split(sep=',', maxsplit=2)
+                print("commandBot[1] : ", commandBot[1])    # 매도율
+                ratio_text = commandBot[1]
             if not ratio_text.isdecimal() or not (1 <= int(ratio_text) <= 100):
                 context.bot.send_message(chat_id=user_id, text=f"[{g_holding_sell_name}] 매도 비율은 1~100 사이 정수로 입력하세요.")
             else:
