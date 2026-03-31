@@ -809,6 +809,24 @@ def volume_rate_chk(current_time, vol_ratio):
 
     return is_volume_satisfied
 
+def get_valid_sell_price(price: int) -> int:
+    """KIS 호가단위 기준으로 price를 유효한 매도 호가로 내림처리."""
+    if price < 1000:
+        tick = 1
+    elif price < 5000:
+        tick = 5
+    elif price < 10000:
+        tick = 10
+    elif price < 50000:
+        tick = 50
+    elif price < 100000:
+        tick = 100
+    elif price < 500000:
+        tick = 500
+    else:
+        tick = 1000
+    return (price // tick) * tick
+
 def get_kis_1min_from_datetime(
     nick: str,
     stock_code: str,
@@ -869,6 +887,7 @@ def get_kis_1min_from_datetime(
 
         # 10분봉 거래량 집계 (전체 당일 데이터 기준 — 이전 20봉 평균 계산용)
         _df_tv = df.copy()
+        _df_tv["거래량"] = _df_tv["거래량"].astype(int)
         _df_tv["_tk"] = _df_tv["dt"].apply(get_10min_key)
         tenmin_vol_ser = (
             _df_tv.groupby("_tk")["거래량"].sum()
@@ -1143,7 +1162,6 @@ def get_kis_1min_from_datetime(
                 "base_low": int(stop_price) if stop_price else 0,
                 "base_high": int(target_price) if target_price else 0,
                 "base_vol": int(volumn) if volumn else 0,
-                "consecutive_down": 0,    # 연속 저가 이탈 카운터
                 "peak_high": int(target_price) if target_price else 0,  # 기준봉 갱신 이력 최고 고가
                 "base_key": None,         # 돌파 발생 10분봉 키 (DB 복원 시 None → 스킵 없음)
             }
@@ -1152,7 +1170,6 @@ def get_kis_1min_from_datetime(
                 "base_low": None,         # 기준봉 저가
                 "base_high": None,        # 기준봉 고가
                 "base_vol": None,         # 기준봉 거래량
-                "consecutive_down": 0,    # 연속 저가 이탈 카운터
                 "peak_high": 0,           # 기준봉 갱신 이력 최고 고가
                 "base_key": None,         # 돌파 발생 10분봉 키
             }
@@ -1185,6 +1202,7 @@ def get_kis_1min_from_datetime(
         # trail_tp='1' 이탈가 이탈 후 10분봉 저가·거래량 대기 상태
         if trail_tp == '1':
             _df_tv_1 = df.copy()
+            _df_tv_1["거래량"] = _df_tv_1["거래량"].astype(int)
             _df_tv_1["_tk"] = _df_tv_1["dt"].apply(get_10min_key)
             tenmin_vol_ser_1 = (
                 _df_tv_1.groupby("_tk")["거래량"].sum()
@@ -1374,7 +1392,6 @@ def get_kis_1min_from_datetime(
                         if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
                             if completed_key == tenmin_state["base_key"]:
                                 continue
-                            # [버그1 수정] 현재 형성 중인 10분봉 스킵 — 완성된 봉만 처리
                             if completed_key >= current_10min_key:
                                 continue
                             tenmin_low = tenmin_df["저가"].astype(int).min()          # 기준봉 갱신용
@@ -1390,27 +1407,29 @@ def get_kis_1min_from_datetime(
                             PEAK_RETRACEMENT_RATE = 0.5  # 고점~안전마진 구간 중 허용 되돌림 비율 (50%)
 
                             # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 즉시 매도 (손절)
+                            # 매도가 하한: basic_price (보유단가 이상 체결 시도), 호가단위 내림
                             if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
                                 sell_trigger = True
-                                sell_price = tenmin_state['base_low']
-                                sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
+                                sell_price = get_valid_sell_price(max(tenmin_close, basic_price))
+                                sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈 (매도가:{sell_price:,})"
 
                             # 조건 B: 고점 대비 되돌림 → 수익 구간 동적 청산 (peak retracement)
                             # 활성화 조건: safety_margin 초과(수익 확보) + 최소 2% 이상 상승폭
                             # 14:30 이후 수익 보호 강화: 되돌림 허용 비율 50% → 30%
+                            # 매도가 하한: safety_margin × 1.02 (안전마진 + 2% 이상), 호가단위 내림
                             peak_to_safety = tenmin_state["peak_high"] - safety_margin
                             effective_retracement_rate = 0.3 if current_time >= dt_time(14, 30) else PEAK_RETRACEMENT_RATE
                             if not sell_trigger and tenmin_state["peak_high"] > safety_margin and peak_to_safety >= int(basic_price * 0.02):
                                 peak_sell_threshold = tenmin_state["peak_high"] - int(peak_to_safety * effective_retracement_rate)
                                 if tenmin_close < peak_sell_threshold:
                                     sell_trigger = True
-                                    sell_price = peak_sell_threshold
-                                    sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈"
+                                    sell_price = get_valid_sell_price(max(tenmin_close, int(safety_margin * 1.02)))
+                                    sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈 (매도가:{sell_price:,})"
 
                             # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                             # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                             # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
-                            # [버그3 수정] consecutive_down은 run 간 리셋되므로 df에서 직접 이전 봉 종가 조회
+                            # 매도가 하한: safety_margin (안전마진 이상), 호가단위 내림
                             prev_key = completed_key - timedelta(minutes=10)
                             prev_tenmin_df = df[df["dt"].apply(get_completed_10min_key) == prev_key]
                             if not prev_tenmin_df.empty:
@@ -1422,7 +1441,8 @@ def get_kis_1min_from_datetime(
                             late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
                             if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or consecutive_breaks >= late_day_consec_threshold):
                                 sell_trigger = True
-                                sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈"
+                                sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
+                                sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈 (매도가:{sell_price:,})"
 
                             if sell_trigger:
                                 trail_rate = round((100 - (sell_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
@@ -1499,7 +1519,6 @@ def get_kis_1min_from_datetime(
 
                                     update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
 
-                            # [버그2 수정] 매도/갱신 없이 완성된 봉 처리 시에도 proc_min 전진
                             # → 다음 1분 실행 시 이미 처리한 봉 재처리 방지
                             if not base_updated:
                                 update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["base_high"]), int(tenmin_state["base_vol"]), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00')
