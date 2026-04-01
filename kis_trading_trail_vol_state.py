@@ -870,6 +870,10 @@ def get_kis_1min_from_datetime(
         app_secret
     )
 
+    if prev_day_info is None:
+        print(f"[{stock_name}-{stock_code}] 전일 일봉 데이터 미존재")
+        return signals
+
     prev_low = prev_day_info['low_price']
     prev_volume = prev_day_info['volume']
 
