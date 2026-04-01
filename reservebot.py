@@ -1826,6 +1826,8 @@ def callback_get(update, context) :
                         app_key=app_key,
                         app_secret=app_secret
                     )
+                    if stck_prpr is None:
+                        stck_prpr = 0
                     stck_rate = round((100-(stck_prpr/basic_price)*100)*-1,2) if basic_price > 0 else 0  # 수익률
                     trail = ""
                     if trail_price > 0:
@@ -3130,10 +3132,9 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=3)
                 print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
                 print("commandBot[2] : ", commandBot[2])    # 매도율
-                ratio_text = commandBot[1]
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                 # 매도가(현재가:0)
                 ratio_text = commandBot[2]                                                                  # 매도율
-            if not sell_price.isdecimal() and (not ratio_text.isdecimal() or not (1 <= int(ratio_text) <= 100)):
+            if not commandBot[1].isdecimal() and (not ratio_text.isdecimal() or not (1 <= int(ratio_text) <= 100)):
                 context.bot.send_message(chat_id=user_id, text=f"[{company}] 매도가(현재가:0) 정수 또는 매도 비율은 1~100 사이 정수로 입력하세요.")
             else:
                 sell_ratio = int(ratio_text)
