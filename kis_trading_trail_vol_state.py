@@ -952,7 +952,7 @@ def get_kis_1min_from_datetime(
             "effective_stop": 0,      # 트리거 시점 스탑 가격
         }
         # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (중복 방지)
-        prevlow_warn_sent = False
+        prevlow_warn_last_key = None  # 전일저가 이탈 경고 마지막 전송 10분봉 키
 
         for _, row in df.iterrows():
 
@@ -1067,30 +1067,31 @@ def get_kis_1min_from_datetime(
                                 "effective_stop": fixed_stop,
                             })
 
-                        # ===============================
-                        # 15:00 전일저가 이탈 사전 경고 알림 (매도 10분 전)
-                        # ===============================
-                        if not prevlow_warn_sent and current_time >= "150000" and current_time < "151000" and prev_low is not None:
-                            if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                                prevlow_warn_sent = True
+                    # ===============================
+                    # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
+                    # ===============================
+                    if current_time >= "091000" and current_time < "151000" and prev_low is not None:
+                        if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                            if current_10min_key != prevlow_warn_last_key:
+                                prevlow_warn_last_key = current_10min_key
                                 gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
                                 msg_warn = (
                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                    f" [사전경고] 15:10 전일저가 이탈 감시 시작 예정"
+                                    f" [사전경고] 전일저가 이탈 감시"
                                     f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
                                     f" | 수익률:{gain_pct_warn:+.1f}%"
                                 )
                                 print(msg_warn)
                                 bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
 
-                        # ===============================
-                        # 15:10 이후 전일저가 이탈 감시
-                        # ===============================
-                        if not breakdown_wait["active"] and current_time >= "151000" and prev_low is not None:
-                            if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                                sell_trigger = True
-                                sell_reason = '금일종가 전일저가 이탈'
-                                sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
+                    # ===============================
+                    # 15:10 이후 전일저가 이탈 감시 (gain_pct 무관)
+                    # ===============================
+                    if not breakdown_wait["active"] and not sell_trigger and current_time >= "151000" and prev_low is not None:
+                        if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                            sell_trigger = True
+                            sell_reason = '금일종가 전일저가 이탈'
+                            sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
 
                 # ===============================
                 # 매도 실행 (공통)
