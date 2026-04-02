@@ -953,6 +953,8 @@ def get_kis_1min_from_datetime(
         }
         # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (중복 방지)
         prevlow_warn_last_key = None  # 전일저가 이탈 경고 마지막 전송 10분봉 키
+        # 이탈 감지 메시지 10분봉 중복 전송 방지
+        breakdown_notify_last_key = None  # 이탈 감지 메시지 마지막 전송 10분봉 키
 
         for _, row in df.iterrows():
 
@@ -1038,7 +1040,8 @@ def get_kis_1min_from_datetime(
                                 "signal_type": "DYNAMIC_TRAIL_STOP",
                                 "effective_stop": effective_stop,
                             })
-                            if verbose:
+                            if verbose and current_10min_key != breakdown_notify_last_key:
+                                breakdown_notify_last_key = current_10min_key
                                 msg_wait = (
                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
                                     f" 동적스탑({effective_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
@@ -1066,6 +1069,14 @@ def get_kis_1min_from_datetime(
                                 "signal_type": "FIXED_STOP",
                                 "effective_stop": fixed_stop,
                             })
+                            if verbose and current_10min_key != breakdown_notify_last_key:
+                                breakdown_notify_last_key = current_10min_key
+                                msg_wait = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    f" 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
+                                )
+                                print(msg_wait)
+                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
 
                     # ===============================
                     # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
