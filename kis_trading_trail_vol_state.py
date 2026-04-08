@@ -959,6 +959,11 @@ def get_kis_1min_from_datetime(
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
+                # ── 매 분봉 시작마다 sell_trigger 초기화 (이전 루프 잔존값 방지) ──
+                sell_trigger     = False
+                sell_reason      = ""
+                sell_signal_type = ""
+
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
@@ -1002,7 +1007,18 @@ def get_kis_1min_from_datetime(
                                 breakdown_wait["tenmin_vol"] = cur_vol
                                 breakdown_wait["tenmin_avg_vol"] = avg_vol
                                 if not vol_ok:
-                                    breakdown_wait["active"] = False
+                                    # 거래량 미충족 → 잔존 상태 방지를 위해 전체 리셋
+                                    breakdown_wait.update({
+                                        "active": False,
+                                        "tenmin_key": None,
+                                        "tenmin_low": None,
+                                        "tenmin_vol_ok": None,
+                                        "tenmin_vol": 0,
+                                        "tenmin_avg_vol": 0,
+                                        "reason": "",
+                                        "signal_type": "",
+                                        "effective_stop": 0,
+                                    })
 
                     if breakdown_wait["active"] and breakdown_wait["tenmin_low"] is not None:
                         # 거래량 조건 충족 확정 + 현재 저가가 이탈 발생 10분봉 저가 이탈 시 매도
@@ -1258,6 +1274,11 @@ def get_kis_1min_from_datetime(
         for _, row in df.iterrows():
 
             if int(proc_min) < int(row['시간'].replace(':', '')+'00'):
+                # ── 매 분봉 시작마다 sell_trigger 초기화 (이전 루프 잔존값 방지) ──
+                sell_trigger     = False
+                sell_reason      = ""
+                sell_signal_type = ""
+
                 high_price = int(row["고가"])
                 low_price = int(row["저가"])
                 close_price = int(row["종가"])
@@ -1295,7 +1316,16 @@ def get_kis_1min_from_datetime(
                                             breakdown_wait_1["tenmin_vol"] = cur_vol_1
                                             breakdown_wait_1["tenmin_avg_vol"] = avg_vol_1
                                             if not vol_ok_1:
-                                                breakdown_wait_1["active"] = False
+                                                # 거래량 미충족 → 잔존 상태 방지를 위해 전체 리셋
+                                                breakdown_wait_1.update({
+                                                    "active": False,
+                                                    "tenmin_key": None,
+                                                    "tenmin_low": None,
+                                                    "tenmin_vol_ok": None,
+                                                    "tenmin_vol": 0,
+                                                    "tenmin_avg_vol": 0,
+                                                    "sell_label": "",
+                                                })
 
                                 if breakdown_wait_1["active"] and breakdown_wait_1["tenmin_low"] is not None:
                                     if low_price < breakdown_wait_1["tenmin_low"]:
