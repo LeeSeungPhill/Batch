@@ -410,7 +410,13 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
     # 자산정보 조회
     cur100 = conn.cursor()
-    cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt, (select (risk_sum / item_number)::int from public.\"stockMarketMng_stock_market_mng\" where acct_no = A.acct_no and aply_end_dt = '99991231') as risk_amt from \"stockFundMng_stock_fund_mng\" A where acct_no = '" + str(acct_no) + "'")
+    cur100.execute("""
+        SELECT asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt, sell_plan_amt,
+               (SELECT (risk_sum / item_number)::int FROM public."stockMarketMng_stock_market_mng"
+                WHERE acct_no = A.acct_no AND aply_end_dt = '99991231') AS risk_amt
+        FROM "stockFundMng_stock_fund_mng" A
+        WHERE acct_no = %s
+    """, (str(acct_no),))
     result_one00 = cur100.fetchall()
     cur100.close()
 
@@ -558,7 +564,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
 
                 # 현재일 최근 체결된 해당종목의 일별체결정보 조회
                 cur302 = conn.cursor()
-                cur302.execute("select paid_fee, profit_loss_amt, paid_tax from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and name = '" + item['prdt_name'] + "' and order_dt = '" + today_str + "' and total_complete_qty::int > 0")
+                cur302.execute("""
+                    SELECT paid_fee, profit_loss_amt, paid_tax
+                    FROM "stockOrderComplete_stock_order_complete" A
+                    WHERE acct_no = %s AND name = %s AND order_dt = %s AND total_complete_qty::int > 0
+                """, (str(acct_no), item['prdt_name'], today_str))
                 result_one32 = cur302.fetchall()
                 cur302.close()
 
@@ -856,7 +866,10 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                     if item['원주문번호'] != "":
                         # 원주문번호의 일별체결정보 조회
                         cur401 = conn.cursor()
-                        cur401.execute("select hold_price from \"stockOrderComplete_stock_order_complete\" A where acct_no = '" + str(acct_no) + "' and order_no = '" + item['원주문번호'] + "' and order_dt = '" + today_str + "'")
+                        cur401.execute("""
+                            SELECT hold_price FROM "stockOrderComplete_stock_order_complete" A
+                            WHERE acct_no = %s AND order_no = %s AND order_dt = %s
+                        """, (str(acct_no), item['원주문번호'], today_str))
                         result_one41 = cur401.fetchone()
                         cur401.close()
 
@@ -1256,7 +1269,7 @@ def main(telegram_text):
 
 # 휴일정보 조회
 cur0 = conn.cursor()
-cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
+cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
 result_one = cur0.fetchone()
 cur0.close()
 
@@ -1279,7 +1292,19 @@ if result_one == None:
     
             # 보유정보 조회
             cur03 = conn.cursor()
-            cur03.execute("select code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '02') as market_dead, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = '0001' and trail_signal_code = '04') as market_over, case when cast(A.purchase_amount as INTEGER) > 0 then (select B.low_price from dly_stock_balance B where A.code = B.code and A.acct_no = cast(B.acct as INTEGER) and B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD')) else null end as low_price, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = A.code and trail_signal_code = '07') as regist_over, (select 1 from trail_signal_recent where acct_no = '"+str(acct_no)+"' and trail_day = TO_CHAR(now(), 'YYYYMMDD') and code = A.code and trail_signal_code = '09') as target_over, COALESCE(NULLIF(trading_plan, ''), 'as'), COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" A where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and (trading_plan is null or trading_plan not in ('i'))")
+            cur03.execute("""
+                SELECT code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '02') AS market_dead,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '04') AS market_over,
+                    CASE WHEN cast(A.purchase_amount AS INTEGER) > 0
+                         THEN (SELECT B.low_price FROM dly_stock_balance B WHERE A.code = B.code AND A.acct_no = cast(B.acct AS INTEGER) AND B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD'))
+                         ELSE null END AS low_price,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '07') AS regist_over,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '09') AS target_over,
+                    COALESCE(NULLIF(trading_plan, ''), 'as'), COALESCE(safe_margin_sum, 0)
+                FROM "stockBalance_stock_balance" A
+                WHERE acct_no = %s AND proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
+            """, (str(acct_no), str(acct_no), str(acct_no), str(acct_no), str(acct_no)))
             result_three = cur03.fetchall()
             cur03.close()
 
@@ -1291,7 +1316,9 @@ if result_one == None:
                     time.sleep(0.3)  # 초당 3건 이하로 제한
                     a = inquire_price(access_token, app_key, app_secret, i[0])
                 except Exception as ex:
-                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")  
+                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")
+                if not a:
+                    continue
 
                 trail_signal_code = ""
                 trail_signal_name = ""
@@ -1775,7 +1802,10 @@ if result_one == None:
 
                 # 추적정보 조회(현재일 종목코드 기준)
                 cur04 = conn.cursor()
-                cur04.execute("select TS.trail_signal_code, TS.trail_time from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+                cur04.execute("""
+                    SELECT TS.trail_signal_code, TS.trail_time FROM trail_signal TS
+                    WHERE TS.acct = %s AND TS.code = %s AND TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') AND trail_signal_code = %s
+                """, (str(acct_no), i[0], trail_signal_code))
                 result_four = cur04.fetchall()
                 cur04.close()
 
