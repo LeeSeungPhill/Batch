@@ -243,7 +243,11 @@ def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no):
 
     # 자산정보 조회
     cur100 = conn.cursor()
-    cur100.execute("select asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt from \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "'")
+    cur100.execute("""
+        SELECT asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt
+        FROM "stockFundMng_stock_fund_mng"
+        WHERE acct_no = %s
+    """, (str(acct_no),))
     result_one00 = cur100.fetchall()
     cur100.close()
 
@@ -264,7 +268,11 @@ def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no):
 
     # 시장레벨정보 조회
     cur300 = conn.cursor()
-    cur300.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
+    cur300.execute("""
+        SELECT asset_risk_num, market_level_num
+        FROM "stockMarketMng_stock_market_mng"
+        WHERE acct_no = %s AND aply_end_dt = '99991231'
+    """, (str(acct_no),))
     result_one01 = cur300.fetchall()
     cur300.close()
 
@@ -383,7 +391,14 @@ def fundTrail_proc():
 
     # 추적신호 조회(코스피) : 추적신호코드별 총평가금액 기준 현금비중금액 설정, 매도예정자금 설정(총평가금액 기준 현금비중금액 - 가수도정산금액), 매수예정자금 설정(가수도정산금액 - 총평가금액 기준 현금비중금액)
     cur300 = conn.cursor()
-    cur300.execute("select trail_signal_code, tot_evlu_amt, prvs_rcdl_excc_amt, asset_num from (select row_number() over(order by trail_day desc, trail_time desc) as num, A.trail_signal_code, B.tot_evlu_amt, B.prvs_rcdl_excc_amt, B.asset_num from trail_signal_recent A, \"stockFundMng_stock_fund_mng\" B where cast(A.acct_no as INTEGER) = B.acct_no and code = '0001' and A.acct_no = '" + str(acct_no) + "') T where num = 1")
+    cur300.execute("""
+        SELECT trail_signal_code, tot_evlu_amt, prvs_rcdl_excc_amt, asset_num
+        FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
+                     A.trail_signal_code, B.tot_evlu_amt, B.prvs_rcdl_excc_amt, B.asset_num
+              FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
+              WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '0001' AND A.acct_no = %s) T
+        WHERE num = 1
+    """, (str(acct_no),))
     result_one100 = cur300.fetchall()
     cur300.close()
 
@@ -451,7 +466,14 @@ def fundTrail_proc():
 
     # 추적신호 조회(코스닥) : 추적신호코드별 시장 흐름 설정, 코스피, 코스닥 조합 시장승률 설정
     cur500 = conn.cursor()
-    cur500.execute("select trail_signal_code, asset_num from (select row_number() over(order by trail_day desc, trail_time desc) as num, A.trail_signal_code, B.asset_num from trail_signal_recent A, \"stockFundMng_stock_fund_mng\" B where cast(A.acct_no as INTEGER) = B.acct_no and code = '1001' and A.acct_no = '" + str(acct_no) + "') T where num = 1")
+    cur500.execute("""
+        SELECT trail_signal_code, asset_num
+        FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
+                     A.trail_signal_code, B.asset_num
+              FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
+              WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '1001' AND A.acct_no = %s) T
+        WHERE num = 1
+    """, (str(acct_no),))
     result_one200 = cur500.fetchall()
     cur500.close()
 
@@ -543,7 +565,7 @@ def main(telegram_text):
 
 # 휴일정보 조회
 cur0 = conn.cursor()
-cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
+cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
 result_one = cur0.fetchone()
 cur0.close()
 
@@ -566,7 +588,21 @@ if result_one == None:
 
             # 관심정보 조회
             cur03 = conn.cursor()
-            cur03.execute("select code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, ROUND(B.buy_avail_cash*C.risk_rate*0.01/C.item_number, 0) as item_loss_sum from \"interestItem_interest_item\" A, (select row_number() over (order by id desc) as ROWNUM, prvs_rcdl_excc_amt, acct_no, case when cash_rate > COALESCE(market_ratio, 0) then ROUND(cash_rate*prvs_rcdl_excc_amt*0.01, 0) else ROUND(COALESCE(market_ratio, 0)*prvs_rcdl_excc_amt*0.01, 0) end as buy_avail_cash from \"stockFundMng_stock_fund_mng\" where acct_no = '"+str(acct_no)+"') B, (select acct_no, risk_rate, item_number from \"stockMarketMng_stock_market_mng\" where acct_no = '"+str(acct_no)+"' and aply_end_dt = '99991231') C where A.acct_no = B.acct_no and A.acct_no = C.acct_no and A.acct_no = '"+str(acct_no)+"' and B.rownum = 1")
+            cur03.execute("""
+                SELECT code, name, through_price, leave_price, resist_price, support_price,
+                       trend_high_price, trend_low_price,
+                       ROUND(B.buy_avail_cash * C.risk_rate * 0.01 / C.item_number, 0) AS item_loss_sum
+                FROM "interestItem_interest_item" A,
+                     (SELECT row_number() OVER (ORDER BY id DESC) AS ROWNUM, prvs_rcdl_excc_amt, acct_no,
+                             CASE WHEN cash_rate > COALESCE(market_ratio, 0)
+                                  THEN ROUND(cash_rate * prvs_rcdl_excc_amt * 0.01, 0)
+                                  ELSE ROUND(COALESCE(market_ratio, 0) * prvs_rcdl_excc_amt * 0.01, 0)
+                             END AS buy_avail_cash
+                      FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) B,
+                     (SELECT acct_no, risk_rate, item_number FROM "stockMarketMng_stock_market_mng"
+                      WHERE acct_no = %s AND aply_end_dt = '99991231') C
+                WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1
+            """, (str(acct_no), str(acct_no), str(acct_no)))
             result_three = cur03.fetchall()
             cur03.close()
 
@@ -586,7 +622,9 @@ if result_one == None:
                         time.sleep(0.3)  # 초당 3건 이하로 제한
                         a = inquire_price(access_token, app_key, app_secret, i[0])
                     except Exception as ex:
-                        print(f"현재가 시세 에러 : [{i[0]}] {ex}")                        
+                        print(f"현재가 시세 에러 : [{i[0]}] {ex}")
+                    if not a:
+                        continue
 
                     if cur_time > '0900' and cur_time < '0910':
                         if round(float(a['prdy_vrss_vol_rate'])) > 10:
@@ -608,6 +646,8 @@ if result_one == None:
 
                     n_buy_amount = 0
                     n_buy_sum = 0
+                    loss_price = 0
+                    item_loss_sum = 0
 
                     if cur_time > '1430' and cur_time < '1520':     # 장종료 1시간전 현재가 기준 돌파, 이탈 설정
 
@@ -732,7 +772,10 @@ if result_one == None:
 
                     # 추적정보 조회(현재일 종목코드 기준)
                     cur04 = conn.cursor()
-                    cur04.execute("select TS.trail_signal_code, TS.trail_time from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+                    cur04.execute("""
+                        SELECT TS.trail_signal_code, TS.trail_time FROM trail_signal TS
+                        WHERE TS.acct = %s AND TS.code = %s AND TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') AND trail_signal_code = %s
+                    """, (str(acct_no), i[0], trail_signal_code))
                     result_four = cur04.fetchall()
                     cur04.close()
 
@@ -745,7 +788,13 @@ if result_one == None:
                                     if vol_appear > 0:
                                         # 자산관리정보 조회
                                         cur041 = conn.cursor()
-                                        cur041.execute("select case when market_ratio = 0 then 100 - cash_rate else market_ratio end as market_ratio from (select row_number() over (order by id desc) as ROWNUM, cash_rate, COALESCE(market_ratio, 0) as market_ratio from  \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
+                                        cur041.execute("""
+                                            SELECT CASE WHEN market_ratio = 0 THEN 100 - cash_rate ELSE market_ratio END AS market_ratio
+                                            FROM (SELECT row_number() OVER (ORDER BY id DESC) AS ROWNUM,
+                                                         cash_rate, COALESCE(market_ratio, 0) AS market_ratio
+                                                  FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) A
+                                            WHERE A.ROWNUM = 1
+                                        """, (str(acct_no),))
                                         result_fourone = cur041.fetchall()
                                         cur041.close()
 
@@ -1167,7 +1216,10 @@ if result_one == None:
 
                     # 시장레벨정보 조회
                     cur05 = conn.cursor()
-                    cur05.execute("select asset_risk_num, market_level_num from \"stockMarketMng_stock_market_mng\" where acct_no = '" + str(acct_no) + "' and aply_end_dt = '99991231'")
+                    cur05.execute("""
+                        SELECT asset_risk_num, market_level_num FROM "stockMarketMng_stock_market_mng"
+                        WHERE acct_no = %s AND aply_end_dt = '99991231'
+                    """, (str(acct_no),))
                     result_five = cur05.fetchall()
                     cur05.close()
 
@@ -1255,7 +1307,10 @@ if result_one == None:
 
                     # 추적정보 조회(현재일 종목코드 기준)
                     cur04 = conn.cursor()
-                    cur04.execute("select TS.trail_signal_code from trail_signal TS where TS.acct = '" + str(acct_no) + "' and TS.code = '" + i[0] + "' and TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') and trail_signal_code = '" + trail_signal_code + "'")
+                    cur04.execute("""
+                        SELECT TS.trail_signal_code FROM trail_signal TS
+                        WHERE TS.acct = %s AND TS.code = %s AND TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') AND trail_signal_code = %s
+                    """, (str(acct_no), i[0], trail_signal_code))
                     result_four = cur04.fetchall()
                     cur04.close()
 

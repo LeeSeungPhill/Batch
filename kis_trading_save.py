@@ -226,7 +226,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
     
     insert_query1 = "with upsert as (update dly_acct_balance set dnca_tot_amt = %s, prvs_excc_amt = %s, td_buy_amt = %s, td_sell_amt = %s, td_tex_amt = %s, user_evlu_amt = %s, tot_evlu_amt = %s, nass_amt = %s, pchs_amt = %s, evlu_amt = %s, evlu_pfls_amt = %s, ytdt_tot_evlu_amt = %s, asst_icdc_amt = %s, total_profit_loss_amt = %s, buy_psbl_amt = %s, last_chg_date = %s where dt = %s and acct = %s returning * ) insert into dly_acct_balance(acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, total_profit_loss_amt, buy_psbl_amt, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
     # insert 인자값 설정
-    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1), int(result2), datetime.now(), today, str(acct_no),
+    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1) if result1 and result1 != [] else 0, int(result2) if result2 and result2 != [] else 0, datetime.now(), today, str(acct_no),
         str(acct_no), today, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1), int(result2), datetime.now()])
     # DB 연결된 커서의 쿼리 수행
     cur1.execute(insert_query1, record_to_insert1)
@@ -257,6 +257,11 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         e_eval_amt = int(e['evlu_amt'][i])              # 평가금액
         e_earnings_rate = e['evlu_pfls_rt'][i]          # 수익율
         e_valuation_amt = int(e['evlu_pfls_amt'][i])    # 평가손익금액
+        f_open_price = 0
+        f_high_price = 0
+        f_low_price = 0
+        f_volumn = 0
+        f_volumn_rate = 0.0
         f = ""
 
         try:
@@ -272,17 +277,65 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
 
         print(f"[{acct_no}-{e_name}] 보유가 : {format_number(e_purchase_price)}, 보유량 : {format_number(e_purchase_qty)}, 현재가 : {format_number(e_current_price)}, 평가손익 : {format_number(e_valuation_amt)}, 처리일시 : {datetime.now()}")
 
-        insert_query2 = "with upsert as (update dly_stock_balance set buy_qty = %s, sell_qty = %s, purchase_price = %s, purchase_qty = %s, purchase_amt = %s, current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, last_chg_date = %s, sign_resist_price = (select COALESCE(sign_resist_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), sign_support_price = (select COALESCE(sign_support_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), end_target_price = (select COALESCE(end_target_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), end_loss_price = (select COALESCE(end_loss_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), trading_plan = (select COALESCE(trading_plan, '') from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), limit_price = (select COALESCE(limit_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), limit_amt = (select COALESCE(limit_amt, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), safe_margin_sum = (select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"') where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_balance(acct, dt, name, code, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt, current_price, open_price, high_price, low_price, volumn, volumn_rate, eval_sum, earnings_rate, valuation_sum, last_chg_date, sign_resist_price, sign_support_price, end_target_price, end_loss_price, trading_plan, limit_price, limit_amt, safe_margin_sum) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select COALESCE(sign_resist_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(sign_support_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(end_target_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(end_loss_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(trading_plan, '') from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(limit_price, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(limit_amt, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"'), (select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = '"+str(acct_no)+"' and proc_yn = 'Y' and code = '"+e_code+"') where not exists(select * from upsert)"
+        # stockBalance 사전 조회 (SQL 인젝션 방지)
+        cur_sb = conn.cursor()
+        cur_sb.execute("""
+            SELECT COALESCE(sign_resist_price, 0), COALESCE(sign_support_price, 0),
+                   COALESCE(end_target_price, 0), COALESCE(end_loss_price, 0),
+                   COALESCE(trading_plan, ''), COALESCE(limit_price, 0),
+                   COALESCE(limit_amt, 0), COALESCE(safe_margin_sum, 0)
+            FROM "stockBalance_stock_balance"
+            WHERE acct_no = %s AND proc_yn = 'Y' AND code = %s
+        """, (str(acct_no), e_code[:6]))
+        sb_row = cur_sb.fetchone()
+        cur_sb.close()
+        sb = sb_row if sb_row else (0, 0, 0, 0, '', 0, 0, 0)
+
+        insert_query2 = """
+            WITH upsert AS (
+                UPDATE dly_stock_balance
+                SET buy_qty=%s, sell_qty=%s, purchase_price=%s, purchase_qty=%s, purchase_amt=%s,
+                    current_price=%s, open_price=%s, high_price=%s, low_price=%s,
+                    volumn=%s, volumn_rate=%s, eval_sum=%s, earnings_rate=%s, valuation_sum=%s,
+                    last_chg_date=%s,
+                    sign_resist_price=%s, sign_support_price=%s, end_target_price=%s,
+                    end_loss_price=%s, trading_plan=%s, limit_price=%s, limit_amt=%s, safe_margin_sum=%s
+                WHERE dt=%s AND code=%s AND acct=%s RETURNING *
+            )
+            INSERT INTO dly_stock_balance(
+                acct, dt, name, code, buy_qty, sell_qty, purchase_price, purchase_qty, purchase_amt,
+                current_price, open_price, high_price, low_price, volumn, volumn_rate,
+                eval_sum, earnings_rate, valuation_sum, last_chg_date,
+                sign_resist_price, sign_support_price, end_target_price, end_loss_price,
+                trading_plan, limit_price, limit_amt, safe_margin_sum
+            )
+            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            WHERE NOT EXISTS (SELECT * FROM upsert)
+        """
         # insert 인자값 설정
-        record_to_insert2 = ([e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt, e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate), e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now(), today, e_code[:6], str(acct_no),
-            str(acct_no), today, e_name, e_code[:6], e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt, e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate), e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now()])
+        record_to_insert2 = (
+            e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt,
+            e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate),
+            e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now(),
+            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7],
+            today, e_code[:6], str(acct_no),
+            str(acct_no), today, e_name, e_code[:6],
+            e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt,
+            e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate),
+            e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now(),
+            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7]
+        )
         # DB 연결된 커서의 쿼리 수행
         cur2.execute(insert_query2, record_to_insert2)
         conn.commit()
 
     # 관심정보 조회
     cur21 = conn.cursor()
-    cur21.execute("select code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price from \"interestItem_interest_item\" where acct_no = '"+str(acct_no)+"'")
+    cur21.execute("""
+        SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
+        FROM "interestItem_interest_item"
+        WHERE acct_no = %s
+    """, (str(acct_no),))
     result = cur21.fetchall()
     cur21.close()
     cur22 = conn.cursor()
@@ -294,6 +347,12 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         name = i[1]                                         # 종목명
         b = ""
         f = ""
+        open_price = 0
+        high_price = 0
+        low_price = 0
+        current_price = 0
+        volumn = 0
+        volumn_rate = 0.0
 
         if len(i[0]) == 4:
             b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
@@ -331,7 +390,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
     cur22.close()
 
 cur0 = conn.cursor()
-cur0.execute("select name from stock_holiday where holiday = '"+today+"'")
+cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
 result_one = cur0.fetchone()
 cur0.close()
 
