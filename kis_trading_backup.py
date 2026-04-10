@@ -72,6 +72,7 @@ end_dt = datetime.now().strftime('%Y%m%d')
 # end_dt = "20250526"
 
 for nick in nickname_list:
+    remote_conn = None
     try:
         ac = account(nick)
         acct_no = ac['acct_no']
@@ -259,12 +260,48 @@ for nick in nickname_list:
         remote_cur5.close()
         print(f"[{nick}] Insert stock_search_form completed. ({len(stock_search_result)} rows processed)")
 
+        cur6 = conn.cursor()
+        cur6.execute("""
+            SELECT 
+                dt, code, name, current_price, open_price, high_price, low_price, volumn, last_chg_date
+            FROM stock_minute_info
+            WHERE dt LIKE %s
+        """, (start_dt + '%',))
+        stock_minute_result = cur6.fetchall()
+        cur6.close()
+
+        if not stock_minute_result:
+            print(f"[{nick}] No stock_minute_info data found.")
+
+        remote_cur6 = remote_conn.cursor()
+
+        insert_query6 = """
+            INSERT INTO stock_minute_info (
+                dt, code, name, current_price, open_price, high_price, low_price, volumn, last_chg_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (dt, code) DO NOTHING
+        """
+
+        for row in stock_minute_result:
+            dt, code, name, current_price, open_price, high_price, low_price, volumn, last_chg_date = row
+            try:
+                remote_cur6.execute(insert_query6, (
+                    dt, code, name, current_price, open_price, high_price, low_price, volumn, last_chg_date
+                ))
+            except Exception as e:
+                print(f"[{nick}] Error stock_minute_info inserting row {row}: {e}")
+
+        remote_conn.commit()
+        remote_cur6.close()
+        print(f"[{nick}] Insert stock_minute_info completed. ({len(stock_minute_result)} rows processed)")
+
         remote_conn.close()
 
     except Exception as e:
         print(f"[{nick}] Error trading backup : {e}")
         try:
-            remote_conn.close()
+            if remote_conn is not None:
+                remote_conn.close()
         except Exception:
             pass
 
