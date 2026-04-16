@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 import psycopg2 as db
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import time as dt_time
 import kis_api_resp as resp
@@ -289,8 +290,18 @@ def get_kis_daily_chart(
         "FID_ORG_ADJ_PRC": adjust_price,
     }
 
-    res = requests.get(url, headers=headers, params=params, timeout=10)
-    data = res.json()
+    for attempt in range(3):
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            data = res.json()
+            break
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+            else:    
+                if verbose:
+                    print(f"\n⚠️ 일봉 조회 실패 ({stock_code}): {e}")
+                return None
 
     if "output" not in data or not data["output"]:
         if verbose:
@@ -350,8 +361,18 @@ def get_kis_1min_dailychart(
         "FID_FAKE_TICK_INCU_YN": include_fake_tick
     }
 
-    res = requests.get(url, headers=headers, params=params, timeout=10)
-    data = res.json()
+    for attempt in range(3):
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            data = res.json()
+            break
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+            else:    
+                if verbose:
+                    print(f"\n⚠️ 분봉 조회 실패 ({stock_code}, {trade_time}): {e}")
+                return pd.DataFrame()    
 
     if "output2" not in data or not data["output2"]:
         if verbose:
@@ -450,8 +471,16 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
         "FID_ORG_ADJ_PRC": "1",
     }
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        data = res.json()
+        for attempt in range(3):
+            try:
+                res = requests.get(url, headers=headers, params=params, timeout=10)
+                data = res.json()
+                break
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(0.5 * (attempt + 1))
+                else:    
+                    raise
         if "output" not in data or not data["output"]:
             return []
         result = []
@@ -886,6 +915,10 @@ def get_kis_1min_from_datetime(
             verbose=False
         )
 
+        if df.empty:
+            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀): {e}")
+            return signals
+
         # 10분봉 거래량 집계 (전체 당일 데이터 기준 — 이전 20봉 평균 계산용)
         _df_tv = df.copy()
         _df_tv["거래량"] = _df_tv["거래량"].astype(int)
@@ -1225,6 +1258,10 @@ def get_kis_1min_from_datetime(
             verbose=False
         )
 
+        if df.empty:
+            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀): {e}")
+            return signals
+        
         # 입력 시간 기준 10분 이후부터만 허용
         df = df[df["dt"] >= loop_start_dt]
 
