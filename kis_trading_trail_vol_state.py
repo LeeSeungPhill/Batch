@@ -300,6 +300,9 @@ def get_kis_daily_chart(
         try:
             res = requests.get(url, headers=headers, params=params, timeout=10)
             data = res.json()
+            if data.get('rt_cd') == '1' and attempt < 2:
+                time.sleep(1)
+                continue
             break
         except Exception as e:
             if attempt < 2:
@@ -371,6 +374,9 @@ def get_kis_1min_dailychart(
         try:
             res = requests.get(url, headers=headers, params=params, timeout=10)
             data = res.json()
+            if data.get('rt_cd') == '1' and attempt < 2:
+                time.sleep(1)
+                continue
             break
         except Exception as e:
             if attempt < 2:
@@ -496,6 +502,9 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
             try:
                 res = requests.get(url, headers=headers, params=params, timeout=10)
                 data = res.json()
+                if data.get('rt_cd') == '1' and attempt < 2:
+                    time.sleep(1)
+                    continue
                 break
             except Exception as e:
                 if attempt < 2:
@@ -1812,6 +1821,15 @@ def process_account(nick):
         cur200.close()
 
         if result_two00:
+            # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)
+            unique_codes = list(set(row[0] for row in result_two00))
+            trade_date = today
+            for code in unique_codes:
+                get_prev_day_info(code, trade_date, ac['access_token'], ac['app_key'], ac['app_secret'], conn_acct)
+                time.sleep(0.1)
+                get_kis_daily_chart_full(code, ac['access_token'], ac['app_key'], ac['app_secret'])
+                time.sleep(0.1)
+
             # 종목별 병렬 처리 (동일 app_key 공유 → max_workers=4로 API rate limit 제어)
             max_stock_workers = min(len(result_two00), 4)
             with ThreadPoolExecutor(max_workers=max_stock_workers) as stock_executor:
