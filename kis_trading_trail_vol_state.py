@@ -311,7 +311,7 @@ def get_kis_daily_chart(
 
     if "output" not in data or not data["output"]:
         if verbose:
-            print(f"⛔ 일봉 데이터 없음")
+            print(f"⛔ 일봉 데이터 없음 ({stock_code}) rt_cd={data.get('rt_cd')}, msg={data.get('msg1', '')}")
         return None
 
     df = pd.DataFrame(data["output"])
@@ -503,6 +503,7 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
                 else:    
                     raise
         if "output" not in data or not data["output"]:
+            print(f"⛔ 일봉 전체 데이터 없음 ({stock_code}) rt_cd={data.get('rt_cd')}, msg={data.get('msg1', '')}")
             return []
         result = []
         for item in data["output"]:
