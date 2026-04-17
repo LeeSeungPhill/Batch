@@ -6,6 +6,7 @@ import pandas as pd
 import psycopg2 as db
 import json
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import time as dt_time
 import kis_api_resp as resp
@@ -20,6 +21,11 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 
 today = datetime.now().strftime("%Y%m%d")
 # today = '20260227'
+
+# 일봉 데이터 캐시(장중 불변 데이터 - 종목코드 기준)
+_daily_cache_lock = threading_lock()
+_daily_chart_full_cache = {}    # {stock_code: [daily_data]}
+_prev_day_info_cache = {}       # {(stock_code, trade_date): {low_price, hight_price, ...}}
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -443,9 +449,14 @@ def is_business_day(check_date: datetime, conn) -> bool:
     return bool(result[0])
 
 def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret, conn):
+    cache_key = (stock_code, trade_date)
+    with _daily_cache_lock:
+        if cache_key in _prev_day_info_cache:
+            return _prev_day_info_cache[cache_key]
+        
     prev_date = get_previous_business_day((datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d"), conn)
 
-    return get_kis_daily_chart(
+    result = get_kis_daily_chart(
         stock_code=stock_code,
         trade_date=prev_date,
         access_token=access_token,
@@ -453,8 +464,18 @@ def get_prev_day_info(stock_code, trade_date, access_token, app_key, app_secret,
         app_secret=app_secret
     )
 
+    if result is not None:
+        with _daily_cache_lock:
+            _prev_day_info_cache[cache_key] = result
+
+    return result            
+
 def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
     """최근 30거래일 일봉 데이터 전체 조회 (ATR 계산용)"""
+    with _daily_cache_lock:
+        if stock_code in _daily_chart_full_cache:
+            return _daily_chart_full_cache[stock_code]
+        
     url = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
     headers = {
         "Content-Type": "application/json",
@@ -493,7 +514,12 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
                     "close_price": int(item["stck_clpr"]),
                     "volume": int(item["acml_vol"]),
                 })
-        return sorted(result, key=lambda x: x["date"])
+        sorted_return = sorted(result, key=lambda x: x["date"])
+        if sorted_return:
+            with _daily_cache_lock:
+                _daily_chart_full_cache[stock_code] = sorted_return
+
+        return sorted_return
     except Exception as e:
         print(f"일봉 전체 조회 오류: {e}")
         return []
