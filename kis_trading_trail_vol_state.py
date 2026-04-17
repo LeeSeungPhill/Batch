@@ -916,7 +916,7 @@ def get_kis_1min_from_datetime(
         )
 
         if df.empty:
-            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀): {e}")
+            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀)")
             return signals
 
         # 10분봉 거래량 집계 (전체 당일 데이터 기준 — 이전 20봉 평균 계산용)
@@ -1259,7 +1259,7 @@ def get_kis_1min_from_datetime(
         )
 
         if df.empty:
-            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀): {e}")
+            print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀)")
             return signals
         
         # 입력 시간 기준 10분 이후부터만 허용
