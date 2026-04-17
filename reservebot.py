@@ -403,7 +403,7 @@ def inquire_price(access_token, app_key, app_secret, code):
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-                'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
+                'FID_COND_MRKT_DIV_CODE': "UN",  # J:KRX, NX:NXT, UN:통합
                 'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
@@ -420,7 +420,7 @@ def get_kis_daily_chart(
         access_token: str,
         app_key: str,
         app_secret: str,
-        market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
+        market_code: str = "UN",           # J:KRX, NX:NXT, UN:통합
         period: str = "D",                # D:최근30거래일, W:최근30주, M:최근30개월
         adjust_price: str = "1",          # 0:수정주가미반영, 1:수정주가반영
         verbose: bool = True              # 출력 제어 옵션
@@ -476,7 +476,7 @@ def inquire_asking_price(access_token, app_key, app_secret, code):
                "tr_id": "FHKST01010200",
                "custtype": "P"}
     params = {
-                'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
+                'FID_COND_MRKT_DIV_CODE': "UN",  # J:KRX, NX:NXT, UN:통합
                 'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
@@ -554,7 +554,12 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
     return final_message   
 
 # 주식주문(현금)
-def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
+def get_excg_id():
+    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
+    t = datetime.now().strftime('%H%M')
+    return "KRX" if '0900' <= t < '1530' else "NXT"
+
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
 
     if buy_flag:
         tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
@@ -574,7 +579,8 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "PDNO": stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
-               "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
+               "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
+               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -622,7 +628,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
     return ar.getBody().output1
 
 # 주식주문(정정취소)
-def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price):
+def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price, excg_id=None):
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -640,7 +646,8 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
-               "QTY_ALL_ORD_YN": "Y"            # 전량 : Y, 일부 : N
+               "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
+               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
