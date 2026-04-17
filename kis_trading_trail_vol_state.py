@@ -23,7 +23,7 @@ today = datetime.now().strftime("%Y%m%d")
 # today = '20260227'
 
 # 일봉 데이터 캐시(장중 불변 데이터 - 종목코드 기준)
-_daily_cache_lock = threading_lock()
+_daily_cache_lock = threading.Lock()
 _daily_chart_full_cache = {}    # {stock_code: [daily_data]}
 _prev_day_info_cache = {}       # {(stock_code, trade_date): {low_price, hight_price, ...}}
 
