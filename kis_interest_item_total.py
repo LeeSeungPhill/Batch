@@ -414,6 +414,9 @@ def fundTrail_proc(acct_no, conn):
         # print("자산번호 : " + str(asset_num))
             
         # 시장 신호 정보 변경 기준 현금 비율 변경
+        kospi_ratio = ""
+        cash_rate = 0
+        cash_rate_amt = 0
         if trail_signal_result1 == '03': # 저항가 돌파
             kospi_ratio = "H"  # 시장 상승
             cash_rate = 30 # 전체금액의 30% 미만 현금 비중 설정
@@ -483,7 +486,7 @@ def fundTrail_proc(acct_no, conn):
         asset_num = i[1]
         # print("코스닥 추적 신호 : " + str(trail_signal_result2))   
         # print("자산번호 : " + str(asset_num))
-            
+        kosdak_ratio = ""    
         if trail_signal_result2 == '03':  # 저항가 돌파
             kosdak_ratio = "H"  # 시장 상승
         elif trail_signal_result2 == '04':  # 지지가 이탈
