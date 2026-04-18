@@ -806,8 +806,8 @@ def get_kis_1min_full_day(
         prev_oldest_dt = oldest_dt
         all_df.append(df)
 
-        # 장 시작 도달 시 종료 : 1월 2일 10시 시작
-        if trade_date.endswith("0102"):
+        # 장 시작 도달 시 종료 : 1월 2일 / 11월 19일 10시 시작
+        if trade_date.endswith("0102") or trade_date.endswith("1119"):
             if oldest_time <= "100000":
                 break
         else:
@@ -840,32 +840,57 @@ def get_kis_1min_full_day(
         .reset_index(drop=True)
     )
 
-def volume_rate_chk(current_time, vol_ratio):
+def volume_rate_chk(current_time, vol_ratio, trade_date=""):
     # ===============================
     # 시간대별 거래량 조건 설정
+    # 1월 2일 / 11월 19일: 장 시작 10시
+    # 11월 19일: 장 종료 16:30 / 1월 2일: 장 종료 15:30
     # ===============================
     is_volume_satisfied = False
+    late_open  = trade_date.endswith("0102") or trade_date.endswith("1119")
+    late_close = trade_date.endswith("1119")   # 16:30 장종료
 
-    # 1. 09:00 ~ 09:20 사이: 20% 이상
-    if 900 <= int(current_time) <= 920:
-        if vol_ratio >= 20:
+    if late_open:
+        # 10시 시작 특수일 시간대
+        # 1. 10:00 ~ 10:20 사이: 20% 이상
+        if 1000 <= int(current_time) <= 1020:
+            if vol_ratio >= 20:
+                is_volume_satisfied = True
+        # 2. 10:21 ~ 10:30 사이: 25% 이상
+        elif 1021 <= int(current_time) <= 1030:
+            if vol_ratio >= 25:
+                is_volume_satisfied = True
+        # 3. 11:00 이전 거래량이 전일 대비 50% 이상
+        elif int(current_time) < 1100 and vol_ratio >= 50:
             is_volume_satisfied = True
-
-    # 2. 09:21 ~ 09:30 사이: 25% 이상 (09:20~09:30 구간 포함)
-    elif 921 <= int(current_time) <= 930:
-        if vol_ratio >= 25:
+        # 4. 장마감 전 30분: 25% 이상 (1119→16:00~16:30 / 0102→15:00~15:30)
+        elif late_close and 1600 <= int(current_time) <= 1630:
+            if vol_ratio >= 25:
+                is_volume_satisfied = True
+        elif not late_close and 1500 <= int(current_time) <= 1530:
+            if vol_ratio >= 25:
+                is_volume_satisfied = True
+        else:
             is_volume_satisfied = True
-    # 3. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
-    elif int(current_time) < 1000 and vol_ratio >= 50:
-        is_volume_satisfied = True
-    # 4. 15:00 ~ 15:30 사이: 25% 이상
-    elif 1500 <= int(current_time) <= 1530:
-        if vol_ratio >= 25:
-            is_volume_satisfied = True
-
     else:
-        # 그 외 시간대는 거래량 제한 없이 기본 로직 수행
-        is_volume_satisfied = True
+        # 일반 거래일 시간대
+        # 1. 09:00 ~ 09:20 사이: 20% 이상
+        if 900 <= int(current_time) <= 920:
+            if vol_ratio >= 20:
+                is_volume_satisfied = True
+        # 2. 09:21 ~ 09:30 사이: 25% 이상
+        elif 921 <= int(current_time) <= 930:
+            if vol_ratio >= 25:
+                is_volume_satisfied = True
+        # 3. 10:00 이전 거래량이 전일 대비 50% 이상 (최우선 특이 케이스)
+        elif int(current_time) < 1000 and vol_ratio >= 50:
+            is_volume_satisfied = True
+        # 4. 15:00 ~ 15:30 사이: 25% 이상
+        elif 1500 <= int(current_time) <= 1530:
+            if vol_ratio >= 25:
+                is_volume_satisfied = True
+        else:
+            is_volume_satisfied = True
 
     return is_volume_satisfied
 
@@ -940,11 +965,12 @@ def get_kis_1min_from_datetime(
     prev_volume = prev_day_info['volume']
 
     if trail_tp == 'L':
+        _start_time = "163000" if trade_date.endswith("1119") else "153000"
 
         df = get_kis_1min_full_day(
             stock_code=stock_code,
             trade_date=trade_date,
-            start_time="153000",
+            start_time=_start_time,
             access_token=access_token,
             app_key=app_key,
             app_secret=app_secret,
@@ -1041,9 +1067,10 @@ def get_kis_1min_from_datetime(
                 # ===============================
                 # 09:10 또는 10:10 이전 미처리
                 # ===============================
-                if trade_date.endswith("0102") and row["dt"].time() < datetime.strptime("10:10", "%H:%M").time():
+                _late_open = trade_date.endswith("0102") or trade_date.endswith("1119")
+                if _late_open and row["dt"].time() < datetime.strptime("10:10", "%H:%M").time():
                     continue
-                elif not trade_date.endswith("0102") and row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
+                elif not _late_open and row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
                     continue
 
                 # 현재 분봉 시간
@@ -1111,7 +1138,7 @@ def get_kis_1min_from_datetime(
                         # ===============================
                         effective_stop = max(int(basic_price * 1.15), day_high_close - int(atr_value * 1.5))
 
-                        if close_price <= effective_stop and volume_rate_chk(current_time, vol_ratio):
+                        if close_price <= effective_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
                             # 이탈 발생 → 10분봉 저가·거래량 이탈 대기 등록
                             breakdown_wait.update({
                                 "active": True,
@@ -1143,7 +1170,7 @@ def get_kis_1min_from_datetime(
                         else:
                             fixed_stop = int(stop_price)
 
-                        if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio):
+                        if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
                             # 이탈 발생 → 10분봉 저가·거래량 이탈 대기 등록
                             breakdown_wait.update({
                                 "active": True,
@@ -1169,7 +1196,9 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
                     # ===============================
-                    if current_time >= "091000" and current_time < "151000" and prev_low is not None:
+                    _prevlow_start  = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
+                    _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
+                    if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
                         if close_price < prev_low and int(prev_volume/2) < acml_vol:
                             if current_10min_key != prevlow_warn_last_key:
                                 prevlow_warn_last_key = current_10min_key
@@ -1187,9 +1216,10 @@ def get_kis_1min_from_datetime(
                                     print(f"텔레그램 발송 실패: {te}")
 
                     # ===============================
-                    # 15:10 이후 전일저가 이탈 감시 (gain_pct 무관)
+                    # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
                     # ===============================
-                    if not breakdown_wait["active"] and not sell_trigger and current_time >= "151000" and prev_low is not None:
+                    _prevlow_cutoff = "161000" if trade_date.endswith("1119") else "151000"
+                    if not breakdown_wait["active"] and not sell_trigger and current_time >= _prevlow_cutoff and prev_low is not None:
                         if close_price < prev_low and int(prev_volume/2) < acml_vol:
                             sell_trigger = True
                             sell_reason = '금일종가 전일저가 이탈'
@@ -1284,10 +1314,12 @@ def get_kis_1min_from_datetime(
                 "base_key": None,         # 돌파 발생 10분봉 키
             }
 
+        _start_time = "163000" if trade_date.endswith("1119") else "153000"
+
         df = get_kis_1min_full_day(
             stock_code=stock_code,
             trade_date=trade_date,
-            start_time="153000",
+            start_time=_start_time,
             access_token=access_token,
             app_key=app_key,
             app_secret=app_secret,
@@ -1297,7 +1329,7 @@ def get_kis_1min_from_datetime(
         if df.empty:
             print(f"\n⚠️ [{stock_name}-{stock_code}] 분봉 데이터 없음 (건너뜀)")
             return signals
-        
+
         # 입력 시간 기준 10분 이후부터만 허용
         df = df[df["dt"] >= loop_start_dt]
 
@@ -1372,7 +1404,7 @@ def get_kis_1min_from_datetime(
                 current_time = row["dt"].time()
 
                 if high_price > low_price:
-                    if trade_date.endswith("0102"):
+                    if trade_date.endswith("0102") or trade_date.endswith("1119"):
                         pre_market = current_time < datetime.strptime("10:10", "%H:%M").time()
                     else:
                         pre_market = current_time < datetime.strptime("09:10", "%H:%M").time()

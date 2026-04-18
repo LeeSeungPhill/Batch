@@ -10,8 +10,8 @@ import psycopg2 as db
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
 # PostgreSQL 연결 설정
-#conn_string = "dbname='my_develop' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
-conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
+# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
 # DB 연결
 conn = db.connect(conn_string)
 
@@ -91,7 +91,7 @@ def stock_minute_get(access_token, app_key, app_secret, code, company):
     # 현재일
     stock_day = datetime.now().strftime("%Y%m%d")
 
-    if stock_day == '20241114':
+    if stock_day == '20261119':
         startHms = '100000'
         endHms = '163000'
         circle = 13
@@ -102,7 +102,7 @@ def stock_minute_get(access_token, app_key, app_secret, code, company):
             hms = '162900'
         else:
             hms = time.strftime('%H%M%S')
-    elif stock_day == '20250102':    
+    elif stock_day == '20270102':    
         startHms = '100000'
         endHms = '153000'
         circle = 11
