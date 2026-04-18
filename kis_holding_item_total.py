@@ -362,13 +362,6 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
-# 텔레그램 메시지 발송 (token을 명시적으로 받아 thread-safe 처리)
-def send_telegram(token, telegram_text):
-    chat_id = "2147256258"
-    bot = telegram.Bot(token=token)
-    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-
-
 # 잔고정보 처리 (balance_map 반환)
 def balance_proc(access_token, app_key, app_secret, acct_no, conn):
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
