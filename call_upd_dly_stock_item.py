@@ -1,7 +1,8 @@
 import psycopg2 as db
 
 # PostgreSQL 연결 설정
-conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
 
 # DB 연결
 conn = db.connect(conn_string)
