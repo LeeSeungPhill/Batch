@@ -19,7 +19,7 @@ matplotlib.use('SVG')
 plt.rcParams["font.family"] = "NanumGothic"
 # 해당 링크는 한국거래소에서 상장법인목록을 엑셀로 다운로드하는 링크입니다.
 # 다운로드와 동시에 Pandas에 excel 파일이 load가 되는 구조입니다.
-stock_code = pd.read_html('http://kind.krx.co.kr/corpgeneral/corpList.do?method=download', header=0)[0]
+stock_code = pd.read_html('http://kind.krx.co.kr/corpgeneral/corpList.do?method=download', header=0, encoding='euc-kr')[0]
 # 필요한 것은 "회사명"과 "종목코드" 이므로 필요없는 column들은 제외
 stock_code = stock_code[['회사명', '종목코드']]
 # 한글 컬럼명을 영어로 변경
@@ -51,7 +51,8 @@ def normalize_code(code):
 stock_code['code'] = stock_code['code'].apply(normalize_code)
 
 # PostgreSQL 연결 설정
-conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+# conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgres' password='sktl2389!1'"
+conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
 # DB 연결
 conn = db.connect(conn_string)
 cur001 = conn.cursor()
@@ -228,7 +229,7 @@ def echo(update, context):
         ax_bottom.tick_params(axis='x', rotation=90)
         ax_bottom.grid()
 
-        plt.savefig('/home/terra/Public/Batch/save2.png')
+        plt.savefig('/home/terra/chart/save2.png')
         plt.close(fig)
 
     def get_sales_sum(col):
@@ -263,7 +264,7 @@ def echo(update, context):
 
     if len(code) > 0 and dividend is not None:
         get_chart(code)
-        with open('/home/terra/Public/Batch/save2.png', 'rb') as f:
+        with open('/home/terra/chart/save2.png', 'rb') as f:
             context.bot.send_photo(chat_id=user_id, photo=f)
 
         text0 = return_print("<" + company + ">")
