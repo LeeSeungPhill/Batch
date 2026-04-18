@@ -7,13 +7,12 @@ import telegram
 import pandas as pd
 from decimal import Decimal
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from telegram.ext import Updater
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
-# PostgreSQL 연결 설정
 conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
-# DB 연결
-conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
 
@@ -31,17 +30,17 @@ def auth(APP_KEY, APP_SECRET):
 
     return ACCESS_TOKEN
 
-def account(nickname):
+def account(nickname, conn):
     cur01 = conn.cursor()
     cur01.execute("""
-        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1
+        SELECT acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id
         FROM "stockAccount_stock_account"
         WHERE nick_name = %s
     """, (nickname,))
     result_two = cur01.fetchone()
     cur01.close()
 
-    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1 = result_two
+    acct_no, access_token, app_key, app_secret, token_publ_date, token_day, bot_token1, bot_token2, chat_id = result_two
     validTokenDate = datetime.strptime(token_publ_date, '%Y%m%d%H%M%S')
     if (datetime.now() - validTokenDate).days >= 1 or token_day != today:
         access_token = auth(app_key, app_secret)
@@ -60,7 +59,9 @@ def account(nickname):
         'access_token': access_token,
         'app_key': app_key,
         'app_secret': app_secret,
-        'bot_token1': bot_token1
+        'bot_token1': bot_token1,
+        'bot_token2': bot_token2,
+        'chat_id': chat_id
     }
 
 # 주식현재가 시세
@@ -361,8 +362,15 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
+# 텔레그램 메시지 발송 (token을 명시적으로 받아 thread-safe 처리)
+def send_telegram(token, telegram_text):
+    chat_id = "2147256258"
+    bot = telegram.Bot(token=token)
+    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+
+
 # 잔고정보 처리 (balance_map 반환)
-def balance_proc(access_token, app_key, app_secret, acct_no):
+def balance_proc(access_token, app_key, app_secret, acct_no, conn):
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
     for i, name in enumerate(b.index):
@@ -409,7 +417,23 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
     conn.commit()
     cur300.close()
 
+    # ③ 배치 DB 조회: 전체 보유 종목의 limit_amt를 한 번에 조회
+    codes = [c['pdno'][i] for i in range(len(c))]
+    if codes:
+        cur_limit = conn.cursor()
+        cur_limit.execute("""
+            SELECT code, limit_amt FROM "stockBalance_stock_balance"
+            WHERE acct_no = %s AND code = ANY(%s)
+        """, (acct_no, codes))
+        limit_map = {row[0]: row[1] for row in cur_limit.fetchall()}
+        cur_limit.close()
+    else:
+        limit_map = {}
+
     balance_list = []
+
+    # ⑤ 배치 커밋: 루프 내 개별 커밋 제거 → 루프 후 1회 커밋
+    cur301 = conn.cursor()
 
     for i, name in enumerate(c.index):
         e_code = c['pdno'][i]
@@ -423,21 +447,14 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         e_valuation_sum = int(c['evlu_pfls_amt'][i])
         e_ord_psbl_qty = int(c['ord_psbl_qty'][i])
 
-        cur101 = conn.cursor()
-        cur101.execute("""
-            SELECT limit_amt
-            FROM "stockBalance_stock_balance"
-            WHERE acct_no = %s AND code = %s
-        """, (acct_no, e_code))
-        row = cur101.fetchone()
-        cur101.close()
-
+        # ③ 배치 조회 결과 사용 (개별 SELECT 제거)
+        limit_amt_val = limit_map.get(e_code)
         limit_price = 0
 
         if e_purchase_amount > 0:
-            if row and row[0] is not None:
+            if limit_amt_val is not None:
                 try:
-                    limit_amt = int(str(row[0]).strip())
+                    limit_amt = int(str(limit_amt_val).strip())
                     limit_price = int((e_purchase_sum + limit_amt) / e_purchase_amount)
                 except (ValueError, TypeError):
                     limit_price = int((e_purchase_sum - int(risk_amt)) / e_purchase_amount)
@@ -458,26 +475,24 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
             e_sell_plan_sum = sell_plan_amt * item_eval_gravity * 0.01
             e_sell_plan_amount = e_sell_plan_sum / e_current_price
 
-            cur301 = conn.cursor()
             update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, sell_plan_sum = %s, sell_plan_amount = %s, avail_amount = %s, limit_price = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sell_plan_sum, sell_plan_amount, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.limit_price from (select row_number() over(order by last_chg_date desc) as num, b.limit_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num = 1), %s, %s where not exists(select * from upsert)"
             record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, e_sell_plan_sum, e_sell_plan_amount, e_ord_psbl_qty, limit_price, datetime.now(), acct_no, e_code, asset_num,
                                     acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num, e_sell_plan_sum, e_sell_plan_amount,
                                     acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
                                     'Y', datetime.now()])
             cur301.execute(update_query301, record_to_update301)
-            conn.commit()
-            cur301.close()
 
         else:
-            cur301 = conn.cursor()
             update_query301 = "with upsert as (update \"stockBalance_stock_balance\" set purchase_price = %s, purchase_amount = %s, purchase_sum = %s, current_price = %s, eval_sum = %s, earnings_rate = %s, valuation_sum = %s, avail_amount = %s, limit_price = %s, proc_yn = 'Y', last_chg_date = %s where acct_no = %s and code = %s and asset_num = %s returning * ) insert into \"stockBalance_stock_balance\"(acct_no, code, name, purchase_price, purchase_amount, purchase_sum, current_price, eval_sum, earnings_rate, valuation_sum, asset_num, sign_resist_price, sign_support_price, end_loss_price, end_target_price, trading_plan, limit_price, proc_yn, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (select A.sign_resist_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_resist_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.sign_support_price from(select row_number() over(order by last_chg_date desc) as num, b.sign_support_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_loss_price from(select row_number() over(order by last_chg_date desc) as num, b.end_loss_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.end_target_price from(select row_number() over(order by last_chg_date desc) as num, b.end_target_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.trading_plan from(select row_number() over(order by last_chg_date desc) as num, b.trading_plan from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where A.num=1), (select A.limit_price from (select row_number() over(order by last_chg_date desc) as num, b.limit_price from \"stockBalance_stock_balance\" b where acct_no = %s and code = %s) A where	A.num = 1), %s, %s where not exists(select * from upsert)"
             record_to_update301 = ([e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, e_ord_psbl_qty, limit_price, datetime.now(), acct_no, e_code, asset_num,
                                     acct_no, e_code, e_name, e_purchase_price, e_purchase_amount, e_purchase_sum, e_current_price, e_eval_sum, e_earnings_rate, e_valuation_sum, asset_num,
                                     acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code, acct_no, e_code,
                                     'Y', datetime.now()])
             cur301.execute(update_query301, record_to_update301)
-            conn.commit()
-            cur301.close()
+
+    # ⑤ 루프 종료 후 1회 배치 커밋
+    conn.commit()
+    cur301.close()
 
     # 잔고정보 맵 설정
     balance_map = {
@@ -486,11 +501,11 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
     }
 
     # 주문체결 처리
-    order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map)
+    order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balance_map)
 
 
 # 주문체결정보 처리 (NXT 시간대에서도 단독 호출 가능)
-def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=None):
+def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balance_map=None):
     if balance_map is None:
         balance_map = {}
 
@@ -499,6 +514,23 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
     order_complete_output = get_my_complete(access_token, app_key, app_secret, acct_no, "", "")
 
     order_complete_list = []
+
+    # ④ 배치 DB 조회: 체결 존재 종목명 목록으로 fee/손익 정보 한 번에 조회
+    names_with_qty = list({item['prdt_name'] for item in order_complete_output if float(item['tot_ccld_qty']) > 0})
+    if names_with_qty:
+        cur302 = conn.cursor()
+        cur302.execute("""
+            SELECT name, paid_fee, profit_loss_amt, paid_tax
+            FROM "stockOrderComplete_stock_order_complete"
+            WHERE acct_no = %s AND name = ANY(%s) AND order_dt = %s AND total_complete_qty::int > 0
+        """, (str(acct_no), names_with_qty, today_str))
+        fee_rows = cur302.fetchall()
+        cur302.close()
+        fee_history_map = {}
+        for row in fee_rows:
+            fee_history_map.setdefault(row[0], []).append((row[1], row[2], row[3]))
+    else:
+        fee_history_map = {}
 
     if order_complete_output:
 
@@ -512,14 +544,8 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
 
             if float(item['tot_ccld_qty']) > 0:
 
-                cur302 = conn.cursor()
-                cur302.execute("""
-                    SELECT paid_fee, profit_loss_amt, paid_tax
-                    FROM "stockOrderComplete_stock_order_complete" A
-                    WHERE acct_no = %s AND name = %s AND order_dt = %s AND total_complete_qty::int > 0
-                """, (str(acct_no), item['prdt_name'], today_str))
-                result_one32 = cur302.fetchall()
-                cur302.close()
+                # ④ 개별 SELECT 대신 배치 조회 결과 사용
+                result_one32 = fee_history_map.get(item['prdt_name'], [])
 
                 if len(result_one32) > 0:
                     last_paid_fee = 0
@@ -527,11 +553,11 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
                     last_paid_tax = 0
 
                     for comp_info in result_one32:
-                        if comp_info[0] != None:
+                        if comp_info[0] is not None:
                             last_paid_fee += int(comp_info[0])
-                        if comp_info[1] != None:
+                        if comp_info[1] is not None:
                             last_pfls_amt += int(comp_info[1])
-                        if comp_info[2] != None:
+                        if comp_info[2] is not None:
                             last_paid_tax += int(comp_info[2])
 
                     period_profit_loss_sum_output = inquire_period_profit_loss(access_token, app_key, app_secret, item['pdno'], today_str, today_str, acct_no)
@@ -624,94 +650,6 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
                     int(item['paid_tax']), int(item['paid_fee'])
                 ))
 
-                # cur402 = conn.cursor()
-                # cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
-                # result_one01 = cur402.fetchone()
-                # cur402.close()
-
-                # if result_one01:
-                #     cur403 = conn.cursor()
-                #     cur403.execute("""
-                #         UPDATE short_trading_detail
-                #         SET total_complete_qty = %s, remain_qty = %s, hold_price = %s, hold_vol = %s,
-                #             profit_loss_rate = %s, profit_loss_amt = %s, chgr_id = %s, chg_date = %s
-                #         WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                #     """, (
-                #         new_complete_qty, new_remain_qty, item['보유단가'], item['보유수량'],
-                #         Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                #         'holding_item', datetime.now(),
-                #         str(acct_no), item['주문일자'], str(int(item['주문번호']))
-                #     ))
-                #     cur403.close()
-
-                # elif item['원주문번호'] != "":
-                #     cur4021 = conn.cursor()
-                #     cur4021.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['원주문번호']))))
-                #     result_one02 = cur4021.fetchone()
-                #     cur4021.close()
-
-                #     if result_one02:
-                #         cur403 = conn.cursor()
-                #         cur403.execute("""
-                #             UPDATE short_trading_detail
-                #             SET order_price = %s, tr_qty = %s, tr_amt = %s,
-                #                 total_complete_qty = %s, remain_qty = %s, hold_price = %s, hold_vol = %s,
-                #                 profit_loss_rate = %s, profit_loss_amt = %s,
-                #                 order_no = %s, org_order_no = %s, chgr_id = %s, chg_date = %s
-                #             WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                #         """, (
-                #             int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']),
-                #             int(item['주문수량']), int(item['체결금액']),
-                #             new_complete_qty, new_remain_qty, item['보유단가'], item['보유수량'],
-                #             Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                #             str(int(item['주문번호'])), str(int(item['원주문번호'])),
-                #             'holding_item', datetime.now(),
-                #             str(acct_no), item['주문일자'], str(int(item['원주문번호']))
-                #         ))
-                #         cur403.close()
-
-                # order_type = item.get('주문유형', '')
-
-                # if new_complete_qty > 0 and '매도' in order_type:
-
-                #     cur404 = conn.cursor()
-                #     cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['종목명'], '%매수%'))
-                #     result_one404 = cur404.fetchall()
-                #     cur404.close()
-
-                #     cur405 = conn.cursor()
-                #     for item404 in result_one404:
-                #         sh_trading_num = item404[0]
-                #         if int(item['체결단가']) > 0:
-                #             tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
-                #         else:
-                #             tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
-
-                #         update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                #         record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['종목명'], '%매수%', sh_trading_num])
-                #         cur405.execute(update_query404, record_to_update404)
-
-                #     cur405.close()
-
-                #     cur406 = conn.cursor()
-                #     cur406.execute("select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = %s and name = %s and proc_yn = 'Y'", (acct_no, item['종목명']))
-                #     result_one406 = cur406.fetchall()
-                #     cur406.close()
-
-                #     cur407 = conn.cursor()
-                #     safe_margin_sum = 0
-                #     for item406 in result_one406:
-                #         if int(item['체결단가']) > 0:
-                #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['체결단가']) - Decimal(item['보유단가'])) * new_complete_qty
-                #         else:
-                #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['주문단가']) - Decimal(item['보유단가'])) * new_complete_qty
-
-                #         update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
-                #         record_to_update406 = ([int(safe_margin_sum), acct_no, item['종목명']])
-                #         cur407.execute(update_query406, record_to_update406)
-
-                #     cur407.close()
-
                 conn.commit()
 
             else:
@@ -751,94 +689,6 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
                         int(item['paid_tax']), int(item['paid_fee'])
                     ))
 
-                    # cur402 = conn.cursor()
-                    # cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
-                    # result_one01 = cur402.fetchone()
-                    # cur402.close()
-
-                    # if result_one01:
-                    #     cur403 = conn.cursor()
-                    #     cur403.execute("""
-                    #         UPDATE short_trading_detail
-                    #         SET total_complete_qty = %s, remain_qty = %s, hold_price = %s, hold_vol = %s,
-                    #             profit_loss_rate = %s, profit_loss_amt = %s, chgr_id = %s, chg_date = %s
-                    #         WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                    #     """, (
-                    #         new_complete_qty, new_remain_qty, hold_price, new_complete_qty,
-                    #         Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                    #         'holding_item', datetime.now(),
-                    #         str(acct_no), item['주문일자'], str(int(item['주문번호']))
-                    #     ))
-                    #     cur403.close()
-
-                    # elif item['원주문번호'] != "":
-                    #     cur4021 = conn.cursor()
-                    #     cur4021.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['원주문번호']))))
-                    #     result_one02 = cur4021.fetchone()
-                    #     cur4021.close()
-
-                    #     if result_one02:
-                    #         cur403 = conn.cursor()
-                    #         cur403.execute("""
-                    #             UPDATE short_trading_detail
-                    #             SET order_price = %s, tr_qty = %s, tr_amt = %s,
-                    #                 total_complete_qty = %s, remain_qty = %s, hold_price = %s, hold_vol = %s,
-                    #                 profit_loss_rate = %s, profit_loss_amt = %s,
-                    #                 order_no = %s, org_order_no = %s, chgr_id = %s, chg_date = %s
-                    #             WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                    #         """, (
-                    #             int(item['체결단가']) if int(item['체결단가']) > 0 else int(item['주문단가']),
-                    #             int(item['주문수량']), int(item['체결금액']),
-                    #             new_complete_qty, new_remain_qty, hold_price, new_complete_qty,
-                    #             Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                    #             str(int(item['주문번호'])), str(int(item['원주문번호'])),
-                    #             'holding_item', datetime.now(),
-                    #             str(acct_no), item['주문일자'], str(int(item['원주문번호']))
-                    #         ))
-                    #         cur403.close()
-
-                    # order_type = item.get('주문유형', '')
-
-                    # if '매도' in order_type:
-
-                    #     cur404 = conn.cursor()
-                    #     cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['종목명'], '%매수%'))
-                    #     result_one404 = cur404.fetchall()
-                    #     cur404.close()
-
-                    #     cur405 = conn.cursor()
-                    #     for item404 in result_one404:
-                    #         sh_trading_num = item404[0]
-                    #         if int(item['체결단가']) > 0:
-                    #             tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
-                    #         else:
-                    #             tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
-
-                    #         update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                    #         record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['종목명'], '%매수%', sh_trading_num])
-                    #         cur405.execute(update_query404, record_to_update404)
-
-                    #     cur405.close()
-
-                    #     cur406 = conn.cursor()
-                    #     cur406.execute("select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = %s and name = %s and proc_yn = 'Y'", (acct_no, item['종목명']))
-                    #     result_one406 = cur406.fetchall()
-                    #     cur406.close()
-
-                    #     cur407 = conn.cursor()
-                    #     safe_margin_sum = 0
-                    #     for item406 in result_one406:
-                    #         if int(item['체결단가']) > 0:
-                    #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['체결단가']) - Decimal(item['보유단가'])) * new_complete_qty
-                    #         else:
-                    #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['주문단가']) - Decimal(item['보유단가'])) * new_complete_qty
-
-                    #         update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
-                    #         record_to_update406 = ([int(safe_margin_sum), acct_no, item['종목명']])
-                    #         cur407.execute(update_query406, record_to_update406)
-
-                    #     cur407.close()
-
                     conn.commit()
 
         else:
@@ -876,757 +726,230 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, balance_map=
                         acct_no, item['주문일자'], str(int(item['주문번호']))
                     ))
 
-                # cur402 = conn.cursor()
-                # cur402.execute("select code, order_type, tr_proc, sh_trading_num from short_trading_detail where acct_no = %s and tr_day = %s and order_no = %s", (str(acct_no), item['주문일자'], str(int(item['주문번호']))))
-                # result_one01 = cur402.fetchone()
-                # cur402.close()
-
-                # if result_one01:
-                #     cur403 = conn.cursor()
-
-                #     if float(item['보유단가']) > 0 and int(item['보유수량']) > 0:
-                #         cur403.execute("""
-                #             UPDATE short_trading_detail
-                #             SET total_complete_qty = %s, remain_qty = %s, hold_price = %s, hold_vol = %s,
-                #                 profit_loss_rate = %s, profit_loss_amt = %s, chgr_id = %s, chg_date = %s
-                #             WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                #         """, (
-                #             new_complete_qty, new_remain_qty, item['보유단가'], item['보유수량'],
-                #             Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                #             'holding_item', datetime.now(),
-                #             str(acct_no), item['주문일자'], str(int(item['주문번호']))
-                #         ))
-                #     else:
-                #         cur403.execute("""
-                #             UPDATE short_trading_detail
-                #             SET total_complete_qty = %s, remain_qty = %s,
-                #                 profit_loss_rate = %s, profit_loss_amt = %s, chgr_id = %s, chg_date = %s
-                #             WHERE acct_no = %s AND tr_day = %s AND order_no = %s
-                #         """, (
-                #             new_complete_qty, new_remain_qty,
-                #             Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                #             'holding_item', datetime.now(),
-                #             str(acct_no), item['주문일자'], str(int(item['주문번호']))
-                #         ))
-
-                #     cur403.close()
-
-                # order_type = item.get('주문유형', '')
-
-                # if '매도' in order_type:
-
-                #     cur404 = conn.cursor()
-                #     cur404.execute("select sh_trading_num, name, code, tr_day, tr_dtm, order_price, total_complete_qty from short_trading_detail where acct_no = %s and name = %s and order_type like %s and total_complete_qty::int > 0 and tr_proc is null", (str(acct_no), item['종목명'], '%매수%'))
-                #     result_one404 = cur404.fetchall()
-                #     cur404.close()
-
-                #     cur405 = conn.cursor()
-                #     for item404 in result_one404:
-                #         sh_trading_num = item404[0]
-                #         if int(item['체결단가']) > 0:
-                #             tr_proc = "SM" if int(item404[5]) < int(item['체결단가']) else "LC"
-                #         else:
-                #             tr_proc = "SM" if int(item404[5]) < int(item['주문단가']) else "LC"
-
-                #         update_query404 = "UPDATE short_trading_detail SET tr_proc = %s, chgr_id = %s, chg_date = %s WHERE acct_no = %s AND name = %s AND order_type LIKE %s AND total_complete_qty::int > 0 AND sh_trading_num = %s"
-                #         record_to_update404 = ([tr_proc, 'tr_proc', datetime.now(), str(acct_no), item['종목명'], '%매수%', sh_trading_num])
-                #         cur405.execute(update_query404, record_to_update404)
-
-                #     cur405.close()
-
-                #     cur406 = conn.cursor()
-                #     cur406.execute("select COALESCE(safe_margin_sum, 0) from \"stockBalance_stock_balance\" where acct_no = %s and name = %s and proc_yn = 'Y'", (acct_no, item['종목명']))
-                #     result_one406 = cur406.fetchall()
-                #     cur406.close()
-
-                #     cur407 = conn.cursor()
-                #     safe_margin_sum = 0
-                #     for item406 in result_one406:
-                #         if int(item['체결단가']) > 0:
-                #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['체결단가']) - Decimal(item['보유단가'])) * new_complete_qty
-                #         else:
-                #             safe_margin_sum = Decimal(item406[0]) + (Decimal(item['주문단가']) - Decimal(item['보유단가'])) * new_complete_qty
-
-                #         update_query406 = "UPDATE \"stockBalance_stock_balance\" SET safe_margin_sum = %s WHERE acct_no = %s AND name = %s AND proc_yn = 'Y'"
-                #         record_to_update406 = ([int(safe_margin_sum), acct_no, item['종목명']])
-                #         cur407.execute(update_query406, record_to_update406)
-
-                #     cur407.close()
-
                 conn.commit()
 
         cur600.close()
 
 
-def main(telegram_text):
-    chat_id = "2147256258"
-    bot = telegram.Bot(token=token)
-    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-
-
-# 휴일정보 조회
-cur0 = conn.cursor()
-cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
-result_one = cur0.fetchone()
-cur0.close()
-
-nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
-
-# 휴일이 아닌 경우
-if result_one == None:
-
-    for nick in nickname_list:
-        try:
-            ac = account(nick)
-            acct_no = ac['acct_no']
-            access_token = ac['access_token']
-            app_key = ac['app_key']
-            app_secret = ac['app_secret']
-            token = ac['bot_token1']
-
-            cur_time = datetime.now().strftime("%H%M")
-
-            if '0800' <= cur_time < '0900':
-                # NXT 장전 : 주문체결 처리만 수행
-                order_complete_proc(access_token, app_key, app_secret, acct_no)
-
-            elif '0900' <= cur_time < '1530':
-                # KRX 정규시장 : 잔고정보 처리(내부에서 주문체결 처리 포함) + trail signal 처리
-                balance_proc(access_token, app_key, app_secret, acct_no)
-
-                # 보유정보 조회
-                cur03 = conn.cursor()
-                cur03.execute("""
-                    SELECT code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount,
-                        (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '02') AS market_dead,
-                        (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '04') AS market_over,
-                        CASE WHEN cast(A.purchase_amount AS INTEGER) > 0
-                             THEN (SELECT B.low_price FROM dly_stock_balance B WHERE A.code = B.code AND A.acct_no = cast(B.acct AS INTEGER) AND B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD'))
-                             ELSE null END AS low_price,
-                        (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '07') AS regist_over,
-                        (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '09') AS target_over,
-                        COALESCE(NULLIF(trading_plan, ''), 'as'), COALESCE(safe_margin_sum, 0)
-                    FROM "stockBalance_stock_balance" A
-                    WHERE acct_no = %s AND proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
-                """, (str(acct_no), str(acct_no), str(acct_no), str(acct_no), str(acct_no)))
-                result_three = cur03.fetchall()
-                cur03.close()
-
-                for i in result_three:
-                    a = ""
-                    try:
-                        time.sleep(0.3)
-                        a = inquire_price(access_token, app_key, app_secret, i[0])
-                    except Exception as ex:
-                        print(f"현재가 시세 에러 : [{i[0]}] {ex}")
-                    if not a:
-                        continue
-
-                    trail_signal_code = ""
-                    trail_signal_name = ""
-                    sell_plan_amount = ""
-                    n_sell_amount = 0
-                    n_sell_sum = 0
-                    if i[2] != None:
-                        if i[2] > 0:
-                            if int(a['stck_prpr']) > i[2]:
-                                trail_signal_code = "07"
-                                trail_signal_name = format(int(i[2]), ',d') + "원 {저항가 돌파}"
-
-                                if i[6] != None:
-                                    n_sell_amount = i[6]
-                                    n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                                    sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    if i[3] != None:
-                        if i[3] > 0:
-                            if int(a['stck_prpr']) < i[3]:
-                                trail_signal_code = "08"
-                                trail_signal_name = format(int(i[3]), ',d') + "원 {지지가 이탈}"
-
-                                if i[6] != None:
-                                    n_sell_amount = i[6]
-                                    n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                                    sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    if i[4] != None:
-                        if i[4] > 0:
-                            if int(a['stck_hgpr']) > i[4]:
-                                trail_signal_code = "09"
-                                trail_signal_name = format(int(i[4]), ',d') + "원 {최종목표가 돌파}"
-
-                                if i[6] != None:
-                                    n_sell_amount = i[6]
-                                    n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                                    sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    if i[5] != None:
-                        if i[5] > 0:
-                            if int(a['stck_lwpr']) < i[5]:
-                                trail_signal_code = "10"
-                                trail_signal_name = format(int(i[5]), ',d') + "원 {최종이탈가 이탈}"
-
-                                if i[6] != None:
-                                    n_sell_amount = i[6]
-                                    n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                                    sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    if i[7] != None:
-                        trail_signal_code = "11"
-                        trail_signal_name = "시장 지지선 이탈[지지가 : " + format(int(i[3]), ',d') + "원]"
-
-                        if i[6] != None:
-                            n_sell_amount = i[6]
-                            n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                            sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    if i[8] != None:
-                        trail_signal_code = "12"
-                        trail_signal_name = "시장 추세선 이탈[지지가 : " + format(int(i[3]), ',d') + "원]"
-
-                        if i[6] != None:
-                            n_sell_amount = i[6]
-                            n_sell_sum = int(a['stck_prpr']) * n_sell_amount
-                            sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    # if cur_time > '1510':
-                    #     if i[9] != None:
-                    #         if int(a['stck_prpr']) < i[9]:
-                    #             if i[7] != None:
-                    #                 trail_signal_code = "13"
-                    #                 trail_signal_name = "시장 이탈하고 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
-
-                    #                 trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20"}
-
-                    #                 for key, value in trading_plan_dic.items():
-                    #                     if key == i[11]:
-                    #                         sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, i[0])
-
-                    #                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-                    #                 result_msgs = []
-
-                    #                 for j, name in enumerate(c.index):
-                    #                     J_code = c['pdno'][j]
-                    #                     j_hldg_qty = int(c['hldg_qty'][j])
-                    #                     j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                    #                     sell_rate = 0
-                    #                     sell_amount = 0
-                    #                     sell_sum = 0
-                    #                     sell_price = 0
-
-                    #                     if J_code == i[0]:
-                    #                         sell_price = int(a['stck_oprc'])
-
-                    #                         for key, value in trading_plan_dic.items():
-                    #                             if key == i[11]:
-                    #                                 sell_rate = int(value)
-
-                    #                         if sell_rate > 0:
-                    #                             n_sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                    #                             n_sell_sum = n_sell_amount * sell_price
-                    #                             sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    #                             if j_ord_psbl_qty > 0:
-                    #                                 try:
-                    #                                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "00", str(n_sell_amount), str(sell_price))
-
-                    #                                     if c['ODNO'] != "":
-                    #                                         output1 = get_my_complete(access_token, app_key, app_secret, acct_no, J_code, c['ODNO'])
-                    #                                         tdf = pd.DataFrame(output1)
-                    #                                         tdf.set_index('odno')
-                    #                                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                    #                                         for k, name in enumerate(d.index):
-                    #                                             d_order_no = int(d['odno'][k])
-                    #                                             d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    #                                             d_order_dt = d['ord_dt'][k]
-                    #                                             d_order_tmd = d['ord_tmd'][k]
-                    #                                             d_name = d['prdt_name'][k]
-                    #                                             d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    #                                             d_order_amount = d['ord_qty'][k]
-                    #                                             d_total_complete_qty = d['tot_ccld_qty'][k]
-                    #                                             d_remain_qty = d['rmn_qty'][k]
-                    #                                             d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                    #                                             print("매도주문 완료")
-                    #                                             msg = f"[시장 이탈하고 전일 저가 이탈 시작가 자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                    #                                             result_msgs.append(msg)
-
-                    #                                         cur13 = conn.cursor()
-                    #                                         update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
-                    #                                         record_to_update404 = ([str(acct_no), i[0]])
-                    #                                         cur13.execute(update_query13, record_to_update404)
-                    #                                         cur13.close()
-                    #                                         conn.commit()
-
-                    #                                     else:
-                    #                                         print("매도주문 실패")
-                    #                                         msg = f"[시장 이탈하고 전일 저가 이탈 시작가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
-                    #                                         result_msgs.append(msg)
-
-                    #                                 except Exception as e:
-                    #                                     print('매도주문 오류.', e)
-                    #                                     msg = f"[시장 이탈하고 전일 저가 이탈 시작가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 [매도주문 오류] - {str(e)}"
-                    #                                     result_msgs.append(msg)
-
-                    #                                 final_message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
-                    #                                 main(final_message)
-
-                    #             elif i[8] != None:
-                    #                 trail_signal_code = "14"
-                    #                 trail_signal_name = "시장 지지선 이탈하고 전일 저가 " + format(int(i[9]), ',d') +"원 이탈"
-
-                    #                 trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"66", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
-
-                    #                 for key, value in trading_plan_dic.items():
-                    #                     if key == i[11]:
-                    #                         sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, i[0])
-
-                    #                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-                    #                 result_msgs = []
-
-                    #                 for j, name in enumerate(c.index):
-                    #                     J_code = c['pdno'][j]
-                    #                     j_hldg_qty = int(c['hldg_qty'][j])
-                    #                     j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                    #                     sell_rate = 0
-                    #                     sell_amount = 0
-                    #                     sell_sum = 0
-                    #                     sell_price = 0
-
-                    #                     if J_code == i[0]:
-                    #                         sell_price = int(a['stck_prpr'])
-
-                    #                         for key, value in trading_plan_dic.items():
-                    #                             if key == i[11]:
-                    #                                 sell_rate = int(value)
-
-                    #                         if sell_rate > 0:
-                    #                             n_sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                    #                             n_sell_sum = n_sell_amount * sell_price
-                    #                             sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    #                             if j_ord_psbl_qty > 0:
-                    #                                 try:
-                    #                                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "00", str(n_sell_amount), str(sell_price))
-
-                    #                                     if c['ODNO'] != "":
-                    #                                         output1 = get_my_complete(access_token, app_key, app_secret, acct_no, J_code, c['ODNO'])
-                    #                                         tdf = pd.DataFrame(output1)
-                    #                                         tdf.set_index('odno')
-                    #                                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                    #                                         for k, name in enumerate(d.index):
-                    #                                             d_order_no = int(d['odno'][k])
-                    #                                             d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    #                                             d_order_dt = d['ord_dt'][k]
-                    #                                             d_order_tmd = d['ord_tmd'][k]
-                    #                                             d_name = d['prdt_name'][k]
-                    #                                             d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    #                                             d_order_amount = d['ord_qty'][k]
-                    #                                             d_total_complete_qty = d['tot_ccld_qty'][k]
-                    #                                             d_remain_qty = d['rmn_qty'][k]
-                    #                                             d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                    #                                             print("매도주문 완료")
-                    #                                             msg = f"[시장 지지선 이탈하고 전일 저가 이탈 현재가 자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                    #                                             result_msgs.append(msg)
-
-                    #                                         cur13 = conn.cursor()
-                    #                                         update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
-                    #                                         record_to_update404 = ([str(acct_no), i[0]])
-                    #                                         cur13.execute(update_query13, record_to_update404)
-                    #                                         cur13.close()
-                    #                                         conn.commit()
-
-                    #                                     else:
-                    #                                         print("매도주문 실패")
-                    #                                         msg = f"[시장 지지선 이탈하고 전일 저가 이탈 현재가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
-                    #                                         result_msgs.append(msg)
-
-                    #                                 except Exception as e:
-                    #                                     print('매도주문 오류.', e)
-                    #                                     msg = f"[시장 지지선 이탈하고 전일 저가 이탈 현재가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 [매도주문 오류] - {str(e)}"
-                    #                                     result_msgs.append(msg)
-
-                    #                                 final_message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
-                    #                                 main(final_message)
-
-                    #             elif i[10] != None:
-                    #                 trail_signal_code = "15"
-                    #                 trail_signal_name = "저항가 돌파하고 전일 저가 "+format(int(i[9]), ',d') +"원 이탈"
-
-                    #                 trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20"}
-
-                    #                 for key, value in trading_plan_dic.items():
-                    #                     if key == i[11]:
-                    #                         sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, i[0])
-
-                    #                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-                    #                 result_msgs = []
-
-                    #                 for j, name in enumerate(c.index):
-                    #                     J_code = c['pdno'][j]
-                    #                     j_hldg_qty = int(c['hldg_qty'][j])
-                    #                     j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                    #                     sell_rate = 0
-                    #                     sell_amount = 0
-                    #                     sell_sum = 0
-                    #                     sell_price = 0
-
-                    #                     if J_code == i[0]:
-                    #                         sell_price = int(a['stck_oprc'])
-
-                    #                         for key, value in trading_plan_dic.items():
-                    #                             if key == i[11]:
-                    #                                 sell_rate = int(value)
-
-                    #                         if sell_rate > 0:
-                    #                             n_sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                    #                             n_sell_sum = n_sell_amount * sell_price
-                    #                             sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    #                             if j_ord_psbl_qty > 0:
-                    #                                 try:
-                    #                                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "00", str(n_sell_amount), str(sell_price))
-
-                    #                                     if c['ODNO'] != "":
-                    #                                         output1 = get_my_complete(access_token, app_key, app_secret, acct_no, J_code, c['ODNO'])
-                    #                                         tdf = pd.DataFrame(output1)
-                    #                                         tdf.set_index('odno')
-                    #                                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                    #                                         for k, name in enumerate(d.index):
-                    #                                             d_order_no = int(d['odno'][k])
-                    #                                             d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    #                                             d_order_dt = d['ord_dt'][k]
-                    #                                             d_order_tmd = d['ord_tmd'][k]
-                    #                                             d_name = d['prdt_name'][k]
-                    #                                             d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    #                                             d_order_amount = d['ord_qty'][k]
-                    #                                             d_total_complete_qty = d['tot_ccld_qty'][k]
-                    #                                             d_remain_qty = d['rmn_qty'][k]
-                    #                                             d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                    #                                             print("매도주문 완료")
-                    #                                             msg = f"[저항가 돌파하고 전일 저가 이탈 시작가 자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                    #                                             result_msgs.append(msg)
-
-                    #                                         cur13 = conn.cursor()
-                    #                                         update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
-                    #                                         record_to_update404 = ([str(acct_no), i[0]])
-                    #                                         cur13.execute(update_query13, record_to_update404)
-                    #                                         cur13.close()
-                    #                                         conn.commit()
-
-                    #                                     else:
-                    #                                         print("매도주문 실패")
-                    #                                         msg = f"[저항가 돌파하고 전일 저가 이탈 시작가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
-                    #                                         result_msgs.append(msg)
-
-                    #                                 except Exception as e:
-                    #                                     print('매도주문 오류.', e)
-                    #                                     msg = f"[저항가 돌파하고 전일 저가 이탈 시작가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 [매도주문 오류] - {str(e)}"
-                    #                                     result_msgs.append(msg)
-
-                    #                                 final_message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
-                    #                                 main(final_message)
-
-                    #             elif i[11] != None:
-                    #                 trail_signal_code = "16"
-                    #                 trail_signal_name = "최종목표가 돌파하고 전일 저가 "+format(int(i[9]), ',d') +"원 이탈"
-
-                    #                 trading_plan_dic = {"as":"100", "66s":"66", "50s":"50", "33s":"33", "25s":"25", "20s":"20", "1b":"66", "2b":"50", "3b":"33", "4b":"25", "5b":"20"}
-
-                    #                 for key, value in trading_plan_dic.items():
-                    #                     if key == i[11]:
-                    #                         sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, i[0])
-
-                    #                 c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-                    #                 result_msgs = []
-
-                    #                 for j, name in enumerate(c.index):
-                    #                     J_code = c['pdno'][j]
-                    #                     j_hldg_qty = int(c['hldg_qty'][j])
-                    #                     j_ord_psbl_qty = int(c['ord_psbl_qty'][j])
-
-                    #                     sell_rate = 0
-                    #                     sell_amount = 0
-                    #                     sell_sum = 0
-                    #                     sell_price = 0
-
-                    #                     if J_code == i[0]:
-                    #                         sell_price = int(a['stck_prpr'])
-
-                    #                         for key, value in trading_plan_dic.items():
-                    #                             if key == i[11]:
-                    #                                 sell_rate = int(value)
-
-                    #                         if sell_rate > 0:
-                    #                             n_sell_amount = round(j_ord_psbl_qty * (sell_rate / 100))
-                    #                             n_sell_sum = n_sell_amount * sell_price
-                    #                             sell_plan_amount = format(int(n_sell_amount), ',d')
-
-                    #                             if j_ord_psbl_qty > 0:
-                    #                                 try:
-                    #                                     c = order_cash(False, access_token, app_key, app_secret, str(acct_no), J_code, "00", str(n_sell_amount), str(sell_price))
-
-                    #                                     if c['ODNO'] != "":
-                    #                                         output1 = get_my_complete(access_token, app_key, app_secret, acct_no, J_code, c['ODNO'])
-                    #                                         tdf = pd.DataFrame(output1)
-                    #                                         tdf.set_index('odno')
-                    #                                         d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
-
-                    #                                         for k, name in enumerate(d.index):
-                    #                                             d_order_no = int(d['odno'][k])
-                    #                                             d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                    #                                             d_order_dt = d['ord_dt'][k]
-                    #                                             d_order_tmd = d['ord_tmd'][k]
-                    #                                             d_name = d['prdt_name'][k]
-                    #                                             d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                    #                                             d_order_amount = d['ord_qty'][k]
-                    #                                             d_total_complete_qty = d['tot_ccld_qty'][k]
-                    #                                             d_remain_qty = d['rmn_qty'][k]
-                    #                                             d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                    #                                             print("매도주문 완료")
-                    #                                             msg = f"[최종목표가 돌파하고 전일 저가 이탈 현재가 자동처리 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
-                    #                                             result_msgs.append(msg)
-
-                    #                                         cur13 = conn.cursor()
-                    #                                         update_query13 = "UPDATE \"stockBalance_stock_balance\" A SET trading_plan = 'h' where acct_no = %s and proc_yn = 'Y' and code = %s"
-                    #                                         record_to_update404 = ([str(acct_no), i[0]])
-                    #                                         cur13.execute(update_query13, record_to_update404)
-                    #                                         cur13.close()
-                    #                                         conn.commit()
-
-                    #                                     else:
-                    #                                         print("매도주문 실패")
-                    #                                         msg = f"[최종목표가 돌파하고 전일 저가 이탈 현재가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 매도주문 실패"
-                    #                                         result_msgs.append(msg)
-
-                    #                                 except Exception as e:
-                    #                                     print('매도주문 오류.', e)
-                    #                                     msg = f"[최종목표가 돌파하고 전일 저가 이탈 현재가 자동처리 매도-{i[1]}] 매도가 : {int(sell_price):,}원, 매도량 : {int(n_sell_amount):,}주 [매도주문 오류] - {str(e)}"
-                    #                                     result_msgs.append(msg)
-
-                    #                                 final_message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
-                    #                                 main(final_message)
-
-                    cur04 = conn.cursor()
-                    cur04.execute("""
-                        SELECT TS.trail_signal_code, TS.trail_time FROM trail_signal TS
-                        WHERE TS.acct = %s AND TS.code = %s AND TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') AND trail_signal_code = %s
-                    """, (str(acct_no), i[0], trail_signal_code))
-                    result_four = cur04.fetchall()
-                    cur04.close()
-
-                    if len(result_four) > 0:
-                        for j in result_four:
-                            if trail_signal_code != "":
-                                if trail_signal_code != j[0]:
+def process_account(nick):
+    """계좌별 독립 DB 연결로 병렬 처리"""
+    conn = db.connect(conn_string)
+    try:
+        ac = account(nick, conn)
+        acct_no = ac['acct_no']
+        access_token = ac['access_token']
+        app_key = ac['app_key']
+        app_secret = ac['app_secret']
+        token = ac['bot_token2']
+        chat_id = ac['chat_id']
+
+        # Bot 인스턴스를 계좌당 1회만 생성
+        updater = Updater(token=token, use_context=True)
+        bot = updater.bot
+
+        cur_time = datetime.now().strftime("%H%M")
+
+        if '0800' <= cur_time < '0900':
+            # NXT 장전 : 주문체결 처리만 수행
+            order_complete_proc(access_token, app_key, app_secret, acct_no, conn)
+
+        elif '0900' <= cur_time < '1530':
+            # KRX 정규시장 : 잔고정보 처리(내부에서 주문체결 처리 포함) + trail signal 처리
+            balance_proc(access_token, app_key, app_secret, acct_no, conn)
+
+            # 보유정보 조회
+            cur03 = conn.cursor()
+            cur03.execute("""
+                SELECT code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '02') AS market_dead,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '04') AS market_over,
+                    CASE WHEN cast(A.purchase_amount AS INTEGER) > 0
+                         THEN (SELECT B.low_price FROM dly_stock_balance B WHERE A.code = B.code AND A.acct_no = cast(B.acct AS INTEGER) AND B.dt = TO_CHAR(get_previous_business_day(now()::date), 'YYYYMMDD'))
+                         ELSE null END AS low_price,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '07') AS regist_over,
+                    (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '09') AS target_over,
+                    COALESCE(NULLIF(trading_plan, ''), 'as'), COALESCE(safe_margin_sum, 0)
+                FROM "stockBalance_stock_balance" A
+                WHERE acct_no = %s AND proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
+            """, (str(acct_no), str(acct_no), str(acct_no), str(acct_no), str(acct_no)))
+            result_three = cur03.fetchall()
+            cur03.close()
+
+            for i in result_three:
+                a = ""
+                try:
+                    time.sleep(0.3)
+                    a = inquire_price(access_token, app_key, app_secret, i[0])
+                except Exception as ex:
+                    print(f"현재가 시세 에러 : [{i[0]}] {ex}")
+                if not a:
+                    continue
+
+                trail_signal_code = ""
+                trail_signal_name = ""
+                sell_plan_amount = ""
+                n_sell_amount = 0
+                n_sell_sum = 0
+                if i[2] != None:
+                    if i[2] > 0:
+                        if int(a['stck_prpr']) > i[2]:
+                            trail_signal_code = "07"
+                            trail_signal_name = format(int(i[2]), ',d') + "원 {저항가 돌파}"
+
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                if i[3] != None:
+                    if i[3] > 0:
+                        if int(a['stck_prpr']) < i[3]:
+                            trail_signal_code = "08"
+                            trail_signal_name = format(int(i[3]), ',d') + "원 {지지가 이탈}"
+
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                if i[4] != None:
+                    if i[4] > 0:
+                        if int(a['stck_hgpr']) > i[4]:
+                            trail_signal_code = "09"
+                            trail_signal_name = format(int(i[4]), ',d') + "원 {최종목표가 돌파}"
+
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                if i[5] != None:
+                    if i[5] > 0:
+                        if int(a['stck_lwpr']) < i[5]:
+                            trail_signal_code = "10"
+                            trail_signal_name = format(int(i[5]), ',d') + "원 {최종이탈가 이탈}"
+
+                            if i[6] != None:
+                                n_sell_amount = i[6]
+                                n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                                sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                if i[7] != None:
+                    trail_signal_code = "11"
+                    trail_signal_name = "시장 지지선 이탈[지지가 : " + format(int(i[3]), ',d') + "원]"
+
+                    if i[6] != None:
+                        n_sell_amount = i[6]
+                        n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                        sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                if i[8] != None:
+                    trail_signal_code = "12"
+                    trail_signal_name = "시장 추세선 이탈[지지가 : " + format(int(i[3]), ',d') + "원]"
+
+                    if i[6] != None:
+                        n_sell_amount = i[6]
+                        n_sell_sum = int(a['stck_prpr']) * n_sell_amount
+                        sell_plan_amount = format(int(n_sell_amount), ',d')
+
+                cur04 = conn.cursor()
+                cur04.execute("""
+                    SELECT TS.trail_signal_code, TS.trail_time FROM trail_signal TS
+                    WHERE TS.acct = %s AND TS.code = %s AND TS.trail_day = TO_CHAR(now(), 'YYYYMMDD') AND trail_signal_code = %s
+                """, (str(acct_no), i[0], trail_signal_code))
+                result_four = cur04.fetchall()
+                cur04.close()
+
+                if len(result_four) > 0:
+                    for j in result_four:
+                        if trail_signal_code != "":
+                            if trail_signal_code != j[0]:
+                                try:
                                     print("종목명 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
                                     if n_sell_amount > 0:
                                         sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
                                         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
                                     else:
                                         telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
-                                    main(telegram_text)
+                                    
+                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                                except Exception as te:
+                                    print(f"텔레그램 발송 실패: {te}")
 
-                                    cur20 = conn.cursor()
-                                    insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                                    record_to_insert0 = ([cur_time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
-                                    cur20.execute(insert_query0, record_to_insert0)
+                                cur20 = conn.cursor()
+                                insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                                record_to_insert0 = ([cur_time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                                cur20.execute(insert_query0, record_to_insert0)
 
-                                    cur2 = conn.cursor()
-                                    insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                    record_to_insert = ([acct_no, today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
-                                    cur2.execute(insert_query, record_to_insert)
-                                    conn.commit()
-                                    cur20.close()
-                                    cur2.close()
+                                cur2 = conn.cursor()
+                                insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                record_to_insert = ([acct_no, today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                                cur2.execute(insert_query, record_to_insert)
+                                conn.commit()
+                                cur20.close()
+                                cur2.close()
 
-                                    # if trail_signal_code == '07' or trail_signal_code == '08' or trail_signal_code == '09' or trail_signal_code == '10':
-
-                                    #     base_dtm = datetime.strptime(today + j[1] + '00', '%Y%m%d%H%M%S')
-                                    #     candle_list = fetch_candles_with_base(access_token, app_key, app_secret, i[0], base_dtm)
-
-                                    #     minute_list = []
-                                    #     for item in candle_list:
-                                    #         minute_list.append({
-                                    #             '체결시간': item['stck_cntg_hour'],
-                                    #             '종가': item['stck_prpr'],
-                                    #             '시가': item['stck_oprc'],
-                                    #             '고가': item['stck_hgpr'],
-                                    #             '저가': item['stck_lwpr'],
-                                    #             '거래량': item['cntg_vol']
-                                    #         })
-
-                                    #     df = pd.DataFrame(minute_list)
-                                    #     df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
-                                    #     df = df.sort_values('체결시간').reset_index(drop=True)
-                                    #     df.rename(columns={'종가': 'close', '시가': 'open', '고가': 'high', '저가': 'low', '거래량': 'volume', '체결시간': 'timestamp'}, inplace=True)
-                                    #     df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-                                    #     df['body'] = (df['close'] - df['open']).abs()
-
-                                    #     df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).reset_index()
-                                    #     df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-                                    #     기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
-                                    #     avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
-
-                                    #     body_value = 기준봉['body']
-                                    #     if body_value > avg_body * 1.5:
-                                    #         candle_body = "L"
-                                    #     elif body_value < avg_body * 0.5:
-                                    #         candle_body = "S"
-                                    #     else:
-                                    #         candle_body = "M"
-
-                                    #     cur500 = conn.cursor()
-                                    #     insert_query = """
-                                    #         INSERT INTO trade_auto_proc (
-                                    #             acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price,
-                                    #             low_price, close_price, vol, candle_body, trade_sum, proc_yn,
-                                    #             regr_id, reg_date, chgr_id, chg_date
-                                    #         )
-                                    #         SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                                    #         WHERE NOT EXISTS (
-                                    #             SELECT 1 FROM trade_auto_proc
-                                    #             WHERE acct_no=%s AND code=%s AND base_day=%s
-                                    #             AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
-                                    #         );
-                                    #         """
-                                    #     cur500.execute(insert_query, (
-                                    #         str(acct_no), i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
-                                    #         , str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
-                                    #     ))
-                                    #     was_inserted = cur500.rowcount == 1
-                                    #     conn.commit()
-                                    #     cur500.close()
-
-                                    #     if was_inserted:
-                                    #         cur501 = conn.cursor()
-                                    #         update_query = """
-                                    #             UPDATE trade_auto_proc
-                                    #             SET proc_yn = 'N', chgr_id = 'AUTO_UP_SELL', chg_date = %s
-                                    #             WHERE acct_no = %s AND code = %s AND base_day = %s
-                                    #             AND base_dtm <> %s AND trade_tp = 'S' AND proc_yn = 'Y'
-                                    #         """
-                                    #         cur501.execute(update_query, (
-                                    #             datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
-                                    #         ))
-                                    #         conn.commit()
-                                    #         cur501.close()
-
-                    else:
-                        if trail_signal_code != "":
+                else:
+                    if trail_signal_code != "":
+                        try:
                             print("종목명 : " + i[1] + "추적신호 : " + trail_signal_name)
                             if n_sell_amount > 0:
                                 sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
                                 telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
                             else:
                                 telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
-                            main(telegram_text)
+                            
+                            bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                        except Exception as te:
+                            print(f"텔레그램 발송 실패: {te}")
+                            
+                        cur20 = conn.cursor()
+                        insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+                        record_to_insert0 = ([cur_time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                        cur20.execute(insert_query0, record_to_insert0)
 
-                            cur20 = conn.cursor()
-                            insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
-                            record_to_insert0 = ([cur_time, i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum), str(acct_no), today, i[0], trail_signal_code, str(acct_no), today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
-                            cur20.execute(insert_query0, record_to_insert0)
+                        cur2 = conn.cursor()
+                        insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        record_to_insert = ([acct_no, today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
+                        cur2.execute(insert_query, record_to_insert)
+                        conn.commit()
+                        cur20.close()
+                        cur2.close()
 
-                            cur2 = conn.cursor()
-                            insert_query = "insert into trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                            record_to_insert = ([acct_no, today, cur_time, trail_signal_code, trail_signal_name, i[0], i[1], int(a['stck_prpr']), int(a['stck_hgpr']), int(a['stck_lwpr']), int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), int(n_sell_amount), int(n_sell_sum)])
-                            cur2.execute(insert_query, record_to_insert)
-                            conn.commit()
-                            cur20.close()
-                            cur2.close()
+                # ② sleep(3) → sleep(0.5) 로 단축
+                time.sleep(0.5)
 
-                            # if trail_signal_code == '07' or trail_signal_code == '08' or trail_signal_code == '09' or trail_signal_code == '10':
+        elif '1530' <= cur_time < '2000':
+            # NXT 장후 : 주문체결 처리만 수행
+            order_complete_proc(access_token, app_key, app_secret, acct_no, conn)
 
-                            #     base_dtm = datetime.strptime(today + cur_time + '00', '%Y%m%d%H%M%S')
-                            #     candle_list = fetch_candles_with_base(access_token, app_key, app_secret, i[0], base_dtm)
+    except Exception as e:
+        print(f"[{nick}] Error holding item : {e}")
+    finally:
+        conn.close()
 
-                            #     minute_list = []
-                            #     for item in candle_list:
-                            #         minute_list.append({
-                            #             '체결시간': item['stck_cntg_hour'],
-                            #             '종가': item['stck_prpr'],
-                            #             '시가': item['stck_oprc'],
-                            #             '고가': item['stck_hgpr'],
-                            #             '저가': item['stck_lwpr'],
-                            #             '거래량': item['cntg_vol']
-                            #         })
 
-                            #     df = pd.DataFrame(minute_list)
-                            #     df['체결시간'] = pd.to_datetime(df['체결시간'], format='%H%M%S')
-                            #     df = df.sort_values('체결시간').reset_index(drop=True)
-                            #     df.rename(columns={'종가': 'close', '시가': 'open', '고가': 'high', '저가': 'low', '거래량': 'volume', '체결시간': 'timestamp'}, inplace=True)
-                            #     df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
-                            #     df['body'] = (df['close'] - df['open']).abs()
+# 휴일정보 조회 (임시 연결 사용 — 스레드 진입 전 단일 실행)
+with db.connect(conn_string) as _conn_check:
+    _cur0 = _conn_check.cursor()
+    _cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
+    _holiday = _cur0.fetchone()
+    _cur0.close()
 
-                            #     df_10m = df.resample('10T', on='timestamp', label='left', closed='left').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).reset_index()
-                            #     df_10m['body'] = (df_10m['close'] - df_10m['open']).abs()
-                            #     기준봉 = df_10m.loc[df_10m['volume'].idxmax()]
-                            #     avg_body = df_10m['body'].rolling(20).mean().iloc[-1] if len(df_10m) >= 20 else df_10m['body'].mean()
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
-                            #     body_value = 기준봉['body']
-                            #     if body_value > avg_body * 1.5:
-                            #         candle_body = "L"
-                            #     elif body_value < avg_body * 0.5:
-                            #         candle_body = "S"
-                            #     else:
-                            #         candle_body = "M"
+# 휴일이 아닌 경우
+if _holiday is None:
 
-                            #     cur500 = conn.cursor()
-                            #     insert_query = """
-                            #         INSERT INTO trade_auto_proc (
-                            #             acct_no, name, code, base_day, base_dtm, trade_tp, open_price, high_price,
-                            #             low_price, close_price, vol, candle_body, trade_sum, proc_yn,
-                            #             regr_id, reg_date, chgr_id, chg_date
-                            #         )
-                            #         SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                            #         WHERE NOT EXISTS (
-                            #             SELECT 1 FROM trade_auto_proc
-                            #             WHERE acct_no=%s AND code=%s AND base_day=%s
-                            #             AND base_dtm=%s AND trade_tp=%s AND proc_yn='Y'
-                            #         );
-                            #         """
-                            #     cur500.execute(insert_query, (
-                            #         str(acct_no), i[1], i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S", 기준봉['open'], 기준봉['high'], 기준봉['low'], 기준봉['close'], 기준봉['volume'], candle_body, '100', 'Y', 'AUTO_SELL', datetime.now(), 'AUTO_SELL', datetime.now()
-                            #         , str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S"), "S"
-                            #     ))
-                            #     was_inserted = cur500.rowcount == 1
-                            #     conn.commit()
-                            #     cur500.close()
-
-                            #     if was_inserted:
-                            #         cur501 = conn.cursor()
-                            #         update_query = """
-                            #             UPDATE trade_auto_proc
-                            #             SET proc_yn = 'N', chgr_id = 'AUTO_UP_SELL', chg_date = %s
-                            #             WHERE acct_no = %s AND code = %s AND base_day = %s
-                            #             AND base_dtm <> %s AND trade_tp = 'S' AND proc_yn = 'Y'
-                            #         """
-                            #         cur501.execute(update_query, (
-                            #             datetime.now(), str(acct_no), i[0], datetime.now().strftime("%Y%m%d"), 기준봉['timestamp'].strftime("%H%M%S")
-                            #         ))
-                            #         conn.commit()
-                            #         cur501.close()
-
-                    time.sleep(3)
-
-            elif '1530' <= cur_time < '2000':
-                # NXT 장후 : 주문체결 처리만 수행
-                order_complete_proc(access_token, app_key, app_secret, acct_no)
-
-        except Exception as e:
-            print(f"[{nick}] Error holding item : {e}")
-
-    conn.close()
+    # ① 9개 계좌 병렬 처리
+    with ThreadPoolExecutor(max_workers=len(nickname_list)) as executor:
+        futures = {executor.submit(process_account, nick): nick for nick in nickname_list}
+        for future in as_completed(futures):
+            nick = futures[future]
+            try:
+                future.result()
+            except Exception as e:
+                print(f"[{nick}] 계좌 최종 오류: {e}")
 
 else:
-    conn.close()
     print("Today is Holiday")
