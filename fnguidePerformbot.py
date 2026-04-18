@@ -229,7 +229,7 @@ def echo(update, context):
         ax_bottom.tick_params(axis='x', rotation=90)
         ax_bottom.grid()
 
-        plt.savefig('/home/terra/Public/Batch/save2.png')
+        plt.savefig('/home/terra/chart/save2.png')
         plt.close(fig)
 
     def get_sales_sum(col):
@@ -264,7 +264,7 @@ def echo(update, context):
 
     if len(code) > 0 and dividend is not None:
         get_chart(code)
-        with open('/home/terra/Public/Batch/save2.png', 'rb') as f:
+        with open('/home/terra/chart/save2.png', 'rb') as f:
             context.bot.send_photo(chat_id=user_id, photo=f)
 
         text0 = return_print("<" + company + ">")
