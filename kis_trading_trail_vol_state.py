@@ -1214,6 +1214,22 @@ def get_kis_1min_from_datetime(
                                     bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
+                                # 전일저가 이탈 사전경고 → trade_tp 'P' 변경
+                                try:
+                                    cur_p = conn.cursor()
+                                    cur_p.execute("""
+                                        UPDATE public.trading_trail
+                                        SET trade_tp = 'P', mod_dt = %s
+                                        WHERE acct_no = %s
+                                          AND code = %s
+                                          AND trail_day = %s
+                                          AND trail_tp NOT IN ('3', '4')
+                                    """, (datetime.now(), acct_no, stock_code, datetime.now().strftime("%Y%m%d")))
+                                    conn.commit()
+                                    cur_p.close()
+                                    print(f"  [{stock_name}-{stock_code}] trade_tp → P 변경 완료")
+                                except Exception as de:
+                                    print(f"  [{stock_name}-{stock_code}] trade_tp P 변경 실패: {de}")
 
                     # ===============================
                     # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
@@ -1488,6 +1504,15 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "손절매도",
                                     })
+                                    try:
+                                        message = (
+                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                            f" 손절매수 대상: 최종이탈가({exit_price:,})원 이탈 대기"
+                                        )
+                                        print(message)
+                                        bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                    except Exception as te:
+                                        print(f"텔레그램 발송 실패: {te}")
 
                                 # 매수금액 대상: 손절가(stop_price) 이탈
                                 elif not pre_market and trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:
@@ -1499,6 +1524,15 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "이탈매도",
                                     })
+                                    try:
+                                        message = (
+                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                            f" 매수금액 대상: 손절가({stop_price:,})원 이탈 대기"
+                                        )
+                                        print(message)
+                                        bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                    except Exception as te:
+                                        print(f"텔레그램 발송 실패: {te}")
 
                             # 목표가 돌파
                             if breakout_check >= target_price:
