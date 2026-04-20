@@ -164,7 +164,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
             tdf = pd.DataFrame(output1)
             tdf.set_index('odno')
-            d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+            d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
             order_no = 0
 
             for i, name in enumerate(d.index):
@@ -567,7 +567,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
 
                     for k, name in enumerate(d.index):
                         d_order_no = int(d['odno'][k])
@@ -665,7 +665,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
 
                     for k, name in enumerate(d.index):
                         d_order_no = int(d['odno'][k])
@@ -1193,53 +1193,53 @@ def get_kis_1min_from_datetime(
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
 
-                    # ===============================
-                    # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
-                    # ===============================
-                    _prevlow_start  = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
-                    _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
-                    if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
-                        if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                            if current_10min_key != prevlow_warn_last_key:
-                                prevlow_warn_last_key = current_10min_key
-                                gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
-                                try:
-                                    msg_warn = (
-                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                        f" [사전경고] 전일저가 이탈 감시"
-                                        f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
-                                        f" | 수익률:{gain_pct_warn:+.1f}%"
-                                    )
-                                    print(msg_warn)
-                                    bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
-                                except Exception as te:
-                                    print(f"텔레그램 발송 실패: {te}")
-                                # 전일저가 이탈 사전경고 → trade_tp 'P' 변경
-                                try:
-                                    cur_p = conn.cursor()
-                                    cur_p.execute("""
-                                        UPDATE public.trading_trail
-                                        SET trade_tp = 'P', mod_dt = %s
-                                        WHERE acct_no = %s
-                                          AND code = %s
-                                          AND trail_day = %s
-                                          AND trail_tp NOT IN ('3', '4')
-                                    """, (datetime.now(), acct_no, stock_code, datetime.now().strftime("%Y%m%d")))
-                                    conn.commit()
-                                    cur_p.close()
-                                    print(f"  [{stock_name}-{stock_code}] trade_tp → P 변경 완료")
-                                except Exception as de:
-                                    print(f"  [{stock_name}-{stock_code}] trade_tp P 변경 실패: {de}")
+                # ===============================
+                # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
+                # ===============================
+                _prevlow_start  = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
+                _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
+                if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
+                    if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                        if current_10min_key != prevlow_warn_last_key:
+                            prevlow_warn_last_key = current_10min_key
+                            gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
+                            try:
+                                msg_warn = (
+                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                    f" [사전경고] 전일저가 이탈 감시"
+                                    f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
+                                    f" | 수익률:{gain_pct_warn:+.1f}%"
+                                )
+                                print(msg_warn)
+                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
+                            except Exception as te:
+                                print(f"텔레그램 발송 실패: {te}")
+                            # 전일저가 이탈 사전경고 → trade_tp 'P' 변경
+                            try:
+                                cur_p = conn.cursor()
+                                cur_p.execute("""
+                                    UPDATE public.trading_trail
+                                    SET trade_tp = 'P', mod_dt = %s
+                                    WHERE acct_no = %s
+                                        AND code = %s
+                                        AND trail_day = %s
+                                        AND trail_tp NOT IN ('3', '4')
+                                """, (datetime.now(), acct_no, stock_code, trade_date))
+                                conn.commit()
+                                cur_p.close()
+                                print(f"  [{stock_name}-{stock_code}] trade_tp → P 변경 완료")
+                            except Exception as de:
+                                print(f"  [{stock_name}-{stock_code}] trade_tp P 변경 실패: {de}")
 
-                    # ===============================
-                    # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
-                    # ===============================
-                    _prevlow_cutoff = "161000" if trade_date.endswith("1119") else "151000"
-                    if not breakdown_wait["active"] and not sell_trigger and current_time >= _prevlow_cutoff and prev_low is not None:
-                        if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                            sell_trigger = True
-                            sell_reason = '금일종가 전일저가 이탈'
-                            sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
+                # ===============================
+                # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
+                # ===============================
+                _prevlow_cutoff = "161000" if trade_date.endswith("1119") else "151000"
+                if not breakdown_wait["active"] and not sell_trigger and current_time >= _prevlow_cutoff and prev_low is not None:
+                    if close_price < prev_low and int(prev_volume/2) < acml_vol:
+                        sell_trigger = True
+                        sell_reason = '금일종가 전일저가 이탈'
+                        sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
 
                 # ===============================
                 # 매도 실행 (공통)
