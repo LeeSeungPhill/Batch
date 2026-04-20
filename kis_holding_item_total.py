@@ -231,7 +231,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
             tdf = pd.DataFrame(output1)
             tdf.set_index('odno')
-            d = tdf[['pdno', 'odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty']]
+            d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
             order_no = 0
 
             for i, name in enumerate(d.index):
@@ -588,6 +588,7 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balanc
                 'pfls_amt': pfls_amt,
                 'paid_tax': paid_tax,
                 'paid_fee': paid_fee,
+                'excg_dvsn': item['excg_id_dvsn_cd'],
             })
 
     cur400 = conn.cursor()
@@ -629,8 +630,8 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balanc
                         acct_no, order_dt, order_tmd, name, order_no, org_order_no,
                         total_complete_amt, order_type, order_price, order_amount,
                         total_complete_qty, remain_qty, hold_price, hold_vol,
-                        profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                        profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, excg_dvsn, last_chg_date
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
                 """, (
                     acct_no, item['주문일자'], item['주문시각'], item['종목명'],
                     str(int(item['주문번호'])),
@@ -640,7 +641,7 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balanc
                     int(item['주문수량']), new_complete_qty, new_remain_qty,
                     item['보유단가'], item['보유수량'],
                     Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                    int(item['paid_tax']), int(item['paid_fee'])
+                    int(item['paid_tax']), int(item['paid_fee']), item['excg_dvsn']
                 ))
 
                 conn.commit()
@@ -668,8 +669,8 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balanc
                             acct_no, order_dt, order_tmd, name, order_no, org_order_no,
                             total_complete_amt, order_type, order_price, order_amount,
                             total_complete_qty, remain_qty, hold_price, hold_vol,
-                            profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, last_chg_date
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                            profit_loss_rate, profit_loss_amt, paid_tax, paid_fee, excg_dvsn, last_chg_date
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
                     """, (
                         acct_no, item['주문일자'], item['주문시각'], item['종목명'],
                         str(int(item['주문번호'])),
@@ -679,7 +680,7 @@ def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balanc
                         int(item['주문수량']), new_complete_qty, new_remain_qty,
                         hold_price, new_complete_qty,
                         Decimal(item['pfls_rate']), int(item['pfls_amt']),
-                        int(item['paid_tax']), int(item['paid_fee'])
+                        int(item['paid_tax']), int(item['paid_fee']), item['excg_dvsn']
                     ))
 
                     conn.commit()
