@@ -857,17 +857,17 @@ def process_account(nick):
                     for j in result_four:
                         if trail_signal_code != "":
                             if trail_signal_code != j[0]:
-                                try:
-                                    print("종목명 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
-                                    if n_sell_amount > 0:
-                                        sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
-                                        telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
-                                    else:
-                                        telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
+                                # try:
+                                #     print("종목명 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
+                                #     if n_sell_amount > 0:
+                                #         sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
+                                #         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
+                                #     else:
+                                #         telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
                                     
-                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-                                except Exception as te:
-                                    print(f"텔레그램 발송 실패: {te}")
+                                #     bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                                # except Exception as te:
+                                #     print(f"텔레그램 발송 실패: {te}")
 
                                 cur20 = conn.cursor()
                                 insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
@@ -884,17 +884,17 @@ def process_account(nick):
 
                 else:
                     if trail_signal_code != "":
-                        try:
-                            print("종목명 : " + i[1] + "추적신호 : " + trail_signal_name)
-                            if n_sell_amount > 0:
-                                sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
-                                telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
-                            else:
-                                telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
+                        # try:
+                        #     print("종목명 : " + i[1] + "추적신호 : " + trail_signal_name)
+                        #     if n_sell_amount > 0:
+                        #         sell_command = f"/HoldingSell_{i[0]}_{i[6]}"
+                        #         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원 => {sell_command}")
+                        #     else:
+                        #         telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(int(a['stck_prpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
                             
-                            bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-                        except Exception as te:
-                            print(f"텔레그램 발송 실패: {te}")
+                        #     bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                        # except Exception as te:
+                        #     print(f"텔레그램 발송 실패: {te}")
                             
                         cur20 = conn.cursor()
                         insert_query0 = "with upsert as (update trail_signal set trail_time = %s, name = %s, current_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, cdate = %s, sell_plan_qty = %s, sell_plan_amt = %s where acct = %s and trail_day = %s and code = %s and trail_signal_code = %s returning * ) insert into trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
