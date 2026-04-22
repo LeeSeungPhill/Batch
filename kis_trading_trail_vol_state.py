@@ -1214,12 +1214,12 @@ def get_kis_1min_from_datetime(
                                 bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
-                            # 전일저가 이탈 사전경고 → trade_tp 'P' 변경
+                            # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
                             try:
                                 cur_p = conn.cursor()
                                 cur_p.execute("""
                                     UPDATE public.trading_trail
-                                    SET trade_tp = 'P', mod_dt = %s
+                                    SET trail_tp = 'P', mod_dt = %s
                                     WHERE acct_no = %s
                                         AND code = %s
                                         AND trail_day = %s
@@ -1227,9 +1227,9 @@ def get_kis_1min_from_datetime(
                                 """, (datetime.now(), acct_no, stock_code, trade_date))
                                 conn.commit()
                                 cur_p.close()
-                                print(f"  [{stock_name}-{stock_code}] trade_tp → P 변경 완료")
+                                print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
                             except Exception as de:
-                                print(f"  [{stock_name}-{stock_code}] trade_tp P 변경 실패: {de}")
+                                print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
 
                 # ===============================
                 # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)

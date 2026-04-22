@@ -420,7 +420,7 @@ def get_kis_daily_chart(
         access_token: str,
         app_key: str,
         app_secret: str,
-        market_code: str = "UN",           # J:KRX, NX:NXT, UN:통합
+        market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
         period: str = "D",                # D:최근30거래일, W:최근30주, M:최근30개월
         adjust_price: str = "1",          # 0:수정주가미반영, 1:수정주가반영
         verbose: bool = True              # 출력 제어 옵션
