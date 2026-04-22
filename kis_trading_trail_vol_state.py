@@ -164,7 +164,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
             tdf = pd.DataFrame(output1)
             tdf.set_index('odno')
-            d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
+            d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
             order_no = 0
 
             for i, name in enumerate(d.index):
@@ -567,7 +567,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
 
                     for k, name in enumerate(d.index):
                         d_order_no = int(d['odno'][k])
@@ -665,7 +665,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
                     output1 = get_my_complete(access_token, app_key, app_secret, acct_no, code, c['ODNO'])
                     tdf = pd.DataFrame(output1)
                     tdf.set_index('odno')
-                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cnc_cfrm_qty', 'excg_id_dvsn_cd']]
+                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
 
                     for k, name in enumerate(d.index):
                         d_order_no = int(d['odno'][k])
@@ -1214,12 +1214,12 @@ def get_kis_1min_from_datetime(
                                 bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
-                            # 전일저가 이탈 사전경고 → trade_tp 'P' 변경
+                            # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
                             try:
                                 cur_p = conn.cursor()
                                 cur_p.execute("""
                                     UPDATE public.trading_trail
-                                    SET trade_tp = 'P', mod_dt = %s
+                                    SET trail_tp = 'P', mod_dt = %s
                                     WHERE acct_no = %s
                                         AND code = %s
                                         AND trail_day = %s
@@ -1227,9 +1227,9 @@ def get_kis_1min_from_datetime(
                                 """, (datetime.now(), acct_no, stock_code, trade_date))
                                 conn.commit()
                                 cur_p.close()
-                                print(f"  [{stock_name}-{stock_code}] trade_tp → P 변경 완료")
+                                print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
                             except Exception as de:
-                                print(f"  [{stock_name}-{stock_code}] trade_tp P 변경 실패: {de}")
+                                print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
 
                 # ===============================
                 # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
