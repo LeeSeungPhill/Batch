@@ -510,14 +510,14 @@ def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
 
     return ar.getBody().output['nrcvb_buy_amt']
 
-# 매도 주문정보 존재시 취소 처리
-def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
+# 주문정보 존재시 취소 처리
+def order_cancel_proc(access_token, app_key, app_secret, acct_no, code, sell_buy_dvsn_cd):
     
     result_msgs = []
 
     try:
         # 일별주문체결 조회
-        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, '')
+        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, '', sell_buy_dvsn_cd)
 
         if len(output1) > 0:
         
@@ -528,9 +528,9 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
 
             for i, name in enumerate(d.index):
 
-                # 매도주문 잔여수량 존재시
-                if d['sll_buy_dvsn_cd'][i] == "01": 
-                    
+                # 매도매수구분코드 일치시
+                if d['sll_buy_dvsn_cd'][i] == sell_buy_dvsn_cd: 
+                    # 잔량 존재시
                     if int(d['rmn_qty'][i]) > 0: 
                         order_no = int(d['odno'][i])
 
@@ -594,7 +594,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     return ar.getBody().output
 
 # 일별주문체결 조회
-def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no):
+def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no, sell_buy_dvsn_cd):
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -608,7 +608,7 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
                 "ACNT_PRDT_CD": '01',
                 "INQR_STRT_DT": datetime.now().strftime('%Y%m%d'),  # 조회시작일자 YYYYMMDD
                 "INQR_END_DT": datetime.now().strftime('%Y%m%d'),   # 조회종료일자 YYYYMMDD
-                "SLL_BUY_DVSN_CD": '00',                            # 매도매수구분코드 : 00 전체, 01 매도, 02 매수
+                "SLL_BUY_DVSN_CD": sell_buy_dvsn_cd,                # 매도매수구분코드 : 00 전체, 01 매도, 02 매수
                 "PDNO": code,
                 "ORD_GNO_BRNO": "",
                 "ODNO": order_no,
@@ -1000,7 +1000,7 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)
 
             # 일별주문체결 조회
-            output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '')
+            output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '00')
 
             if len(output1) > 0:
                 tdf = pd.DataFrame(output1)
@@ -1097,7 +1097,7 @@ def callback_get(update, context) :
                         c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
                         if c_ord is not None and c_ord['ODNO'] != "":
                             time.sleep(0.5)
-                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'])
+                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
                             tdf = pd.DataFrame(output1)
                             tdf.set_index('odno')
                             d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
@@ -1349,7 +1349,7 @@ def callback_get(update, context) :
                         c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
                         if c_ord is not None and c_ord['ODNO'] != "":
                             time.sleep(0.5)
-                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'])
+                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
                             tdf = pd.DataFrame(output1)
                             tdf.set_index('odno')
                             d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
@@ -1474,8 +1474,8 @@ def callback_get(update, context) :
             "31": "종목코드(종목명), 매도가(현재가:0), 매도량을 입력하세요.",
             "32": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
             "33": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
-            "51": "주문정정할 종목코드(종목명), 정정가(시장가:0)를 입력하세요.",
-            "52": "주문취소할 종목코드(종목명)를 입력하세요.",
+            "51": "주문정정할 종목코드(종목명), 정정가(시장가:0), 매매구분(매수:1 매도:2)을 입력하세요.",
+            "52": "주문취소할 종목코드(종목명), 매매구분(매수:1 매도:2)을 입력하세요.",
             "61": "예약주문할 종목코드(종목명), 매매구분(매수:1 매도:2), 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
             "62": "예약정정할 종목코드(종목명), 정정가(시장가:0), 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
             "63": "예약철회할 종목코드(종목명)를 입력하세요.",
@@ -2136,15 +2136,15 @@ def echo(update, context):
                     t_sell_qty = sell_qty
                     ord_dvsn = "00"
                     try:
-                        # 매도 주문정보 존재시 취소 처리
-                        if sell_order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code) == 'success':
+                        # 주문정보 존재시 취소 처리
+                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
                         
                             # 매도 : 지정가 주문
                             c = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, ord_dvsn, str(int(t_sell_qty)), str(int(t_sell_price)))
 
                             if c is not None and c['ODNO'] != "":
                                 # 일별주문체결 조회
-                                output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'])
+                                output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                 tdf = pd.DataFrame(output1)
                                 tdf.set_index('odno')
                                 d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
@@ -2212,8 +2212,8 @@ def echo(update, context):
                     t_sell_qty = 0
                     ord_dvsn = "00"
                     try:
-                        # 매도 주문정보 존재시 취소 처리
-                        if sell_order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code) == 'success':
+                        # 주문정보 존재시 취소 처리
+                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
 
                             # 계좌잔고 조회
                             e = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
@@ -2232,7 +2232,7 @@ def echo(update, context):
 
                                 if c is not None and c['ODNO'] != "":
                                     # 일별주문체결 조회
-                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'])
+                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                     tdf = pd.DataFrame(output1)
                                     tdf.set_index('odno')
                                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
@@ -2300,8 +2300,8 @@ def echo(update, context):
                     t_sell_qty = 0
                     ord_dvsn = "00"
                     try:
-                        # 매도 주문정보 존재시 취소 처리
-                        if sell_order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code) == 'success':
+                        # 주문정보 존재시 취소 처리
+                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
 
                             # 계좌잔고 조회
                             e = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
@@ -2320,7 +2320,7 @@ def echo(update, context):
 
                                 if c is not None and c['ODNO'] != "":
                                     # 일별주문체결 조회
-                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'])
+                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                     tdf = pd.DataFrame(output1)
                                     tdf.set_index('odno')
                                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
@@ -2456,17 +2456,20 @@ def echo(update, context):
 
         elif menuNum == '51':
             initMenuNum()
-            # 입력 형식: 종목코드(종목명), 정정가
-            parts51 = user_text.split(',', 1)
-            if len(parts51) < 2 or not parts51[1].strip().isdecimal():
+            # 입력 형식: 종목코드(종목명), 정정가, 매매구분(매수:1 매도:2)
+            parts51 = user_text.split(',', 3)
+            if len(parts51) < 3 or not parts51[1].strip().isdecimal():
                 context.bot.send_message(chat_id=user_id, text=f"입력 형식 오류 [{company}] - 종목코드(종목명), 정정가(시장가:0)")
+            elif parts51[2] not in ["1", "2"]:
+                print("매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
             else:
                 revise_price_51 = parts51[1].strip()
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_51(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     try:
-                        output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, '')
+                        output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, '', '01' if parts51[2] == '2' else '02')
                         if not output1:
                             context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문 미존재 [{company}]")
                             return
@@ -2526,67 +2529,73 @@ def echo(update, context):
 
         elif menuNum == '52':
             initMenuNum()
-            target_nicks = g_selected_accounts if g_selected_accounts else [None]
+            # 입력 형식: 종목코드(종목명), 매매구분(매수:1 매도:2)
+            parts52 = user_text.split(',', 2)
+            if parts52[1] not in ["1", "2"]:
+                print("매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
+            else:
+                target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
-            def process_nick_52(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-                try:
-                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, '')
-                    if not output1:
-                        context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문 미존재 [{company}]")
-                        return
-                    tdf = pd.DataFrame(output1)
-                    tdf = tdf[tdf['rmn_qty'].astype(int) > 0]
-                    if tdf.empty:
-                        context.bot.send_message(chat_id=user_id, text=f"[{nick}] 미체결 주문 없음 [{company}]")
-                        return
-                    for _, row in tdf.iterrows():
-                        order_no = row['odno']
-                        ord_type = row['sll_buy_dvsn_cd_name']
-                        ord_price = row['ord_unpr']
-                        ord_qty = row['ord_qty']
-                        try:
-                            c = order_cancel_revice(t_access_token, t_app_key, t_app_secret, t_acct_no, "02", order_no, "0", "0")
-                            if c is not None and c['ODNO'] != "":
-                                context.bot.send_message(chat_id=user_id,
-                                    text=f"[{nick}] 주문취소 완료 [{company}] {ord_type} {format(int(ord_price),',')}원 {format(int(ord_qty),',')}주, 주문번호: <code>{str(int(c['ODNO']))}</code>",
-                                    parse_mode='HTML')
-                                try:
-                                    with conn.cursor() as cur:
-                                        cur.execute("""
-                                            UPDATE trading_trail SET trail_tp = %s, mod_dt = %s
-                                            WHERE acct_no = %s AND code = %s AND trail_day = %s AND order_no = %s
-                                        """, ("C", datetime.now(), t_acct_no, code, datetime.now().strftime("%Y%m%d"), str(int(order_no))))
-                                        conn.commit()
-                                except Exception as e:
-                                    conn.rollback()
-                                    print(f"매매추적 update 오류: {e}")
-                            else:
-                                context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문취소 실패 [{company}]")
-                        except Exception as e:
-                            print('주문취소 오류.', e)
-                            context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문취소 오류 [{company}]: {str(e)}")
-                except Exception as e:
-                    print('일별주문체결 조회 오류.', e)
-                    context.bot.send_message(chat_id=user_id, text=f"[{nick}] 일별주문체결 조회 오류 [{company}]: {str(e)}")
+                def process_nick_52(nick, t_acct_no, t_access_token, t_app_key, t_app_secret, order_dvsn_cd):
+                    try:
+                        output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, '', '02' if order_dvsn_cd == '1' else '01')
+                        if not output1:
+                            context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문 미존재 [{company}]")
+                            return
+                        tdf = pd.DataFrame(output1)
+                        tdf = tdf[tdf['rmn_qty'].astype(int) > 0]
+                        if tdf.empty:
+                            context.bot.send_message(chat_id=user_id, text=f"[{nick}] 미체결 주문 없음 [{company}]")
+                            return
+                        for _, row in tdf.iterrows():
+                            order_no = row['odno']
+                            ord_type = row['sll_buy_dvsn_cd_name']
+                            ord_price = row['ord_unpr']
+                            ord_qty = row['ord_qty']
+                            try:
+                                c = order_cancel_revice(t_access_token, t_app_key, t_app_secret, t_acct_no, "02", order_no, "0", "0")
+                                if c is not None and c['ODNO'] != "":
+                                    context.bot.send_message(chat_id=user_id,
+                                        text=f"[{nick}] 주문취소 완료 [{company}] {ord_type} {format(int(ord_price),',')}원 {format(int(ord_qty),',')}주, 주문번호: <code>{str(int(c['ODNO']))}</code>",
+                                        parse_mode='HTML')
+                                    try:
+                                        with conn.cursor() as cur:
+                                            cur.execute("""
+                                                UPDATE trading_trail SET trail_tp = %s, mod_dt = %s
+                                                WHERE acct_no = %s AND code = %s AND trail_day = %s AND order_no = %s
+                                            """, ("C", datetime.now(), t_acct_no, code, datetime.now().strftime("%Y%m%d"), str(int(order_no))))
+                                            conn.commit()
+                                    except Exception as e:
+                                        conn.rollback()
+                                        print(f"매매추적 update 오류: {e}")
+                                else:
+                                    context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문취소 실패 [{company}]")
+                            except Exception as e:
+                                print('주문취소 오류.', e)
+                                context.bot.send_message(chat_id=user_id, text=f"[{nick}] 주문취소 오류 [{company}]: {str(e)}")
+                    except Exception as e:
+                        print('일별주문체결 조회 오류.', e)
+                        context.bot.send_message(chat_id=user_id, text=f"[{nick}] 일별주문체결 조회 오류 [{company}]: {str(e)}")
 
-            threads_52 = []
-            for nick in target_nicks:
-                if nick is not None:
-                    ac = account(nick)
-                    t_acct_no = ac['acct_no']
-                    t_access_token = ac['access_token']
-                    t_app_key = ac['app_key']
-                    t_app_secret = ac['app_secret']
-                else:
-                    t_acct_no = acct_no
-                    t_access_token = access_token
-                    t_app_key = app_key
-                    t_app_secret = app_secret
-                t = threading.Thread(target=process_nick_52, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                threads_52.append(t)
-                t.start()
-            for t in threads_52:
-                t.join()
+                threads_52 = []
+                for nick in target_nicks:
+                    if nick is not None:
+                        ac = account(nick)
+                        t_acct_no = ac['acct_no']
+                        t_access_token = ac['access_token']
+                        t_app_key = ac['app_key']
+                        t_app_secret = ac['app_secret']
+                    else:
+                        t_acct_no = acct_no
+                        t_access_token = access_token
+                        t_app_key = app_key
+                        t_app_secret = app_secret
+                    t = threading.Thread(target=process_nick_52, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret, parts52[1].strip()))
+                    threads_52.append(t)
+                    t.start()
+                for t in threads_52:
+                    t.join()
         
         elif menuNum == '61':
             initMenuNum()
