@@ -69,13 +69,15 @@ def account(nickname, conn):
 # 주식현재가 시세
 def inquire_price(access_token, app_key, app_secret, code):
 
+    t = datetime.now().strftime('%H%M')
+
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-            'FID_COND_MRKT_DIV_CODE': "J",
+            'FID_COND_MRKT_DIV_CODE': "J" if '0900' <= t < '1530' else "NX",  # J:KRX, NX:NXT, UN:통합
             'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
@@ -109,6 +111,8 @@ def inquire_daily_indexchartprice(access_token, app_key, app_secret, market, sto
 
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
+
+    t = datetime.now().strftime('%H%M')
     
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -118,7 +122,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N',
+                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
                 'FNCG_AMT_AUTO_RDPT_YN': 'N',
                 'FUND_STTL_ICLD_YN': 'N',
                 'INQR_DVSN': '01',
