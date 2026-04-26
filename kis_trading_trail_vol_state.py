@@ -10,7 +10,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import time as dt_time
 import kis_api_resp as resp
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
@@ -76,6 +76,11 @@ def account(nickname, conn):
         'chat_id': chat_id
     }
 
+def get_excg_id():
+    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
+    t = datetime.now().strftime('%H%M')
+    return "KRX" if '0900' <= t < '1530' else "NXT"
+
 # 일별주문체결조회
 def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
 
@@ -121,7 +126,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
         return []
 
 # 주식주문(정정취소)
-def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price):
+def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price, excg_id=None):
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -139,7 +144,8 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
-               "QTY_ALL_ORD_YN": "Y"            # 전량 : Y, 일부 : N
+               "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
+               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{BASE_URL}/{PATH}"
@@ -172,11 +178,13 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
                 # 매도주문 잔여수량 존재시
                 if d['sll_buy_dvsn_cd'][i] == "01":
 
-                    if int(d['rmn_qty'][i]) > 0:
+                    # 잔량 존재 AND cncl_yn != 'Y' (Y=취소, 그 외 공백/N 모두 취소 아님으로 처리)
+                    if int(d['rmn_qty'][i]) > 0 and d['cncl_yn'][i] != 'Y':
                         order_no = int(d['odno'][i])
+                        ord_excg_id = d['excg_id_dvsn_cd'][i] if 'excg_id_dvsn_cd' in d.columns else None
 
                         # 주문취소
-                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
+                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0", ord_excg_id)
                         if c is not None and c['ODNO'] != "":
                             print("매도주문취소 완료")
 
@@ -195,7 +203,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
     return final_message
 
 # 주식주문(현금)
-def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None):
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
 
     if buy_flag:
         tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
@@ -215,7 +223,8 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "PDNO": stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
-               "ORD_UNPR": order_price          # 시장가 등 주문시, "0"으로 입력
+               "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
+               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -234,6 +243,8 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
 
+    t = datetime.now().strftime('%H%M')
+    
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
@@ -242,7 +253,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N',
+                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
                 'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
                 'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
                 'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
@@ -840,6 +851,63 @@ def get_kis_1min_full_day(
         .reset_index(drop=True)
     )
 
+def _listen_prevlow_sell(bot, chat_id, expected_data,
+                         access_token, app_key, app_secret, acct_no,
+                         stock_code, basic_qty, prev_low, timeout_sec=600):
+    """
+    전일저가 이탈 사전경고 버튼 클릭을 백그라운드에서 수신하여
+    클릭 즉시 지정가 전량매도 주문을 자체 실행한다.
+    get_updates 폴링 방식 — reservebot.py 수정 불필요.
+    timeout_sec 초 내에 버튼이 눌리지 않으면 자동 종료.
+    """
+    import time as _time
+    offset = None
+    deadline = _time.time() + timeout_sec
+
+    while _time.time() < deadline:
+        try:
+            updates = bot.get_updates(
+                offset=offset, timeout=10,
+                allowed_updates=["callback_query"]
+            )
+            for upd in updates:
+                offset = upd.update_id + 1
+                cq = upd.callback_query
+                if cq is None:
+                    continue
+                if cq.data != expected_data:
+                    continue
+
+                try:
+                    cq.answer("매도 주문 처리 중...")
+                except Exception:
+                    pass
+
+                result = order_cash(
+                    False, access_token, app_key, app_secret, str(acct_no),
+                    stock_code, "00", str(basic_qty), str(prev_low)
+                )
+                if result:
+                    msg_result = (
+                        f"✅ 전량매도 완료\n"
+                        f"종목: {stock_code} | {basic_qty:,}주 | {prev_low:,}원"
+                    )
+                else:
+                    msg_result = f"❌ 전량매도 실패: {stock_code}"
+
+                try:
+                    cq.edit_message_reply_markup(reply_markup=None)
+                    bot.send_message(chat_id=chat_id, text=msg_result)
+                except Exception:
+                    pass
+
+                return  # 처리 완료
+
+        except Exception as e:
+            print(f"[prevlow_listen] {stock_code} 폴링 오류: {e}")
+            _time.sleep(2)
+
+
 def volume_rate_chk(current_time, vol_ratio, trade_date=""):
     # ===============================
     # 시간대별 거래량 조건 설정
@@ -1210,8 +1278,22 @@ def get_kis_1min_from_datetime(
                                     f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
                                     f" | 수익률:{gain_pct_warn:+.1f}%"
                                 )
+                                _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
+                                sell_btn = InlineKeyboardButton(
+                                    text=f"전량매도 {prev_low:,}원",
+                                    callback_data=_cb_data
+                                )
+                                markup = InlineKeyboardMarkup([[sell_btn]])
                                 print(msg_warn)
-                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
+                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
+                                # 버튼 클릭 수신 → 자체 매도 실행 (백그라운드 스레드)
+                                threading.Thread(
+                                    target=_listen_prevlow_sell,
+                                    args=(bot, chat_id, _cb_data,
+                                          access_token, app_key, app_secret, acct_no,
+                                          stock_code, basic_qty, prev_low),
+                                    daemon=True
+                                ).start()
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                             # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
@@ -1896,8 +1978,8 @@ def process_account(nick):
                 get_kis_daily_chart_full(code, ac['access_token'], ac['app_key'], ac['app_secret'])
                 time.sleep(0.1)
 
-            # 종목별 병렬 처리 (동일 app_key 공유 → max_workers=4로 API rate limit 제어)
-            max_stock_workers = min(len(result_two00), 4)
+            # 종목별 병렬 처리 (동일 app_key 공유 → max_workers=6로 API rate limit 제어)
+            max_stock_workers = min(len(result_two00), 6)
             with ThreadPoolExecutor(max_workers=max_stock_workers) as stock_executor:
                 futures = {
                     stock_executor.submit(process_stock, stock_info, nick, ac, bot, chat_id): stock_info
@@ -1924,9 +2006,9 @@ if __name__ == "__main__":
 
     if _is_business:
 
-        nickname_list = ['phills2', 'yh480825', 'mamalong', 'worry106']
+        nickname_list = ['phills2', 'phills13', 'phills15', 'yh480825', 'mamalong', 'worry106']
 
-        # 4개 계좌 병렬 처리
+        # 6개 계좌 병렬 처리
         with ThreadPoolExecutor(max_workers=len(nickname_list)) as account_executor:
             account_futures = {
                 account_executor.submit(process_account, nick): nick
