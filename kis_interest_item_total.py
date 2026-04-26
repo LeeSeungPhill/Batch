@@ -175,12 +175,14 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
         ar = resp.APIResp(res)
         return ar.getBody().output2  # 원본 dict 리스트
 
+    _today_str = datetime.now().strftime("%Y%m%d")
+
     def convert_to_df(candle_list):
         """dict 리스트 → DataFrame(1분봉)"""
         minute_list = []
         for item in candle_list:
             minute_list.append({
-                'timestamp': pd.to_datetime(item['stck_cntg_hour'], format='%H%M%S'),
+                'timestamp': pd.to_datetime(_today_str + item['stck_cntg_hour'], format='%Y%m%d%H%M%S'),
                 'open': float(item['stck_oprc']),
                 'high': float(item['stck_hgpr']),
                 'low': float(item['stck_lwpr']),
@@ -192,7 +194,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     def resample_to_10min(df):
         """1분봉 → 10분봉 변환"""
         df = df.set_index('timestamp')
-        df_10 = df.resample('10T').agg({
+        df_10 = df.resample('10min').agg({
             'open': 'first',
             'high': 'max',
             'low': 'min',
@@ -237,13 +239,20 @@ def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no, conn):
     # 계좌잔고 조회
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
+    u_tot_evlu_amt = 0
+    u_dnca_tot_amt = 0
+    u_nass_amt = 0
+    u_prvs_rcdl_excc_amt = 0
+    u_scts_evlu_amt = 0
+    u_asst_icdc_amt = 0
+
     for i, name in enumerate(b.index):
-        u_tot_evlu_amt = int(b['tot_evlu_amt'][i])                  # 총평가금액
-        u_dnca_tot_amt = int(b['dnca_tot_amt'][i])                  # 예수금총금액
-        u_nass_amt = int(b['nass_amt'][i])                          # 순자산금액(세금비용 제외)
-        u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])      # 가수도 정산 금액
-        u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
-        u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
+        u_tot_evlu_amt = int(b['tot_evlu_amt'][i])
+        u_dnca_tot_amt = int(b['dnca_tot_amt'][i])
+        u_nass_amt = int(b['nass_amt'][i])
+        u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])
+        u_scts_evlu_amt = int(b['scts_evlu_amt'][i])
+        u_asst_icdc_amt = int(b['asst_icdc_amt'][i])
 
     # 자산정보 조회
     cur100 = conn.cursor()
@@ -280,7 +289,10 @@ def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no, conn):
     result_one01 = cur300.fetchall()
     cur300.close()
 
-    asset_risk_num = 0 
+    asset_risk_num = 0
+    n_asset_sum = 0
+    n_risk_rate = 0
+    n_stock_num = 0
 
     for i in result_one01:
 
@@ -406,6 +418,8 @@ def fundTrail_proc(acct_no, conn):
     result_one100 = cur300.fetchall()
     cur300.close()
 
+    kospi_ratio = ""
+
     for i in result_one100:
 
         trail_signal_result1 = i[0]
@@ -505,6 +519,7 @@ def fundTrail_proc(acct_no, conn):
             kosdak_ratio = "D"  # 시장 하락
 
         # 시장 승률정보 저장처리
+        market_ratio = 0
         if kospi_ratio == "H" and kosdak_ratio == "H":    # 코스피 강세 & 코스닥 강세
             market_ratio = 90
         elif kospi_ratio == "H" and kosdak_ratio == "D":  # 코스피 강세 & 코스닥 약세
@@ -902,7 +917,13 @@ def process_account(nick):
                         if vol_appear > 0:
                             # 자산관리정보 조회
                             cur041 = conn_acct.cursor()
-                            cur041.execute("select case when market_ratio = 0 then 100 - cash_rate else market_ratio end as market_ratio from (select row_number() over (order by id desc) as ROWNUM, cash_rate, COALESCE(market_ratio, 0) as market_ratio from  \"stockFundMng_stock_fund_mng\" where acct_no = '" + str(acct_no) + "') A where A.ROWNUM = 1")
+                            cur041.execute("""
+                                SELECT CASE WHEN market_ratio = 0 THEN 100 - cash_rate ELSE market_ratio END AS market_ratio
+                                FROM (SELECT row_number() OVER (ORDER BY id DESC) AS ROWNUM,
+                                             cash_rate, COALESCE(market_ratio, 0) AS market_ratio
+                                      FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) A
+                                WHERE A.ROWNUM = 1
+                            """, (str(acct_no),))
                             result_fourone = cur041.fetchall()
                             cur041.close()
 
@@ -1063,7 +1084,8 @@ def process_account(nick):
                     if i[0] == "0001":
                         if len(result_five) > 0:
                             for k in result_five:
-                                # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3')                            if int(k[1]) < 4:
+                                # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1','2','3')
+                                if int(k[1]) < 4:
                                     market_level_num = "4"  # 일봉상 추세 전환 후, 눌림구간에서 반등
                                     risk_rate = 5.5
                                     item_number = 8
@@ -1074,9 +1096,9 @@ def process_account(nick):
                     trail_signal_name = format(int(i[5]), ',d') + " {지지포인트 이탈}"
 
                     if i[0] == "0001":
-                        for k in result_five:
-                            if len(result_five) > 0:
-                                # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1', market_level_num='2', market_level_num='3', market_level_num='4')
+                        if len(result_five) > 0:
+                            for k in result_five:
+                                # 기존 시장레벨번호가 일봉상 추세 전환 후, 눌림구간에서 반등보다 작은 경우(market_level_num='1','2','3','4')
                                 if int(k[1]) < 5:
                                     market_level_num = "1"  # 하락 지속 후, 기술적 반등
                                     risk_rate = 2
@@ -1190,11 +1212,14 @@ def process_account(nick):
         conn_acct.close()
 
 if __name__ == "__main__":
-    with db.connect(conn_string) as _conn_check:
+    _conn_check = db.connect(conn_string)
+    try:
         _cur0 = _conn_check.cursor()
         _cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
         _holiday = _cur0.fetchone()
         _cur0.close()
+    finally:
+        _conn_check.close()
 
     nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 

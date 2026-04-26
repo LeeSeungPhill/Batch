@@ -259,11 +259,13 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
         ar = resp.APIResp(res)
         return ar.getBody().output2
 
+    _today_str = datetime.now().strftime("%Y%m%d")
+
     def convert_to_df(candle_list):
         minute_list = []
         for item in candle_list:
             minute_list.append({
-                'timestamp': pd.to_datetime(item['stck_cntg_hour'], format='%H%M%S'),
+                'timestamp': pd.to_datetime(_today_str + item['stck_cntg_hour'], format='%Y%m%d%H%M%S'),
                 'open': float(item['stck_oprc']),
                 'high': float(item['stck_hgpr']),
                 'low': float(item['stck_lwpr']),
@@ -274,7 +276,7 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     def resample_to_10min(df):
         df = df.set_index('timestamp')
-        df_10 = df.resample('10T').agg({
+        df_10 = df.resample('10min').agg({
             'open': 'first',
             'high': 'max',
             'low': 'min',
@@ -310,6 +312,13 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 # 잔고정보 처리 (balance_map 반환)
 def balance_proc(access_token, app_key, app_secret, acct_no, conn):
     b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
+
+    u_tot_evlu_amt = 0
+    u_dnca_tot_amt = 0
+    u_nass_amt = 0
+    u_prvs_rcdl_excc_amt = 0
+    u_scts_evlu_amt = 0
+    u_asst_icdc_amt = 0
 
     for i, name in enumerate(b.index):
         u_tot_evlu_amt = int(b['tot_evlu_amt'][i])
@@ -408,7 +417,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no, conn):
             '현재가': e_current_price,
         })
 
-        if sell_plan_amt > 0:
+        if sell_plan_amt > 0 and u_tot_evlu_amt > 0:
             item_eval_gravity = e_eval_sum / u_tot_evlu_amt * 100
             e_sell_plan_sum = sell_plan_amt * item_eval_gravity * 0.01
             e_sell_plan_amount = e_sell_plan_sum / e_current_price
@@ -870,11 +879,14 @@ def process_account(nick):
 
 
 # 휴일정보 조회 (임시 연결 사용 — 스레드 진입 전 단일 실행)
-with db.connect(conn_string) as _conn_check:
+_conn_check = db.connect(conn_string)
+try:
     _cur0 = _conn_check.cursor()
     _cur0.execute("SELECT name FROM stock_holiday WHERE holiday = %s", (today,))
     _holiday = _cur0.fetchone()
     _cur0.close()
+finally:
+    _conn_check.close()
 
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 

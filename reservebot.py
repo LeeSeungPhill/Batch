@@ -40,7 +40,7 @@ def get_conn():
     return conn                
 
 cur001 = conn.cursor()
-cur001.execute("select bot_token2 from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+cur001.execute("select bot_token2 from \"stockAccount_stock_account\" where nick_name = %s", (arguments[1],))
 result_001 = cur001.fetchone()
 cur001.close()
 token = result_001[0]    
@@ -362,9 +362,9 @@ def account(nickname=None):
     conn = get_conn()
     cur01 = conn.cursor()
     if nickname is None:
-        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = '" + arguments[1] + "'")
+        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = %s", (arguments[1],))
     else:
-        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = '" + nickname + "'")        
+        cur01.execute("select acct_no, access_token, app_key, app_secret, token_publ_date, substr(token_publ_date, 0, 9) AS token_day, bot_token1, bot_token2, chat_id from \"stockAccount_stock_account\" where nick_name = %s", (nickname,))        
     result_two = cur01.fetchone()
     cur01.close()
 
@@ -509,7 +509,6 @@ def order_cancel_proc(access_token, app_key, app_secret, acct_no, code, sell_buy
         if len(output1) > 0:
         
             tdf = pd.DataFrame(output1)
-            tdf.set_index('odno')
             d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
             order_no = 0
 
@@ -798,7 +797,7 @@ def is_positive_int(val: str) -> bool:
 def post_business_day_char(business_day:str):
     conn = get_conn()
     cur100 = conn.cursor()
-    cur100.execute("select post_business_day_char('"+business_day+"'::date)")
+    cur100.execute("select post_business_day_char(%s::date)", (business_day,))
     result_one00 = cur100.fetchall()
     cur100.close()
 
@@ -1084,7 +1083,6 @@ def callback_get(update, context) :
                     output1 = daily_order_complete(ac['access_token'], ac['app_key'], ac['app_secret'],
                                                    ac['acct_no'], sig_code, c_ord['ODNO'], '01')
                     tdf = pd.DataFrame(output1)
-                    tdf.set_index('odno')
                     d = tdf[['odno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'tot_ccld_amt', 'rmn_qty']]
                     for k, _ in enumerate(d.index):
                         d_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
@@ -1122,11 +1120,10 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)
 
             # 일별주문체결 조회
-            output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '00')
+            output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, '', '', '00')
 
             if len(output1) > 0:
                 tdf = pd.DataFrame(output1)
-                tdf.set_index('odno')
                 d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
                 result_msgs = []
 
@@ -1221,7 +1218,6 @@ def callback_get(update, context) :
                             time.sleep(0.5)
                             output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
                             tdf = pd.DataFrame(output1)
-                            tdf.set_index('odno')
                             d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
                             for i, _ in enumerate(d_ord.index):
                                 d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
@@ -1316,7 +1312,6 @@ def callback_get(update, context) :
 
             if len(output) > 0:
                 tdf = pd.DataFrame(output)
-                tdf.set_index('rsvn_ord_seq')
                 d = tdf[['rsvn_ord_seq', 'rsvn_ord_ord_dt', 'rsvn_ord_rcit_dt', 'pdno', 'ord_dvsn_cd', 'ord_rsvn_qty', 'tot_ccld_qty', 'cncl_ord_dt', 'ord_tmd', 'odno', 'rsvn_ord_rcit_tmd', 'kor_item_shtn_name', 'sll_buy_dvsn_cd', 'ord_rsvn_unpr', 'tot_ccld_amt', 'cncl_rcit_tmd', 'prcs_rslt', 'ord_dvsn_name', 'rsvn_end_dt']]
                 result_msgs = []
 
@@ -1473,7 +1468,6 @@ def callback_get(update, context) :
                             time.sleep(0.5)
                             output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
                             tdf = pd.DataFrame(output1)
-                            tdf.set_index('odno')
                             d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
                             for i, _ in enumerate(d_ord.index):
                                 d_order_no = int(d_ord['odno'][i])
@@ -1637,9 +1631,9 @@ def callback_get(update, context) :
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
             
-            cur199 = conn.cursor()
+            cur199 = get_conn().cursor()
             balance_rows = []
-            
+
             #  일별 매매 잔고 현행화
             for i in range(len(c)):
                 insert_query199 = """
@@ -1686,7 +1680,7 @@ def callback_get(update, context) :
                     datetime.now()
                 )
                 cur199.execute(insert_query199, record_to_insert199)
-                conn.commit()
+                get_conn().commit()
 
                 if int(c['hldg_qty'][i]) > 0:
                     balance_rows.append((
@@ -1700,6 +1694,9 @@ def callback_get(update, context) :
             cur199.close()
 
             if len(balance_rows) > 0:
+                int(acct_no)  # numeric guard
+                datetime.strptime(str(prev_date), "%Y-%m-%d")  # date format guard
+                datetime.strptime(str(trail_day), "%Y-%m-%d")  # date format guard
                 balance_sql = f"""
                 WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
                     VALUES %s
@@ -1790,7 +1787,7 @@ def callback_get(update, context) :
                 );
                 """
 
-                cur200 = conn.cursor()
+                cur200 = get_conn().cursor()
                 full_query = balance_sql + insert_query
 
                 execute_values(
@@ -1847,7 +1844,7 @@ def callback_get(update, context) :
             result_msgs = []
         
             # 추적 delete
-            cur200 = conn.cursor()
+            cur200 = get_conn().cursor()
             delete_query = """
                 DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
                 """
@@ -1927,9 +1924,9 @@ def callback_get(update, context) :
             result_msgs = []
         
             # 매매추적 select
-            cur200 = conn.cursor()
+            cur200 = get_conn().cursor()
             select_query = """
-                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min, exit_price, trade_tp, trade_result FROM trading_trail WHERE acct_no = %s AND trail_day = %s ORDER BY trail_tp, proc_min DESC 
+                SELECT code, name, trail_day, trail_dtm, trail_tp, trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, stop_price, target_price, proc_min, exit_price, trade_tp, trade_result FROM trading_trail WHERE acct_no = %s AND trail_day = %s ORDER BY trail_tp, proc_min DESC
                 """
             # select 인자값 설정
             cur200.execute(select_query, (acct_no, trail_day))
@@ -2016,13 +2013,6 @@ get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
 
 updater.dispatcher.add_handler(CallbackQueryHandler(callback_get))
-
-def is_positive_int(val: str) -> bool:
-    """양수 정수만 허용 (1~100 범위)"""
-    if val.isdigit():
-        num = int(val)
-        return 0 < num <= 100
-    return False    
 
 def is_signed_float_2dec(val: str) -> bool:
     """양수/음수 실수 허용, 소숫점 2자리까지"""
@@ -2152,7 +2142,6 @@ def echo(update, context):
                     output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret,
                                                    t_acct_no, cb_code_01, c_ord['ODNO'], '01')
                     tdf = pd.DataFrame(output1)
-                    tdf.set_index('odno')
                     d = tdf[['odno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'tot_ccld_amt', 'rmn_qty']]
                     for k, _ in enumerate(d.index):
                         d_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
@@ -2393,7 +2382,6 @@ def echo(update, context):
                                 # 일별주문체결 조회
                                 output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                 tdf = pd.DataFrame(output1)
-                                tdf.set_index('odno')
                                 d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
 
                                 for k, name in enumerate(d.index):
@@ -2481,7 +2469,6 @@ def echo(update, context):
                                     # 일별주문체결 조회
                                     output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                     tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
                                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
 
                                     for k, name in enumerate(d.index):
@@ -2569,7 +2556,6 @@ def echo(update, context):
                                     # 일별주문체결 조회
                                     output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
                                     tdf = pd.DataFrame(output1)
-                                    tdf.set_index('odno')
                                     d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
 
                                     for k, name in enumerate(d.index):
