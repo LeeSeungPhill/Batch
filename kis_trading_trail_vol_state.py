@@ -10,7 +10,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import time as dt_time
 import kis_api_resp as resp
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
@@ -851,6 +851,63 @@ def get_kis_1min_full_day(
         .reset_index(drop=True)
     )
 
+def _listen_prevlow_sell(bot, chat_id, expected_data,
+                         access_token, app_key, app_secret, acct_no,
+                         stock_code, basic_qty, prev_low, timeout_sec=600):
+    """
+    전일저가 이탈 사전경고 버튼 클릭을 백그라운드에서 수신하여
+    클릭 즉시 지정가 전량매도 주문을 자체 실행한다.
+    get_updates 폴링 방식 — reservebot.py 수정 불필요.
+    timeout_sec 초 내에 버튼이 눌리지 않으면 자동 종료.
+    """
+    import time as _time
+    offset = None
+    deadline = _time.time() + timeout_sec
+
+    while _time.time() < deadline:
+        try:
+            updates = bot.get_updates(
+                offset=offset, timeout=10,
+                allowed_updates=["callback_query"]
+            )
+            for upd in updates:
+                offset = upd.update_id + 1
+                cq = upd.callback_query
+                if cq is None:
+                    continue
+                if cq.data != expected_data:
+                    continue
+
+                try:
+                    cq.answer("매도 주문 처리 중...")
+                except Exception:
+                    pass
+
+                result = order_cash(
+                    False, access_token, app_key, app_secret, str(acct_no),
+                    stock_code, "00", str(basic_qty), str(prev_low)
+                )
+                if result:
+                    msg_result = (
+                        f"✅ 전량매도 완료\n"
+                        f"종목: {stock_code} | {basic_qty:,}주 | {prev_low:,}원"
+                    )
+                else:
+                    msg_result = f"❌ 전량매도 실패: {stock_code}"
+
+                try:
+                    cq.edit_message_reply_markup(reply_markup=None)
+                    bot.send_message(chat_id=chat_id, text=msg_result)
+                except Exception:
+                    pass
+
+                return  # 처리 완료
+
+        except Exception as e:
+            print(f"[prevlow_listen] {stock_code} 폴링 오류: {e}")
+            _time.sleep(2)
+
+
 def volume_rate_chk(current_time, vol_ratio, trade_date=""):
     # ===============================
     # 시간대별 거래량 조건 설정
@@ -1221,8 +1278,22 @@ def get_kis_1min_from_datetime(
                                     f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
                                     f" | 수익률:{gain_pct_warn:+.1f}%"
                                 )
+                                _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
+                                sell_btn = InlineKeyboardButton(
+                                    text=f"전량매도 {prev_low:,}원",
+                                    callback_data=_cb_data
+                                )
+                                markup = InlineKeyboardMarkup([[sell_btn]])
                                 print(msg_warn)
-                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML')
+                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
+                                # 버튼 클릭 수신 → 자체 매도 실행 (백그라운드 스레드)
+                                threading.Thread(
+                                    target=_listen_prevlow_sell,
+                                    args=(bot, chat_id, _cb_data,
+                                          access_token, app_key, app_secret, acct_no,
+                                          stock_code, basic_qty, prev_low),
+                                    daemon=True
+                                ).start()
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                             # 전일저가 이탈 사전경고 → trail_tp 'P' 변경

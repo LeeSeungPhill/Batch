@@ -1064,6 +1064,49 @@ def callback_get(update, context) :
             text=f"[{g_holding_edit_name}({g_holding_edit_code})] {field} 값을 입력하세요. (숫자만 입력)"
         )
 
+    elif command.startswith("signal_sell_"):
+        parts = command.split("_")
+        sig_code  = parts[2]
+        sig_qty   = int(parts[3])
+        sig_price = int(parts[4])
+        sig_name_match = stock_code[stock_code.code == sig_code]
+        sig_name = sig_name_match.company.values[0].strip() if len(sig_name_match) > 0 else sig_code
+        ac = account()
+
+        def process_signal_sell():
+            try:
+                query.edit_message_text(text=f"[{sig_name}({sig_code})] 전량매도 처리 중...")
+                c_ord = order_cash(False, ac['access_token'], ac['app_key'], ac['app_secret'],
+                                   str(ac['acct_no']), sig_code, "00", str(sig_qty), str(sig_price))
+                if c_ord is not None and c_ord['ODNO'] != "":
+                    time.sleep(0.5)
+                    output1 = daily_order_complete(ac['access_token'], ac['app_key'], ac['app_secret'],
+                                                   ac['acct_no'], sig_code, c_ord['ODNO'], '01')
+                    tdf = pd.DataFrame(output1)
+                    tdf.set_index('odno')
+                    d = tdf[['odno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'tot_ccld_amt', 'rmn_qty']]
+                    for k, _ in enumerate(d.index):
+                        d_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                        d_qty   = d['ord_qty'][k]
+                        d_ccld  = d['tot_ccld_qty'][k]
+                        d_amt   = d['tot_ccld_amt'][k]
+                        d_rmn   = d['rmn_qty'][k]
+                        d_no    = int(d['odno'][k])
+                        query.message.reply_text(
+                            text=f"[{sig_name}(<code>{sig_code}</code>)] "
+                                 f"매도가:{format(int(d_price), ',d')}원 | 주문량:{format(int(d_qty), ',d')}주 | "
+                                 f"체결량:{format(int(d_ccld), ',d')}주 | 체결금:{format(int(d_amt), ',d')}원 | "
+                                 f"잔량:{format(int(d_rmn), ',d')}주 | 주문번호:<code>{d_no}</code>",
+                            parse_mode='HTML'
+                        )
+                else:
+                    query.edit_message_text(text=f"[{sig_name}({sig_code})] 전량매도 주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=query.message.chat_id,
+                    text=f"[{sig_name}({sig_code})] 전량매도 오류: {str(e)}")
+
+        threading.Thread(target=process_signal_sell).start()
+
     elif command == "전체주문":
 
         ac = account()
