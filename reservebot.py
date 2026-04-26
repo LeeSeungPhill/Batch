@@ -929,8 +929,22 @@ def callback_get(update, context) :
                 
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-        
-            
+
+            # stockBalance_stock_balance 신호가 조회 (code → 목표가/이탈가/최종목표가/최종이탈가)
+            sb_map = {}
+            try:
+                with get_conn().cursor() as cur_sb:
+                    cur_sb.execute(
+                        """SELECT code, sign_resist_price, sign_support_price, end_target_price, end_loss_price
+                           FROM public."stockBalance_stock_balance"
+                           WHERE acct_no = %s AND proc_yn = 'Y'""",
+                        (str(acct_no),)
+                    )
+                    for row in cur_sb.fetchall():
+                        sb_map[row[0]] = (row[1], row[2], row[3], row[4])
+            except Exception as sb_e:
+                print(f"신호가 조회 오류: {sb_e}")
+
             ord_psbl_qty = 0
             for i, name in enumerate(c.index):
                 code = c['pdno'][i]
@@ -944,7 +958,14 @@ def callback_get(update, context) :
                 valuation_sum = int(c['evlu_pfls_amt'][i])
                 ord_psbl_qty = int(c['ord_psbl_qty'][i])
 
-                msg = f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원"
+                sb = sb_map.get(code, (None, None, None, None))
+                signal_str = ""
+                if sb[0]: signal_str += f", 목표가:{format(int(sb[0]), ',d')}원"
+                if sb[1]: signal_str += f", 이탈가:{format(int(sb[1]), ',d')}원"
+                if sb[2]: signal_str += f", 최종목표가:{format(int(sb[2]), ',d')}원"
+                if sb[3]: signal_str += f", 최종이탈가:{format(int(sb[3]), ',d')}원"
+
+                msg = f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원{signal_str}"
                 result_msgs.append(msg)
 
             if result_msgs:
