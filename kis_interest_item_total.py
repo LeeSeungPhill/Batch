@@ -1143,10 +1143,10 @@ def process_account(nick):
                                 print("시장 : " + i[1] + "추적정보 대상 : " + trail_signal_name)
                                 telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주" 
                                 # 텔레그램 메시지 전송
-                                # try:
-                                #     bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-                                # except Exception as te:
-                                #     print(f"텔레그램 전송 오류: {te}")
+                                try:
+                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                                except Exception as te:
+                                    print(f"텔레그램 전송 오류: {te}")
 
                                 # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                                 cur20 = conn_acct.cursor()
@@ -1177,10 +1177,10 @@ def process_account(nick):
                         print("시장 : " + i[1] + "추적신호 : " + trail_signal_name)
                         telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
                         # 텔레그램 메시지 전송
-                        # try:
-                        #     bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
-                        # except Exception as te:
-                        #     print(f"텔레그램 전송 오류: {te}")
+                        try:
+                            bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                        except Exception as te:
+                            print(f"텔레그램 전송 오류: {te}")
 
                         # 추적신호 정보 미존재 대상 신규생성 또는 변경(현재일 종목 기준)
                         cur20 = conn_acct.cursor()

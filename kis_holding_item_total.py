@@ -725,6 +725,8 @@ def process_account(nick):
                 print(f"현재가 시세 에러 : [{i[0]}] {ex}")
             if not a:
                 continue
+            if int(a['stck_hgpr']) == 0 or int(a['stck_lwpr']) == 0 or int(a['stck_prpr']) == 0:
+                continue
 
             trail_signal_code = ""
             trail_signal_name = ""
@@ -813,7 +815,7 @@ def process_account(nick):
                                     sell_markup = InlineKeyboardMarkup([[
                                         InlineKeyboardButton(
                                             f"전량매도 ({format(sig_price, ',d')}원)",
-                                            callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}_{sig_price}"
+                                            callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}"
                                         )
                                     ]])
                                     bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=sell_markup)
@@ -846,7 +848,7 @@ def process_account(nick):
                             sell_markup = InlineKeyboardMarkup([[
                                 InlineKeyboardButton(
                                     f"전량매도 ({format(sig_price, ',d')}원)",
-                                    callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}_{sig_price}"
+                                    callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}"
                                 )
                             ]])
                             bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=sell_markup)
