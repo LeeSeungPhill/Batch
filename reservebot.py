@@ -919,13 +919,13 @@ def callback_get(update, context) :
             try:
                 with get_conn().cursor() as cur_sb:
                     cur_sb.execute(
-                        """SELECT code, sign_resist_price, sign_support_price, end_target_price, end_loss_price
+                        """SELECT code, sign_resist_price, sign_support_price, end_target_price, end_loss_price, trading_plan
                            FROM public."stockBalance_stock_balance"
                            WHERE acct_no = %s AND proc_yn = 'Y'""",
                         (str(acct_no),)
                     )
                     for row in cur_sb.fetchall():
-                        sb_map[row[0]] = (row[1], row[2], row[3], row[4])
+                        sb_map[row[0]] = (row[1], row[2], row[3], row[4], row[5])
             except Exception as sb_e:
                 print(f"신호가 조회 오류: {sb_e}")
 
@@ -942,12 +942,14 @@ def callback_get(update, context) :
                 valuation_sum = int(c['evlu_pfls_amt'][i])
                 ord_psbl_qty = int(c['ord_psbl_qty'][i])
 
-                sb = sb_map.get(code, (None, None, None, None))
+                sb = sb_map.get(code, (None, None, None, None, None))
                 signal_str = ""
                 if sb[0]: signal_str += f", 목표가:{format(int(sb[0]), ',d')}원"
                 if sb[1]: signal_str += f", 이탈가:{format(int(sb[1]), ',d')}원"
                 if sb[2]: signal_str += f", 최종목표가:{format(int(sb[2]), ',d')}원"
                 if sb[3]: signal_str += f", 최종이탈가:{format(int(sb[3]), ',d')}원"
+                if sb[4] == 'i':
+                    name = f"(투자) {name}"
 
                 msg = f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원{signal_str}"
                 result_msgs.append(msg)
@@ -1045,12 +1047,25 @@ def callback_get(update, context) :
             global g_holding_edit_code, g_holding_edit_name
             g_holding_edit_code = h_code
             g_holding_edit_name = h_name
+            h_tp = None
+            try:
+                with get_conn().cursor() as cur_tp:
+                    cur_tp.execute(
+                        'SELECT trading_plan FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
+                        (h_code,)
+                    )
+                    tp_row = cur_tp.fetchone()
+                    h_tp = tp_row[0] if tp_row else None
+            except Exception:
+                pass
+            plan_btn_text = "매매계획(투자)" if h_tp == 'i' else "매매계획(일반)"
             field_buttons = [
-                InlineKeyboardButton("이탈가",      callback_data=f"menu,holding_edit_field_이탈가"),
-                InlineKeyboardButton("최종이탈가",  callback_data=f"menu,holding_edit_field_최종이탈가"),
-                InlineKeyboardButton("목표가",      callback_data=f"menu,holding_edit_field_목표가"),
-                InlineKeyboardButton("최종목표가",  callback_data=f"menu,holding_edit_field_최종목표가"),
-                InlineKeyboardButton("취소",        callback_data="menu,취소"),
+                InlineKeyboardButton("이탈가",        callback_data=f"menu,holding_edit_field_이탈가"),
+                InlineKeyboardButton("최종이탈가",    callback_data=f"menu,holding_edit_field_최종이탈가"),
+                InlineKeyboardButton("목표가",        callback_data=f"menu,holding_edit_field_목표가"),
+                InlineKeyboardButton("최종목표가",    callback_data=f"menu,holding_edit_field_최종목표가"),
+                InlineKeyboardButton(plan_btn_text,   callback_data="menu,holding_plan_toggle"),
+                InlineKeyboardButton("취소",          callback_data="menu,취소"),
             ]
             rows = [field_buttons[i:i+2] for i in range(0, len(field_buttons), 2)]
             query.edit_message_text(
@@ -1068,6 +1083,37 @@ def callback_get(update, context) :
         query.edit_message_text(
             text=f"[{g_holding_edit_name}({g_holding_edit_code})] {field} 값을 입력하세요. (숫자만 입력)"
         )
+
+    elif command == "holding_plan_toggle":
+        try:
+            with get_conn().cursor() as cur_tp:
+                cur_tp.execute(
+                    'SELECT trading_plan FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
+                    (g_holding_edit_code,)
+                )
+                tp_row = cur_tp.fetchone()
+                cur_tp_val = tp_row[0] if tp_row else None
+            new_tp = None if cur_tp_val == 'i' else 'i'
+            with get_conn().cursor() as cur_upd:
+                if new_tp is None:
+                    cur_upd.execute(
+                        'UPDATE public."stockBalance_stock_balance" SET trading_plan = NULL WHERE code = %s AND proc_yn = \'Y\'',
+                        (g_holding_edit_code,)
+                    )
+                else:
+                    cur_upd.execute(
+                        'UPDATE public."stockBalance_stock_balance" SET trading_plan = %s WHERE code = %s AND proc_yn = \'Y\'',
+                        (new_tp, g_holding_edit_code)
+                    )
+                get_conn().commit()
+                updated = cur_upd.rowcount
+            plan_label = "투자" if new_tp == 'i' else "일반"
+            query.edit_message_text(
+                text=f"[{g_holding_edit_name}(<code>{g_holding_edit_code}</code>)] 매매계획 → {plan_label} ({updated}건 업데이트)",
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
 
     elif command.startswith("signal_sell_"):
         parts = command.split("_")
@@ -1582,7 +1628,14 @@ def callback_get(update, context) :
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
-        query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
+        if menu_num == "01" and g_holding_sell_name:
+            stock_prefix = f"[{g_holding_sell_name}(<code>{g_holding_sell_code}</code>)] "
+            query.edit_message_text(
+                text=f"[선택계좌: {selected_str}]\n{stock_prefix}{prompt}",
+                parse_mode='HTML'
+            )
+        else:
+            query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
 
     elif command == "추적준비":
         query.edit_message_text(
