@@ -853,7 +853,7 @@ def callback_get(update, context) :
                                       message_id=query.message.message_id)
         return
 
-    elif command.startswith("holding_") and not command.startswith("holding_edit_"):
+    elif command.startswith("holding_") and not command.startswith("holding_edit_") and command != "holding_plan_toggle":
         # 보유종목 종목 선택 → 기준계좌 잔고로 종목명 확인 후 계좌 선택 키보드 표시
         h_code = command[len("holding_"):]
         ac_h = account()
