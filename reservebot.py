@@ -1187,7 +1187,7 @@ def callback_get(update, context) :
     elif command == "interest_new":
         menuNum = '05'
         query.edit_message_text(
-            text="신규 관심종목 종목코드(종목명)을 입력하세요.\n(예: 005930 또는 삼성전자)"
+            text="신규 관심종목 종목코드(종목명)을 입력하세요."
         )
 
     elif command.startswith("holding_edit_") and not command.startswith("holding_edit_field_"):
@@ -2517,19 +2517,66 @@ def echo(update, context):
             return
         new_val04 = int(user_text.strip())
         try:
+            acct04 = str(account()['acct_no'])
             c04 = get_conn()
+            # 현재 DB 값 조회 (연쇄 비교용)
+            with c04.cursor() as cur_r:
+                cur_r.execute(
+                    'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
+                    'FROM public."interestItem_interest_item" '
+                    "WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
+                    (acct04, g_interest_edit_code)
+                )
+                cur_row = cur_r.fetchone()
+            if cur_row:
+                _, _, db_resist, db_support, db_trend_high, db_trend_low = [
+                    int(v) if v is not None else 0 for v in cur_row
+                ]
+            else:
+                db_resist = db_support = db_trend_high = db_trend_low = 0
+
+            # 변경할 컬럼/값 결정 (연쇄 규칙 적용)
+            updates = {col04: new_val04}
+            changed_labels = [g_interest_edit_field]
+
+            if g_interest_edit_field == "1차저항가":
+                if new_val04 > db_resist:
+                    updates["resist_price"] = new_val04
+                    changed_labels.append("2차저항가")
+                if new_val04 > db_trend_high:
+                    updates["trend_high_price"] = new_val04
+                    changed_labels.append("추세상한가")
+            elif g_interest_edit_field == "2차저항가":
+                if new_val04 > db_trend_high:
+                    updates["trend_high_price"] = new_val04
+                    changed_labels.append("추세상한가")
+            elif g_interest_edit_field == "1차지지가":
+                if new_val04 < db_support:
+                    updates["support_price"] = new_val04
+                    changed_labels.append("2차지지가")
+                if new_val04 < db_trend_low:
+                    updates["trend_low_price"] = new_val04
+                    changed_labels.append("추세이탈가")
+            elif g_interest_edit_field == "2차지지가":
+                if new_val04 < db_trend_low:
+                    updates["trend_low_price"] = new_val04
+                    changed_labels.append("추세이탈가")
+
+            set_clause = ", ".join(f"{k} = %s" for k in updates)
+            values = list(updates.values()) + [acct04, g_interest_edit_code]
             with c04.cursor() as cur04:
                 cur04.execute(
-                    f'UPDATE public."interestItem_interest_item" SET {col04} = %s '
+                    f'UPDATE public."interestItem_interest_item" SET {set_clause} '
                     f"WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
-                    (new_val04, str(account()['acct_no']), g_interest_edit_code)
+                    values
                 )
                 updated04 = cur04.rowcount
             c04.commit()
+            changed_str = ", ".join(changed_labels)
             context.bot.send_message(
                 chat_id=user_id,
                 text=f"[{g_interest_edit_name}(<code>{g_interest_edit_code}</code>)] "
-                     f"{g_interest_edit_field} → {format(new_val04, ',d')}원 ({updated04}건 업데이트)",
+                     f"{changed_str} → {format(new_val04, ',d')}원 ({updated04}건 업데이트)",
                 parse_mode='HTML'
             )
         except Exception as e:
