@@ -322,7 +322,7 @@ def build_button(text_list, callback_header = "") : # make button list
 def get_command(update, context) :
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
                                  "전체예약", "예약주문", "예약정정", "예약철회", 
-                                 "전체주문", "보유종목", "추적준비", "추적삭제", 
+                                 "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                  "손실금액계산"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
@@ -872,14 +872,14 @@ def callback_get(update, context) :
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
 
-    elif command == "보유종목":
+    elif command == "종목관리":
         sub_buttons = [
             InlineKeyboardButton("조회", callback_data="menu,보유종목_조회"),
             InlineKeyboardButton("수정", callback_data="menu,보유종목_수정"),
             InlineKeyboardButton("취소", callback_data="menu,취소"),
         ]
         query.edit_message_text(
-            text="보유종목 메뉴를 선택하세요:",
+            text="종목관리 메뉴를 선택하세요:",
             reply_markup=InlineKeyboardMarkup(build_menu(sub_buttons, 2))
         )
 
@@ -1114,6 +1114,38 @@ def callback_get(update, context) :
             )
         except Exception as e:
             query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
+
+    elif command.startswith("prevlow_sell:"):
+        # kis_trading_trail_vol_state.py 에서 발송한 전일저가 이탈 전량매도 버튼
+        # callback_data 형식: prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}
+        parts = command.split(":")
+        p_nick  = parts[1]
+        p_code  = parts[2]
+        p_qty   = int(parts[3])
+        p_price = int(parts[4])
+        try:
+            query.answer("매도 주문 처리 중...")
+        except Exception:
+            pass
+        try:
+            ac_p = account(p_nick)
+            c_ord = order_cash(
+                False, ac_p['access_token'], ac_p['app_key'], ac_p['app_secret'],
+                str(ac_p['acct_no']), p_code, "00", str(p_qty), str(p_price)
+            )
+            if c_ord:
+                try:
+                    query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"✅ [{p_nick}] 전량매도 완료\n종목: {p_code} | {format(p_qty, ',d')}주 | {format(p_price, ',d')}원"
+                )
+            else:
+                query.edit_message_text(text=f"❌ [{p_nick}] 전량매도 실패: {p_code}")
+        except Exception as e:
+            query.edit_message_text(text=f"[prevlow_sell] 오류: {str(e)}")
 
     elif command.startswith("signal_sell_"):
         parts = command.split("_")
