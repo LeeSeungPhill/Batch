@@ -506,8 +506,8 @@ def get_period_high_low(access_token, app_key, app_secret, stock_code, period="D
     if "output" not in data or not data["output"]:
         return None, None
     df = pd.DataFrame(data["output"]).head(count)
-    high = df["stck_hgpr"].astype(int).max()
-    low  = df["stck_lwpr"].astype(int).min()
+    high = int(df["stck_hgpr"].astype(int).max())
+    low  = int(df["stck_lwpr"].astype(int).min())
     return high, low
 
 # 매수 가능(현금) 조회
