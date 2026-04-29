@@ -1190,6 +1190,62 @@ def callback_get(update, context) :
             text="신규 관심종목 종목코드(종목명)을 입력하세요."
         )
 
+    elif command.startswith("interest_register_"):
+        # kw_fast_stock_search.py 돌파 알림 버튼 → 즉시 관심종목 등록
+        ii_reg_code = command[len("interest_register_"):]
+        try:
+            query.answer("관심종목 등록 중...")
+        except Exception:
+            pass
+        try:
+            ac_reg = account('phills2')
+            match_reg = stock_code[stock_code.code == ii_reg_code]
+            ii_reg_name = match_reg.company.values[0].strip() if len(match_reg) > 0 else ii_reg_code
+            ap_reg = inquire_price(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'], ii_reg_code)
+            today_high = int(ap_reg['stck_hgpr'])
+            today_low  = int(ap_reg['stck_lwpr'])
+            d20_high, d20_low = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
+                                                     ii_reg_code, period="D", count=20)
+            y1_high, y1_low  = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
+                                                    ii_reg_code, period="M", count=12)
+            acct_reg = str(ac_reg['acct_no'])
+            c_reg = get_conn()
+            with c_reg.cursor() as cur_reg:
+                cur_reg.execute("""
+                    INSERT INTO public."interestItem_interest_item"
+                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
+                         trend_high_price, trend_low_price, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                    ON CONFLICT (acct_no, code) DO UPDATE SET
+                        name             = EXCLUDED.name,
+                        through_price    = EXCLUDED.through_price,
+                        leave_price      = EXCLUDED.leave_price,
+                        resist_price     = EXCLUDED.resist_price,
+                        support_price    = EXCLUDED.support_price,
+                        trend_high_price = EXCLUDED.trend_high_price,
+                        trend_low_price  = EXCLUDED.trend_low_price,
+                        last_chg_date    = EXCLUDED.last_chg_date
+                """, (acct_reg, ii_reg_code, ii_reg_name,
+                      today_high, today_low, d20_high, d20_low, y1_high, y1_low, datetime.now()))
+            c_reg.commit()
+            try:
+                query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=(f"✅ [{ii_reg_name}(<code>{ii_reg_code}</code>)] 관심종목 등록 완료\n"
+                      f"  1차저항가(금일고가): {format(today_high, ',d')}원\n"
+                      f"  1차지지가(금일저가): {format(today_low, ',d')}원\n"
+                      f"  2차저항가(20일고가): {format(d20_high, ',d')}원\n"
+                      f"  2차지지가(20일저가): {format(d20_low, ',d')}원\n"
+                      f"  추세상한가(1년고가): {format(y1_high, ',d')}원\n"
+                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원"),
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[관심종목 등록] 오류: {str(e)}")
+
     elif command.startswith("holding_edit_") and not command.startswith("holding_edit_field_"):
         h_code = command[len("holding_edit_"):]
         ac_h = account()
@@ -2852,6 +2908,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_31, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_31.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_31:
                     t.join()
 
@@ -2939,6 +2996,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_32, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_32.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_32:
                     t.join()
 
@@ -3026,6 +3084,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_33, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_33.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_33:
                     t.join()
 
@@ -3186,6 +3245,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_51, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_51.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_51:
                     t.join()
 
@@ -3258,6 +3318,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_52, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret, parts52[1].strip()))
                     threads_52.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_52:
                     t.join()
         
@@ -3347,6 +3408,7 @@ def echo(update, context):
                         t = threading.Thread(target=process_nick_61, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                         threads_61.append(t)
                         t.start()
+                        time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                     for t in threads_61:
                         t.join()
 
@@ -3411,6 +3473,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_62, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_62.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_62:
                     t.join()
 
@@ -3467,6 +3530,7 @@ def echo(update, context):
                 t = threading.Thread(target=process_nick_63, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                 threads_63.append(t)
                 t.start()
+                time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
             for t in threads_63:
                 t.join()               
 
