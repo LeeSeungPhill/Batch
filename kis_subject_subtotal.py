@@ -6,6 +6,7 @@ import sys
 import math
 from datetime import datetime
 from itertools import product
+from telegram import Bot
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -150,4 +151,59 @@ for market_code, tr_code, main_code in product(MARKET_MAP, TR_MAP, MAIN_MAP):
     except Exception as e:
         print(f"[{market_code}/{tr_code}/{main_code}] 오류: {e}")
 
+# 저장 완료 후 요약 메시지 텔레그램 전송
+def send_subject_summary():
+    COMBOS = [
+        ('외국인', '코스피', '순매수'),
+        ('외국인', '코스피', '순매도'),
+        ('외국인', '코스닥', '순매수'),
+        ('외국인', '코스닥', '순매도'),
+        ('기관',   '코스피', '순매수'),
+        ('기관',   '코스피', '순매도'),
+        ('기관',   '코스닥', '순매수'),
+        ('기관',   '코스닥', '순매도'),
+    ]
+    try:
+        cur_bot = conn.cursor()
+        cur_bot.execute(
+            "SELECT bot_token1, chat_id FROM \"stockAccount_stock_account\" WHERE nick_name = 'kwphills75'"
+        )
+        bot_row = cur_bot.fetchone()
+        cur_bot.close()
+        if not bot_row:
+            print("봇 설정 미존재")
+            return
+        bot_token, chat_id = bot_row
+        bot = Bot(token=bot_token)
+
+        sections = []
+        for subject, market, tr_type in COMBOS:
+            cur_q = conn.cursor()
+            cur_q.execute("""
+                SELECT tr_order, name, code, puri_volumn
+                FROM public.subject_sub_total
+                WHERE tr_day = prev_business_day_char(CURRENT_DATE)
+                  AND tr_subject = %s AND market_type = %s AND tr_type = %s
+                ORDER BY tr_time DESC, tr_order
+                LIMIT 10
+            """, (subject, market, tr_type))
+            rows = cur_q.fetchall()
+            cur_q.close()
+            if not rows:
+                continue
+            lines = [f"▶ {subject} {market} {tr_type} TOP10"]
+            for order, name, code, vol in rows:
+                lines.append(f"  {order}. {name}({code}) {format(vol, ',d')}주")
+            sections.append("\n".join(lines))
+
+        # 4개 섹션씩 묶어서 전송 (메시지 길이 분산)
+        chunk = 4
+        for i in range(0, len(sections), chunk):
+            text = "\n\n".join(sections[i:i + chunk])
+            bot.send_message(chat_id=chat_id, text=text)
+            print(f"  → 요약 메시지 전송 ({i+1}~{min(i+chunk, len(sections))})")
+    except Exception as e:
+        print(f"요약 메시지 전송 오류: {e}")
+
+send_subject_summary()
 conn.close()
