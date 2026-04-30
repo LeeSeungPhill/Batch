@@ -1,6 +1,5 @@
 import re
 import pandas as pd
-from telegram.ext import Updater
 from telegram.ext import MessageHandler, Filters
 import requests
 from datetime import datetime, timedelta
@@ -1190,62 +1189,6 @@ def callback_get(update, context) :
             text="신규 관심종목 종목코드(종목명)을 입력하세요."
         )
 
-    elif command.startswith("interest_register_"):
-        # kw_fast_stock_search.py 돌파 알림 버튼 → 즉시 관심종목 등록
-        ii_reg_code = command[len("interest_register_"):]
-        try:
-            query.answer("관심종목 등록 중...")
-        except Exception:
-            pass
-        try:
-            ac_reg = account('phills2')
-            match_reg = stock_code[stock_code.code == ii_reg_code]
-            ii_reg_name = match_reg.company.values[0].strip() if len(match_reg) > 0 else ii_reg_code
-            ap_reg = inquire_price(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'], ii_reg_code)
-            today_high = int(ap_reg['stck_hgpr'])
-            today_low  = int(ap_reg['stck_lwpr'])
-            d20_high, d20_low = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
-                                                     ii_reg_code, period="D", count=20)
-            y1_high, y1_low  = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
-                                                    ii_reg_code, period="M", count=12)
-            acct_reg = str(ac_reg['acct_no'])
-            c_reg = get_conn()
-            with c_reg.cursor() as cur_reg:
-                cur_reg.execute("""
-                    INSERT INTO public."interestItem_interest_item"
-                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                         trend_high_price, trend_low_price, proc_yn, last_chg_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
-                    ON CONFLICT (acct_no, code) DO UPDATE SET
-                        name             = EXCLUDED.name,
-                        through_price    = EXCLUDED.through_price,
-                        leave_price      = EXCLUDED.leave_price,
-                        resist_price     = EXCLUDED.resist_price,
-                        support_price    = EXCLUDED.support_price,
-                        trend_high_price = EXCLUDED.trend_high_price,
-                        trend_low_price  = EXCLUDED.trend_low_price,
-                        last_chg_date    = EXCLUDED.last_chg_date
-                """, (acct_reg, ii_reg_code, ii_reg_name,
-                      today_high, today_low, d20_high, d20_low, y1_high, y1_low, datetime.now()))
-            c_reg.commit()
-            try:
-                query.edit_message_reply_markup(reply_markup=None)
-            except Exception:
-                pass
-            context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=(f"✅ [{ii_reg_name}(<code>{ii_reg_code}</code>)] 관심종목 등록 완료\n"
-                      f"  1차저항가(금일고가): {format(today_high, ',d')}원\n"
-                      f"  1차지지가(금일저가): {format(today_low, ',d')}원\n"
-                      f"  2차저항가(20일고가): {format(d20_high, ',d')}원\n"
-                      f"  2차지지가(20일저가): {format(d20_low, ',d')}원\n"
-                      f"  추세상한가(1년고가): {format(y1_high, ',d')}원\n"
-                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원"),
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            query.edit_message_text(text=f"[관심종목 등록] 오류: {str(e)}")
-
     elif command.startswith("holding_edit_") and not command.startswith("holding_edit_field_"):
         h_code = command[len("holding_edit_"):]
         ac_h = account()
@@ -1904,40 +1847,42 @@ def callback_get(update, context) :
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
             
-            cur199 = get_conn().cursor()
+            conn199 = get_conn()
+            cur199 = conn199.cursor()
             balance_rows = []
+
+            insert_query199 = """
+                INSERT INTO dly_trading_balance (
+                    acct_no,
+                    code,
+                    name,
+                    balance_day,
+                    balance_price,
+                    balance_qty,
+                    balance_amt,
+                    value_rate,
+                    value_amt,
+                    buy_qty,
+                    sell_qty,
+                    mod_dt
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (acct_no, code, balance_day)
+                DO UPDATE SET
+                    balance_price = EXCLUDED.balance_price,
+                    balance_qty   = EXCLUDED.balance_qty,
+                    balance_amt   = EXCLUDED.balance_amt,
+                    value_rate    = EXCLUDED.value_rate,
+                    value_amt     = EXCLUDED.value_amt,
+                    buy_qty       = EXCLUDED.buy_qty,
+                    sell_qty      = EXCLUDED.sell_qty,
+                    mod_dt        = EXCLUDED.mod_dt;
+            """
 
             #  일별 매매 잔고 현행화
             for i in range(len(c)):
-                insert_query199 = """
-                    INSERT INTO dly_trading_balance (
-                        acct_no,
-                        code,
-                        name,
-                        balance_day,
-                        balance_price,
-                        balance_qty,
-                        balance_amt,
-                        value_rate,
-                        value_amt,
-                        buy_qty,
-                        sell_qty,
-                        mod_dt
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (acct_no, code, balance_day)
-                    DO UPDATE SET
-                        balance_price = EXCLUDED.balance_price,
-                        balance_qty   = EXCLUDED.balance_qty,
-                        balance_amt   = EXCLUDED.balance_amt,
-                        value_rate    = EXCLUDED.value_rate,
-                        value_amt     = EXCLUDED.value_amt,
-                        buy_qty       = EXCLUDED.buy_qty,
-                        sell_qty      = EXCLUDED.sell_qty,
-                        mod_dt        = EXCLUDED.mod_dt;
-                """
                 record_to_insert199 = (
                     acct_no,
                     c['pdno'][i],
@@ -1953,7 +1898,6 @@ def callback_get(update, context) :
                     datetime.now()
                 )
                 cur199.execute(insert_query199, record_to_insert199)
-                get_conn().commit()
 
                 if int(c['hldg_qty'][i]) > 0:
                     balance_rows.append((
@@ -1964,15 +1908,13 @@ def callback_get(update, context) :
                         int(c['hldg_qty'][i])           # purchase_qty
                     ))
 
+            conn199.commit()
             cur199.close()
 
             if len(balance_rows) > 0:
-                int(acct_no)  # numeric guard
-                datetime.strptime(str(prev_date), "%Y-%m-%d")  # date format guard
-                datetime.strptime(str(trail_day), "%Y-%m-%d")  # date format guard
-                balance_sql = f"""
+                balance_sql_tmpl = """
                 WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
-                    VALUES %s
+                    VALUES %%s
                 ),
                 sim AS (
                     SELECT *
@@ -1993,14 +1935,14 @@ def callback_get(update, context) :
                             exit_price,
                             loss_amt
                         FROM trading_trail
-                        WHERE acct_no = {acct_no}                            
-                        AND trail_day = '{prev_date}'
+                        WHERE acct_no = %s
+                        AND trail_day = %s
                         AND trail_tp IN ('1','2','3','L','P','C','U')
                     ) t
                 )
                 """
 
-                insert_query = f"""
+                insert_query_tmpl = """
                 INSERT INTO trading_trail (
                     acct_no,
                     name,
@@ -2025,7 +1967,7 @@ def callback_get(update, context) :
                     BAL.acct_no,
                     BAL.name,
                     BAL.code,
-                    '{trail_day}' AS trail_day,
+                    %s AS trail_day,
                     '090000' AS trail_dtm,
                     CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE  CASE WHEN COALESCE(S.trail_tp, '1') IN ('P','C','U') THEN 'P' ELSE '1' END END AS trail_tp,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
@@ -2047,21 +1989,25 @@ def callback_get(update, context) :
                     FROM trading_trail T
                     WHERE T.acct_no = BAL.acct_no
                     AND T.code = BAL.code
-                    AND T.trail_day = '{trail_day}'
-                    AND T.trail_dtm >= CASE WHEN S.trail_day = '{trail_day}' THEN S.trail_dtm ELSE '090000' END
+                    AND T.trail_day = %s
+                    AND T.trail_dtm >= CASE WHEN S.trail_day = %s THEN S.trail_dtm ELSE '090000' END
                 )
                 AND NOT EXISTS (
                     SELECT 1
                     FROM public.dly_stock_balance DSB
                     WHERE DSB.acct::int = BAL.acct_no
                     AND DSB.code = BAL.code
-                    AND DSB.dt = '{prev_date}'
+                    AND DSB.dt = %s
                     AND DSB.trading_plan IN ('i', 'h')
                 );
                 """
 
-                cur200 = get_conn().cursor()
-                full_query = balance_sql + insert_query
+                conn200 = get_conn()
+                cur200 = conn200.cursor()
+                full_query = cur200.mogrify(
+                    balance_sql_tmpl + insert_query_tmpl,
+                    (int(acct_no), prev_date, trail_day, trail_day, trail_day, prev_date)
+                ).decode()
 
                 execute_values(
                     cur200,
@@ -2072,7 +2018,7 @@ def callback_get(update, context) :
 
                 countProc = cur200.rowcount
 
-                conn.commit()
+                conn200.commit()
                 cur200.close()
 
                 if countProc >= 1:
@@ -2117,7 +2063,8 @@ def callback_get(update, context) :
             result_msgs = []
         
             # 추적 delete
-            cur200 = get_conn().cursor()
+            conn200 = get_conn()
+            cur200 = conn200.cursor()
             delete_query = """
                 DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
                 """
@@ -2126,7 +2073,7 @@ def callback_get(update, context) :
 
             countProc = cur200.rowcount
 
-            conn.commit()
+            conn200.commit()
             cur200.close()
 
             if countProc >= 1:
