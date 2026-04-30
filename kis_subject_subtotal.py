@@ -193,14 +193,14 @@ def send_subject_summary():
                 continue
             lines = [f"▶ {subject} {market} {tr_type} TOP10"]
             for order, name, code, vol in rows:
-                lines.append(f"  {order}. {name}({code}) {format(vol, ',d')}주")
+                lines.append(f"  {order}. {name}(<code>{code}</code>) : {format(vol, ',d')}주")
             sections.append("\n".join(lines))
 
         # 4개 섹션씩 묶어서 전송 (메시지 길이 분산)
         chunk = 4
         for i in range(0, len(sections), chunk):
             text = "\n\n".join(sections[i:i + chunk])
-            bot.send_message(chat_id=chat_id, text=text)
+            bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML')
             print(f"  → 요약 메시지 전송 ({i+1}~{min(i+chunk, len(sections))})")
     except Exception as e:
         print(f"요약 메시지 전송 오류: {e}")
