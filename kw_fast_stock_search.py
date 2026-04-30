@@ -1,6 +1,6 @@
 import requests
 import json
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 import psycopg2 as db
 import sys
 import math
@@ -163,14 +163,14 @@ def get_next_completed_10min_dt(dt: datetime) -> datetime:
     return base + timedelta(minutes=10)
 
 # 텔레그램 메시지 전송 함수
-async def send_telegram_message(message_text: str, bot_token: str, parse_mode: str = 'HTML'):
+async def send_telegram_message(message_text: str, bot_token: str, parse_mode: str = 'HTML', reply_markup=None):
     bot = Bot(token=bot_token)
-    
     await asyncio.to_thread(
         bot.send_message,
         chat_id=CHAT_ID,
         text=message_text,
-        parse_mode=parse_mode
+        parse_mode=parse_mode,
+        reply_markup=reply_markup
     )
 
 def auth(APP_KEY, APP_SECRET):
@@ -533,7 +533,10 @@ class WebSocketClient:
                         f"현재가 : {current_price:,}원, 등락율 : {current_rate}%"
                     )
                     print(message)
-                    await send_telegram_message(message, self.bot_token, parse_mode='HTML')
+                    reg_markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("관심종목 등록", callback_data=f"menu,interest_register_{code}")
+                    ]])
+                    await send_telegram_message(message, self.bot_token, parse_mode='HTML', reply_markup=reg_markup)
 
                     # 돌파 알림 완료 업데이트 (signal_time: 돌파 시간, signal_price: 돌파가)
                     with conn.cursor() as cur:

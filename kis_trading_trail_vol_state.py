@@ -851,87 +851,6 @@ def get_kis_1min_full_day(
         .reset_index(drop=True)
     )
 
-# ── 봇 토큰당 단일 콜백 리스너 (레지스트리 패턴) ──────────────────────────
-# 문제: 같은 봇에서 여러 종목이 동시에 _listen_prevlow_sell 스레드를 띄우면
-#       각 스레드가 bot.get_updates()를 동시에 호출해 업데이트를 서로 뺏어감.
-# 해결: 봇 토큰당 리스너 스레드 1개만 유지하고, 종목별 핸들러를 레지스트리에 등록.
-_prevlow_registry_lock = threading.Lock()
-_prevlow_registry: dict[str, dict] = {}   # token → {callback_data: handler_fn}
-_prevlow_listeners: dict[str, threading.Thread] = {}  # token → Thread
-_prevlow_offsets: dict[str, int] = {}     # token → last offset
-
-
-def _bot_callback_listener(token: str, bot):
-    """봇 토큰당 단일 get_updates 폴링 — 레지스트리 핸들러 실행 후 항목 제거."""
-    import time as _time
-    while True:
-        with _prevlow_registry_lock:
-            if not _prevlow_registry.get(token):
-                _prevlow_registry.pop(token, None)
-                break
-        try:
-            offset = _prevlow_offsets.get(token)
-            updates = bot.get_updates(
-                offset=offset, timeout=10,
-                allowed_updates=["callback_query"]
-            )
-            for upd in updates:
-                _prevlow_offsets[token] = upd.update_id + 1
-                cq = upd.callback_query
-                if cq is None:
-                    continue
-                with _prevlow_registry_lock:
-                    handler = _prevlow_registry.get(token, {}).pop(cq.data, None)
-                if handler:
-                    threading.Thread(target=handler, args=(cq,), daemon=True).start()
-        except Exception as e:
-            print(f"[callback_listener:{token[:8]}…] 폴링 오류: {e}")
-            _time.sleep(2)
-
-
-def _register_prevlow_sell(token: str, bot, chat_id,
-                            access_token, app_key, app_secret, acct_no,
-                            stock_code, basic_qty, prev_low, callback_data: str):
-    """
-    종목별 전량매도 핸들러를 레지스트리에 등록하고
-    봇 토큰당 단일 리스너 스레드를 보장한다.
-    """
-    def handler(cq):
-        try:
-            cq.answer("매도 주문 처리 중...")
-        except Exception:
-            pass
-        result = order_cash(
-            False, access_token, app_key, app_secret, str(acct_no),
-            stock_code, "00", str(basic_qty), str(prev_low)
-        )
-        msg = (
-            f"✅ 전량매도 완료\n종목: {stock_code} | {basic_qty:,}주 | {prev_low:,}원"
-            if result else f"❌ 전량매도 실패: {stock_code}"
-        )
-        try:
-            cq.edit_message_reply_markup(reply_markup=None)
-            bot.send_message(chat_id=chat_id, text=msg)
-        except Exception:
-            pass
-
-    with _prevlow_registry_lock:
-        if token not in _prevlow_registry:
-            _prevlow_registry[token] = {}
-        _prevlow_registry[token][callback_data] = handler
-
-        alive = (token in _prevlow_listeners and _prevlow_listeners[token].is_alive())
-        if not alive:
-            t = threading.Thread(
-                target=_bot_callback_listener,
-                args=(token, bot),
-                daemon=True
-            )
-            _prevlow_listeners[token] = t
-            t.start()
-# ── 레지스트리 패턴 끝 ────────────────────────────────────────────────────
-
-
 def volume_rate_chk(current_time, vol_ratio, trade_date=""):
     # ===============================
     # 시간대별 거래량 조건 설정
@@ -1253,6 +1172,23 @@ def get_kis_1min_from_datetime(
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
 
+                                # 이탈 발생 → 10분봉 저가·거래량 이탈 대기 등록 → trail_tp 'P' 변경
+                                try:
+                                    cur_p = conn.cursor()
+                                    cur_p.execute("""
+                                        UPDATE public.trading_trail
+                                        SET trail_tp = 'P', mod_dt = %s
+                                        WHERE acct_no = %s
+                                            AND code = %s
+                                            AND trail_day = %s
+                                            AND trail_tp NOT IN ('3', '4')
+                                    """, (datetime.now(), acct_no, stock_code, trade_date))
+                                    conn.commit()
+                                    cur_p.close()
+                                    print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
+                                except Exception as de:
+                                    print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")    
+
                     else:
                         # ===============================
                         # 20% 미만: 기존 고정 이탈가 로직
@@ -1285,6 +1221,23 @@ def get_kis_1min_from_datetime(
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
 
+                                # 이탈 발생 → 10분봉 저가·거래량 이탈 대기 등록 → trail_tp 'P' 변경
+                                try:
+                                    cur_p = conn.cursor()
+                                    cur_p.execute("""
+                                        UPDATE public.trading_trail
+                                        SET trail_tp = 'P', mod_dt = %s
+                                        WHERE acct_no = %s
+                                            AND code = %s
+                                            AND trail_day = %s
+                                            AND trail_tp NOT IN ('3', '4')
+                                    """, (datetime.now(), acct_no, stock_code, trade_date))
+                                    conn.commit()
+                                    cur_p.close()
+                                    print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
+                                except Exception as de:
+                                    print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")      
+
                 # ===============================
                 # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
                 # ===============================
@@ -1310,14 +1263,7 @@ def get_kis_1min_from_datetime(
                                 markup = InlineKeyboardMarkup([[sell_btn]])
                                 print(msg_warn)
                                 bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
-                                # 버튼 클릭 수신 → 자체 매도 실행 (레지스트리 패턴)
-                                _register_prevlow_sell(
-                                    token=bot.token,
-                                    bot=bot, chat_id=chat_id,
-                                    access_token=access_token, app_key=app_key, app_secret=app_secret, acct_no=acct_no,
-                                    stock_code=stock_code, basic_qty=basic_qty, prev_low=prev_low,
-                                    callback_data=_cb_data
-                                )
+                                # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                             # 전일저가 이탈 사전경고 → trail_tp 'P' 변경

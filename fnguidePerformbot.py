@@ -1,25 +1,36 @@
 import re
+import json
 import pandas as pd
 from telegram.ext import Updater
-from telegram.ext import MessageHandler, Filters
+from telegram.ext import MessageHandler, Filters, CallbackQueryHandler
 import requests
 from io import StringIO
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.font_manager as fm
 from datetime import datetime, timedelta
 import urllib3
 from pykrx import stock
 from mplfinance.original_flavor import candlestick2_ohlc
 import matplotlib.ticker as mticker
 import psycopg2 as db
+import kis_api_resp as resp
+
+URL_BASE = "https://openapi.koreainvestment.com:9443"
 
 urllib3.disable_warnings()
-matplotlib.use('SVG')
-plt.rcParams["font.family"] = "NanumGothic"
-# 해당 링크는 한국거래소에서 상장법인목록을 엑셀로 다운로드하는 링크입니다.
-# 다운로드와 동시에 Pandas에 excel 파일이 load가 되는 구조입니다.
-stock_code = pd.read_html('http://kind.krx.co.kr/corpgeneral/corpList.do?method=download', header=0, encoding='euc-kr')[0]
+matplotlib.use('Agg')
+_nanum_path = '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'
+fm.fontManager.addfont(_nanum_path)
+_nanum_prop = fm.FontProperties(fname=_nanum_path)
+plt.rcParams['font.family'] = _nanum_prop.get_name()
+plt.rcParams['axes.unicode_minus'] = False
+# 한국거래소 상장법인목록 다운로드
+krx_url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download'
+krx_res = requests.get(krx_url, timeout=10)
+krx_res.encoding = 'EUC-KR'
+stock_code = pd.read_html(krx_res.text, header=0)[0]
 # 필요한 것은 "회사명"과 "종목코드" 이므로 필요없는 column들은 제외
 stock_code = stock_code[['회사명', '종목코드']]
 # 한글 컬럼명을 영어로 변경
@@ -59,8 +70,102 @@ cur001 = conn.cursor()
 cur001.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
 result_001 = cur001.fetchone()
 cur001.close()
-conn.close()
 token = result_001[0]
+
+def get_conn():
+    global conn
+    try:
+        conn.isolation_level
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        conn = db.connect(conn_string)
+    return conn
+
+def auth(APP_KEY, APP_SECRET):
+    headers = {"content-type": "application/json"}
+    body = {"grant_type": "client_credentials", "appkey": APP_KEY, "appsecret": APP_SECRET}
+    PATH = "oauth2/tokenP"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.post(URL, headers=headers, data=json.dumps(body), verify=False, timeout=10)
+    return res.json()["access_token"]
+
+def get_phills2_account():
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("""
+        SELECT acct_no, access_token, app_key, app_secret,
+               token_publ_date, substr(token_publ_date, 0, 9) AS token_day
+        FROM "stockAccount_stock_account"
+        WHERE nick_name = 'phills2'
+    """)
+    row = cur.fetchone()
+    cur.close()
+    if row is None:
+        raise ValueError("DB에 'phills2' 계정 정보가 없습니다.")
+    acct_no, access_token, app_key, app_secret = row[0], row[1], row[2], row[3]
+    today = datetime.now().strftime("%Y%m%d")
+    valid_date = datetime.strptime(row[4], '%Y%m%d%H%M%S')
+    if (datetime.now() - valid_date).days >= 1 or row[5] != today:
+        access_token = auth(app_key, app_secret)
+        token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
+        cur2 = c.cursor()
+        cur2.execute(
+            "UPDATE \"stockAccount_stock_account\" SET access_token = %s, token_publ_date = %s, last_chg_date = %s WHERE acct_no = %s",
+            (access_token, token_publ_date, datetime.now(), acct_no)
+        )
+        c.commit()
+        cur2.close()
+    return {'acct_no': acct_no, 'access_token': access_token, 'app_key': app_key, 'app_secret': app_secret}
+
+def inquire_price(access_token, app_key, app_secret, code):
+    t = datetime.now().strftime('%H%M')
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010100"
+    }
+    params = {
+        'FID_COND_MRKT_DIV_CODE': "J" if '0900' <= t < '1530' else "NX",
+        'FID_INPUT_ISCD': code
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    ar = resp.APIResp(res)
+    return ar.getBody().output
+
+def get_period_high_low(access_token, app_key, app_secret, code, period="D", count=30):
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P",
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": code,
+        "FID_PERIOD_DIV_CODE": period,
+        "FID_ORG_ADJ_PRC": "1",
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    if "output" not in data or not data["output"]:
+        return None, None
+    df = pd.DataFrame(data["output"]).head(count)
+    high = int(df["stck_hgpr"].astype(int).max())
+    low  = int(df["stck_lwpr"].astype(int).min())
+    return high, low
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
@@ -79,7 +184,7 @@ def get_date_str(s):
     return date_str
 
 # FnGuide 재무정보 조회
-def get_dividiend(code):
+def get_dividend(code):
 
     URL = "https://comp.fnguide.com/SVO2/asp/SVD_Finance.asp?pGB=1&gicode=A%s&cID=&MenuYn=Y&ReportGB=B&NewMenuID=103&stkGb=701" % (code)
     with requests.Session() as session:
@@ -112,17 +217,17 @@ def get_dividiend(code):
         IS_temp.columns = cols
         IS_temp = IS_temp.T
 
-        IS_temp.drop('매출원가', axis=1, inplace=True)
-        IS_temp.drop('매출총이익', axis=1, inplace=True)
-        IS_temp.drop('영업이익(발표기준)', axis=1, inplace=True)
-        IS_temp.drop('판매비와관리비', axis=1, inplace=True)
-        IS_temp.drop('금융원가', axis=1, inplace=True)
-        IS_temp.drop('기타비용', axis=1, inplace=True)
-        IS_temp.drop('종속기업,공동지배기업및관계기업관련손익', axis=1, inplace=True)
-        IS_temp.drop('세전계속사업이익', axis=1, inplace=True)
-        IS_temp.drop('법인세비용', axis=1, inplace=True)
-        IS_temp.drop('계속영업이익', axis=1, inplace=True)
-        IS_temp.drop('중단영업이익', axis=1, inplace=True)
+        IS_temp.drop('매출원가', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('매출총이익', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('영업이익(발표기준)', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('판매비와관리비', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('금융원가', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('기타비용', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('종속기업,공동지배기업및관계기업관련손익', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('세전계속사업이익', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('법인세비용', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('계속영업이익', axis=1, inplace=True, errors='ignore')
+        IS_temp.drop('중단영업이익', axis=1, inplace=True, errors='ignore')
 
         IS_temp.index = pd.to_datetime(IS_temp.index)
         IS_temp = IS_temp[pd.notnull(IS_temp.index)]
@@ -168,7 +273,7 @@ def echo(update, context):
             context.bot.send_message(chat_id=user_id, text=ext)
 
     if len(code) > 0:
-        dividend = get_dividiend(code)
+        dividend = get_dividend(code)
 
     def get_chart(code):
         title = company + '[' + code + ']'
@@ -208,7 +313,7 @@ def echo(update, context):
         ax_top.set_xticks(xticks)
         ax_top.set_xticklabels(xticklabels, fontsize=8)
         ax_top.tick_params(axis='x', rotation=90)
-        ax_top.set_title(title, fontsize=15)
+        ax_top.set_title(title, fontsize=15, fontproperties=_nanum_prop)
         ax_top.grid()
 
         # 색깔 구분을 위한 함수
@@ -269,31 +374,96 @@ def echo(update, context):
 
         text0 = return_print("<" + company + ">")
         text1 = return_print("[매출액]")
-        for date in get_sales_sum("매출액").keys():
-            #print("%s : %s" % (date, get_sales_sum("매출액")[date]))
-            text1 = text1+return_print("%s : %s" % (date, get_sales_sum("매출액")[date]))
+        if "매출액" in dividend.columns:
+            for date in get_sales_sum("매출액").keys():
+                text1 = text1+return_print("%s : %s" % (date, get_sales_sum("매출액")[date]))
         text2 = return_print("[영업이익]")
-        for date in get_sales_sum("영업이익").keys():
-            #print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
-            text2 = text2+return_print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
+        if "영업이익" in dividend.columns:
+            for date in get_sales_sum("영업이익").keys():
+                text2 = text2+return_print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
         text3 = return_print("[당기순이익]")
-        for date in get_sales_sum("당기순이익").keys():
-            #print("%s : %s" % (date, get_sales_sum(4)[date]))
-            text3 = text3+return_print("%s : %s" % (date, get_sales_sum("당기순이익")[date]))
+        if "당기순이익" in dividend.columns:
+            for date in get_sales_sum("당기순이익").keys():
+                text3 = text3+return_print("%s : %s" % (date, get_sales_sum("당기순이익")[date]))
         text4 = return_print("[금융수익]")
-        for date in get_sales_sum("금융수익").keys():
-            #print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
-            text4 = text4+return_print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
+        if "금융수익" in dividend.columns:
+            for date in get_sales_sum("금융수익").keys():
+                text4 = text4+return_print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
         text5 = return_print("[기타수익]")
-        for date in get_sales_sum("기타수익").keys():
-            #print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
-            text5 = text5+return_print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
+        if "기타수익" in dividend.columns:
+            for date in get_sales_sum("기타수익").keys():
+                text5 = text5+return_print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
 
         context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5)
+
+def callback_get(update, context):
+    data_selected = update.callback_query.data
+    query = update.callback_query
+    command = data_selected.split(",")[-1] if "," in data_selected else data_selected
+
+    if command.startswith("interest_register_"):
+        ii_reg_code = command[len("interest_register_"):]
+        try:
+            query.answer("관심종목 등록 중...")
+        except Exception:
+            pass
+        try:
+            ac_reg = get_phills2_account()
+            match_reg = stock_code[stock_code.code == ii_reg_code]
+            ii_reg_name = match_reg.company.values[0].strip() if len(match_reg) > 0 else ii_reg_code
+            ap_reg = inquire_price(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'], ii_reg_code)
+            today_high = int(ap_reg['stck_hgpr'])
+            today_low  = int(ap_reg['stck_lwpr'])
+            d20_high, d20_low = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
+                                                     ii_reg_code, period="D", count=20)
+            y1_high, y1_low  = get_period_high_low(ac_reg['access_token'], ac_reg['app_key'], ac_reg['app_secret'],
+                                                    ii_reg_code, period="M", count=12)
+            d20_high = d20_high if d20_high is not None else 0
+            d20_low  = d20_low  if d20_low  is not None else 0
+            y1_high  = y1_high  if y1_high  is not None else 0
+            y1_low   = y1_low   if y1_low   is not None else 0
+            acct_reg = str(ac_reg['acct_no'])
+            c_reg = get_conn()
+            with c_reg.cursor() as cur_reg:
+                cur_reg.execute("""
+                    INSERT INTO public."interestItem_interest_item"
+                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
+                         trend_high_price, trend_low_price, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                    ON CONFLICT (acct_no, code) DO UPDATE SET
+                        name             = EXCLUDED.name,
+                        through_price    = EXCLUDED.through_price,
+                        leave_price      = EXCLUDED.leave_price,
+                        resist_price     = EXCLUDED.resist_price,
+                        support_price    = EXCLUDED.support_price,
+                        trend_high_price = EXCLUDED.trend_high_price,
+                        trend_low_price  = EXCLUDED.trend_low_price,
+                        last_chg_date    = EXCLUDED.last_chg_date
+                """, (acct_reg, ii_reg_code, ii_reg_name,
+                      today_high, today_low, d20_high, d20_low, y1_high, y1_low, datetime.now()))
+            c_reg.commit()
+            try:
+                query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=(f"✅ [{ii_reg_name}(<code>{ii_reg_code}</code>)] 관심종목 등록 완료\n"
+                      f"  1차저항가(금일고가): {format(today_high, ',d')}원\n"
+                      f"  1차지지가(금일저가): {format(today_low, ',d')}원\n"
+                      f"  2차저항가(20일고가): {format(d20_high, ',d')}원\n"
+                      f"  2차지지가(20일저가): {format(d20_low, ',d')}원\n"
+                      f"  추세상한가(1년고가): {format(y1_high, ',d')}원\n"
+                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원"),
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[관심종목 등록] 오류: {str(e)}")
 
 # 텔레그램봇 응답 처리
 echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
 dispatcher.add_handler(echo_handler)
+dispatcher.add_handler(CallbackQueryHandler(callback_get))
 
 # 텔레그램봇 polling
 updater.start_polling()

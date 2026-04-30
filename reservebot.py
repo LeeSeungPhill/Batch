@@ -1,6 +1,5 @@
 import re
 import pandas as pd
-from telegram.ext import Updater
 from telegram.ext import MessageHandler, Filters
 import requests
 from datetime import datetime, timedelta
@@ -136,6 +135,11 @@ g_holding_edit_field = ""   # 수정할 필드명 (이탈가/최종이탈가/목
 g_signal_sell_code = ""
 g_signal_sell_name = ""
 g_signal_sell_qty  = 0
+
+# 관심종목 수정/신규 상태
+g_interest_edit_code  = ""
+g_interest_edit_name  = ""
+g_interest_edit_field = ""   # 수정할 필드명 (1차저항가/1차지지가/2차저항가/2차지지가/추세상한가/추세이탈가)
 
 # 추적등록(손절금액) 미리보기 → 진행 콜백 공유 상태
 g_trail71_code = ""
@@ -322,7 +326,7 @@ def build_button(text_list, callback_header = "") : # make button list
 def get_command(update, context) :
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
                                  "전체예약", "예약주문", "예약정정", "예약철회", 
-                                 "전체주문", "보유종목", "추적준비", "추적삭제", 
+                                 "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                  "손실금액계산"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
@@ -477,6 +481,33 @@ def get_kis_daily_chart(
 
     # trade_date 종가
     return int(day_df.iloc[0]["stck_clpr"])
+
+def get_period_high_low(access_token, app_key, app_secret, stock_code, period="D", count=30):
+    """KIS 일/주/월봉 API로 period 내 최고가·최저가 반환. period: D/W/M"""
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P",
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": stock_code,
+        "FID_PERIOD_DIV_CODE": period,
+        "FID_ORG_ADJ_PRC": "1",
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    if "output" not in data or not data["output"]:
+        return None, None
+    df = pd.DataFrame(data["output"]).head(count)
+    high = int(df["stck_hgpr"].astype(int).max())
+    low  = int(df["stck_lwpr"].astype(int).min())
+    return high, low
 
 # 매수 가능(현금) 조회
 def inquire_psbl_order(access_token, app_key, app_secret, acct_no):
@@ -872,14 +903,16 @@ def callback_get(update, context) :
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
 
-    elif command == "보유종목":
+    elif command == "종목관리":
         sub_buttons = [
-            InlineKeyboardButton("조회", callback_data="menu,보유종목_조회"),
-            InlineKeyboardButton("수정", callback_data="menu,보유종목_수정"),
-            InlineKeyboardButton("취소", callback_data="menu,취소"),
+            InlineKeyboardButton("보유종목 조회", callback_data="menu,보유종목_조회"),
+            InlineKeyboardButton("보유종목 수정", callback_data="menu,보유종목_수정"),
+            InlineKeyboardButton("관심종목 조회", callback_data="menu,관심종목_조회"),
+            InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
+            InlineKeyboardButton("취소",          callback_data="menu,취소"),
         ]
         query.edit_message_text(
-            text="보유종목 메뉴를 선택하세요:",
+            text="종목관리 메뉴를 선택하세요:",
             reply_markup=InlineKeyboardMarkup(build_menu(sub_buttons, 2))
         )
 
@@ -1037,6 +1070,125 @@ def callback_get(update, context) :
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 수정] 오류: {str(e)}")
 
+    elif command == "관심종목_조회":
+        ac = account()
+        acct_no = ac['acct_no']
+        try:
+            query.edit_message_text(text="[관심종목 조회] 조회 중...")
+            with get_conn().cursor() as cur_ii:
+                cur_ii.execute("""
+                    SELECT name, code, through_price, leave_price, resist_price, support_price,
+                           trend_high_price, trend_low_price
+                    FROM public."interestItem_interest_item"
+                    WHERE acct_no = %s AND proc_yn = 'Y'
+                    ORDER BY name
+                """, (str(acct_no),))
+                rows = cur_ii.fetchall()
+            if not rows:
+                query.edit_message_text(text="[관심종목 조회] 조회된 종목이 없습니다.")
+            else:
+                result_msgs = []
+                for row in rows:
+                    ii_name, ii_code, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price = row
+                    parts = []
+                    if through_price:   parts.append(f"1차저항가:{format(int(through_price), ',d')}원")
+                    if leave_price:     parts.append(f"1차지지가:{format(int(leave_price), ',d')}원")
+                    if resist_price:    parts.append(f"2차저항가:{format(int(resist_price), ',d')}원")
+                    if support_price:   parts.append(f"2차지지가:{format(int(support_price), ',d')}원")
+                    if trend_high_price: parts.append(f"추세상한가:{format(int(trend_high_price), ',d')}원")
+                    if trend_low_price:  parts.append(f"추세이탈가:{format(int(trend_low_price), ',d')}원")
+                    price_str = ", ".join(parts)
+                    msg = f"* {ii_name}[<code>{ii_code}</code>]" + (f"\n  {price_str}" if price_str else "")
+                    result_msgs.append(msg)
+                chunk_size = 10
+                chunks = [result_msgs[i:i + chunk_size] for i in range(0, len(result_msgs), chunk_size)]
+                for idx, chunk in enumerate(chunks):
+                    text = "\n\n".join(chunk)
+                    if idx == 0:
+                        context.bot.edit_message_text(
+                            text=text, parse_mode='HTML',
+                            chat_id=query.message.chat_id,
+                            message_id=query.message.message_id
+                        )
+                    else:
+                        context.bot.send_message(
+                            text=text, parse_mode='HTML',
+                            chat_id=query.message.chat_id
+                        )
+        except Exception as e:
+            query.edit_message_text(text=f"[관심종목 조회] 오류: {str(e)}")
+
+    elif command == "관심종목_변경":
+        ac = account()
+        acct_no = ac['acct_no']
+        try:
+            query.edit_message_text(text="[관심종목 변경] 조회 중...")
+            with get_conn().cursor() as cur_ii:
+                cur_ii.execute("""
+                    SELECT name, code
+                    FROM public."interestItem_interest_item"
+                    WHERE acct_no = %s AND proc_yn = 'Y'
+                    ORDER BY name
+                """, (str(acct_no),))
+                rows = cur_ii.fetchall()
+            ii_buttons = [
+                InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
+                for r in rows
+            ]
+            ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
+            ii_buttons.append(InlineKeyboardButton("취소",      callback_data="menu,취소"))
+            rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
+            query.edit_message_text(
+                text="변경할 관심종목을 선택하거나 신규 등록하세요:",
+                reply_markup=InlineKeyboardMarkup(rows_kb)
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[관심종목 변경] 오류: {str(e)}")
+
+    elif command.startswith("interest_edit_") and not command.startswith("interest_edit_field_"):
+        ii_code = command[len("interest_edit_"):]
+        try:
+            with get_conn().cursor() as cur_ie:
+                cur_ie.execute(
+                    'SELECT name FROM public."interestItem_interest_item" WHERE acct_no = %s AND code = %s AND proc_yn = \'Y\'',
+                    (str(account()['acct_no']), ii_code)
+                )
+                row_ie = cur_ie.fetchone()
+            ii_name = row_ie[0] if row_ie else ii_code
+            global g_interest_edit_code, g_interest_edit_name
+            g_interest_edit_code = ii_code
+            g_interest_edit_name = ii_name
+            field_btns = [
+                InlineKeyboardButton("1차저항가",  callback_data="menu,interest_edit_field_1차저항가"),
+                InlineKeyboardButton("1차지지가",  callback_data="menu,interest_edit_field_1차지지가"),
+                InlineKeyboardButton("2차저항가",  callback_data="menu,interest_edit_field_2차저항가"),
+                InlineKeyboardButton("2차지지가",  callback_data="menu,interest_edit_field_2차지지가"),
+                InlineKeyboardButton("추세상한가", callback_data="menu,interest_edit_field_추세상한가"),
+                InlineKeyboardButton("추세이탈가", callback_data="menu,interest_edit_field_추세이탈가"),
+                InlineKeyboardButton("취소",       callback_data="menu,취소"),
+            ]
+            rows_f = [field_btns[i:i+2] for i in range(0, len(field_btns), 2)]
+            query.edit_message_text(
+                text=f"[{ii_name}({ii_code})] 수정할 항목을 선택하세요:",
+                reply_markup=InlineKeyboardMarkup(rows_f)
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[관심종목 수정] 오류: {str(e)}")
+
+    elif command.startswith("interest_edit_field_"):
+        global g_interest_edit_field
+        g_interest_edit_field = command[len("interest_edit_field_"):]
+        menuNum = '04'
+        query.edit_message_text(
+            text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field} 값을 입력하세요. (숫자만 입력)"
+        )
+
+    elif command == "interest_new":
+        menuNum = '05'
+        query.edit_message_text(
+            text="신규 관심종목 종목코드(종목명)을 입력하세요."
+        )
+
     elif command.startswith("holding_edit_") and not command.startswith("holding_edit_field_"):
         h_code = command[len("holding_edit_"):]
         ac_h = account()
@@ -1114,6 +1266,38 @@ def callback_get(update, context) :
             )
         except Exception as e:
             query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
+
+    elif command.startswith("prevlow_sell:"):
+        # kis_trading_trail_vol_state.py 에서 발송한 전일저가 이탈 전량매도 버튼
+        # callback_data 형식: prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}
+        parts = command.split(":")
+        p_nick  = parts[1]
+        p_code  = parts[2]
+        p_qty   = int(parts[3])
+        p_price = int(parts[4])
+        try:
+            query.answer("매도 주문 처리 중...")
+        except Exception:
+            pass
+        try:
+            ac_p = account(p_nick)
+            c_ord = order_cash(
+                False, ac_p['access_token'], ac_p['app_key'], ac_p['app_secret'],
+                str(ac_p['acct_no']), p_code, "00", str(p_qty), str(p_price)
+            )
+            if c_ord:
+                try:
+                    query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"✅ [{p_nick}] 전량매도 완료\n종목: {p_code} | {format(p_qty, ',d')}주 | {format(p_price, ',d')}원"
+                )
+            else:
+                query.edit_message_text(text=f"❌ [{p_nick}] 전량매도 실패: {p_code}")
+        except Exception as e:
+            query.edit_message_text(text=f"[prevlow_sell] 오류: {str(e)}")
 
     elif command.startswith("signal_sell_"):
         parts = command.split("_")
@@ -1663,40 +1847,42 @@ def callback_get(update, context) :
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
             
-            cur199 = get_conn().cursor()
+            conn199 = get_conn()
+            cur199 = conn199.cursor()
             balance_rows = []
+
+            insert_query199 = """
+                INSERT INTO dly_trading_balance (
+                    acct_no,
+                    code,
+                    name,
+                    balance_day,
+                    balance_price,
+                    balance_qty,
+                    balance_amt,
+                    value_rate,
+                    value_amt,
+                    buy_qty,
+                    sell_qty,
+                    mod_dt
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (acct_no, code, balance_day)
+                DO UPDATE SET
+                    balance_price = EXCLUDED.balance_price,
+                    balance_qty   = EXCLUDED.balance_qty,
+                    balance_amt   = EXCLUDED.balance_amt,
+                    value_rate    = EXCLUDED.value_rate,
+                    value_amt     = EXCLUDED.value_amt,
+                    buy_qty       = EXCLUDED.buy_qty,
+                    sell_qty      = EXCLUDED.sell_qty,
+                    mod_dt        = EXCLUDED.mod_dt;
+            """
 
             #  일별 매매 잔고 현행화
             for i in range(len(c)):
-                insert_query199 = """
-                    INSERT INTO dly_trading_balance (
-                        acct_no,
-                        code,
-                        name,
-                        balance_day,
-                        balance_price,
-                        balance_qty,
-                        balance_amt,
-                        value_rate,
-                        value_amt,
-                        buy_qty,
-                        sell_qty,
-                        mod_dt
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (acct_no, code, balance_day)
-                    DO UPDATE SET
-                        balance_price = EXCLUDED.balance_price,
-                        balance_qty   = EXCLUDED.balance_qty,
-                        balance_amt   = EXCLUDED.balance_amt,
-                        value_rate    = EXCLUDED.value_rate,
-                        value_amt     = EXCLUDED.value_amt,
-                        buy_qty       = EXCLUDED.buy_qty,
-                        sell_qty      = EXCLUDED.sell_qty,
-                        mod_dt        = EXCLUDED.mod_dt;
-                """
                 record_to_insert199 = (
                     acct_no,
                     c['pdno'][i],
@@ -1712,7 +1898,6 @@ def callback_get(update, context) :
                     datetime.now()
                 )
                 cur199.execute(insert_query199, record_to_insert199)
-                get_conn().commit()
 
                 if int(c['hldg_qty'][i]) > 0:
                     balance_rows.append((
@@ -1723,15 +1908,13 @@ def callback_get(update, context) :
                         int(c['hldg_qty'][i])           # purchase_qty
                     ))
 
+            conn199.commit()
             cur199.close()
 
             if len(balance_rows) > 0:
-                int(acct_no)  # numeric guard
-                datetime.strptime(str(prev_date), "%Y-%m-%d")  # date format guard
-                datetime.strptime(str(trail_day), "%Y-%m-%d")  # date format guard
-                balance_sql = f"""
+                balance_sql_tmpl = """
                 WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
-                    VALUES %s
+                    VALUES %%s
                 ),
                 sim AS (
                     SELECT *
@@ -1752,14 +1935,14 @@ def callback_get(update, context) :
                             exit_price,
                             loss_amt
                         FROM trading_trail
-                        WHERE acct_no = {acct_no}                            
-                        AND trail_day = '{prev_date}'
+                        WHERE acct_no = %s
+                        AND trail_day = %s
                         AND trail_tp IN ('1','2','3','L','P','C','U')
                     ) t
                 )
                 """
 
-                insert_query = f"""
+                insert_query_tmpl = """
                 INSERT INTO trading_trail (
                     acct_no,
                     name,
@@ -1784,7 +1967,7 @@ def callback_get(update, context) :
                     BAL.acct_no,
                     BAL.name,
                     BAL.code,
-                    '{trail_day}' AS trail_day,
+                    %s AS trail_day,
                     '090000' AS trail_dtm,
                     CASE WHEN COALESCE(S.trail_tp, '1') IN ('3', 'L') THEN 'L' ELSE  CASE WHEN COALESCE(S.trail_tp, '1') IN ('P','C','U') THEN 'P' ELSE '1' END END AS trail_tp,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
@@ -1806,21 +1989,25 @@ def callback_get(update, context) :
                     FROM trading_trail T
                     WHERE T.acct_no = BAL.acct_no
                     AND T.code = BAL.code
-                    AND T.trail_day = '{trail_day}'
-                    AND T.trail_dtm >= CASE WHEN S.trail_day = '{trail_day}' THEN S.trail_dtm ELSE '090000' END
+                    AND T.trail_day = %s
+                    AND T.trail_dtm >= CASE WHEN S.trail_day = %s THEN S.trail_dtm ELSE '090000' END
                 )
                 AND NOT EXISTS (
                     SELECT 1
                     FROM public.dly_stock_balance DSB
                     WHERE DSB.acct::int = BAL.acct_no
                     AND DSB.code = BAL.code
-                    AND DSB.dt = '{prev_date}'
+                    AND DSB.dt = %s
                     AND DSB.trading_plan IN ('i', 'h')
                 );
                 """
 
-                cur200 = get_conn().cursor()
-                full_query = balance_sql + insert_query
+                conn200 = get_conn()
+                cur200 = conn200.cursor()
+                full_query = cur200.mogrify(
+                    balance_sql_tmpl + insert_query_tmpl,
+                    (int(acct_no), prev_date, trail_day, trail_day, trail_day, prev_date)
+                ).decode()
 
                 execute_values(
                     cur200,
@@ -1831,7 +2018,7 @@ def callback_get(update, context) :
 
                 countProc = cur200.rowcount
 
-                conn.commit()
+                conn200.commit()
                 cur200.close()
 
                 if countProc >= 1:
@@ -1876,7 +2063,8 @@ def callback_get(update, context) :
             result_msgs = []
         
             # 추적 delete
-            cur200 = get_conn().cursor()
+            conn200 = get_conn()
+            cur200 = conn200.cursor()
             delete_query = """
                 DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
                 """
@@ -1885,7 +2073,7 @@ def callback_get(update, context) :
 
             countProc = cur200.rowcount
 
-            conn.commit()
+            conn200.commit()
             cur200.close()
 
             if countProc >= 1:
@@ -2310,6 +2498,165 @@ def echo(update, context):
         threading.Thread(target=process_signal_sell_94).start()
         return
 
+    # 관심종목 필드값 수정 — 숫자만 입력
+    if menuNum == '04':
+        initMenuNum()
+        global g_interest_edit_code, g_interest_edit_name, g_interest_edit_field
+        ii_field_col_map = {
+            "1차저항가":  "through_price",
+            "1차지지가":  "leave_price",
+            "2차저항가":  "resist_price",
+            "2차지지가":  "support_price",
+            "추세상한가": "trend_high_price",
+            "추세이탈가": "trend_low_price",
+        }
+        col04 = ii_field_col_map.get(g_interest_edit_field)
+        if not col04:
+            context.bot.send_message(chat_id=user_id, text="수정할 항목이 선택되지 않았습니다.")
+            return
+        if not user_text.strip().lstrip('-').isdecimal():
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field}: 숫자만 입력하세요.")
+            return
+        new_val04 = int(user_text.strip())
+        try:
+            acct04 = str(account()['acct_no'])
+            c04 = get_conn()
+            # 현재 DB 값 조회 (연쇄 비교용)
+            with c04.cursor() as cur_r:
+                cur_r.execute(
+                    'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
+                    'FROM public."interestItem_interest_item" '
+                    "WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
+                    (acct04, g_interest_edit_code)
+                )
+                cur_row = cur_r.fetchone()
+            if cur_row:
+                _, _, db_resist, db_support, db_trend_high, db_trend_low = [
+                    int(v) if v is not None else 0 for v in cur_row
+                ]
+            else:
+                db_resist = db_support = db_trend_high = db_trend_low = 0
+
+            # 변경할 컬럼/값 결정 (연쇄 규칙 적용)
+            updates = {col04: new_val04}
+            changed_labels = [g_interest_edit_field]
+
+            if g_interest_edit_field == "1차저항가":
+                if new_val04 > db_resist:
+                    updates["resist_price"] = new_val04
+                    changed_labels.append("2차저항가")
+                if new_val04 > db_trend_high:
+                    updates["trend_high_price"] = new_val04
+                    changed_labels.append("추세상한가")
+            elif g_interest_edit_field == "2차저항가":
+                if new_val04 > db_trend_high:
+                    updates["trend_high_price"] = new_val04
+                    changed_labels.append("추세상한가")
+            elif g_interest_edit_field == "1차지지가":
+                if new_val04 < db_support:
+                    updates["support_price"] = new_val04
+                    changed_labels.append("2차지지가")
+                if new_val04 < db_trend_low:
+                    updates["trend_low_price"] = new_val04
+                    changed_labels.append("추세이탈가")
+            elif g_interest_edit_field == "2차지지가":
+                if new_val04 < db_trend_low:
+                    updates["trend_low_price"] = new_val04
+                    changed_labels.append("추세이탈가")
+
+            set_clause = ", ".join(f"{k} = %s" for k in updates)
+            values = list(updates.values()) + [acct04, g_interest_edit_code]
+            with c04.cursor() as cur04:
+                cur04.execute(
+                    f'UPDATE public."interestItem_interest_item" SET {set_clause} '
+                    f"WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
+                    values
+                )
+                updated04 = cur04.rowcount
+            c04.commit()
+            changed_str = ", ".join(changed_labels)
+            context.bot.send_message(
+                chat_id=user_id,
+                text=f"[{g_interest_edit_name}(<code>{g_interest_edit_code}</code>)] "
+                     f"{changed_str} → {format(new_val04, ',d')}원 ({updated04}건 업데이트)",
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            try: get_conn().rollback()
+            except Exception: pass
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_interest_edit_name}] {g_interest_edit_field} 업데이트 오류: {str(e)}")
+        return
+
+    # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 자동 가격 설정
+    if menuNum == '05':
+        initMenuNum()
+        try:
+            ac05 = account()
+            input_stripped = user_text.strip()
+            # 종목코드 또는 종목명으로 코드 확인
+            if input_stripped[:6].isdecimal() and len(input_stripped) >= 6:
+                ii_new_code = input_stripped[:6].zfill(6)
+                match05 = stock_code[stock_code.code == ii_new_code]
+                ii_new_name = match05.company.values[0].strip() if len(match05) > 0 else ii_new_code
+            else:
+                match05 = stock_code[stock_code.company.str.strip() == input_stripped]
+                if len(match05) == 0:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"'{input_stripped}' 종목을 찾을 수 없습니다. 종목코드(6자리) 또는 정확한 종목명을 입력하세요.")
+                    return
+                ii_new_code = match05.code.values[0]
+                ii_new_name = input_stripped
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{ii_new_name}({ii_new_code})] 가격 조회 중...")
+            # 금일 고가/저가
+            ap05 = inquire_price(ac05['access_token'], ac05['app_key'], ac05['app_secret'], ii_new_code)
+            today_high = int(ap05['stck_hgpr'])
+            today_low  = int(ap05['stck_lwpr'])
+            # 20일 최고가/최저가 (일봉 30일 중 최근 20일)
+            d20_high, d20_low = get_period_high_low(ac05['access_token'], ac05['app_key'], ac05['app_secret'],
+                                                     ii_new_code, period="D", count=20)
+            # 1년 최고가/최저가 (월봉 12개월)
+            y1_high, y1_low = get_period_high_low(ac05['access_token'], ac05['app_key'], ac05['app_secret'],
+                                                   ii_new_code, period="M", count=12)
+            now05 = datetime.now()
+            acct05 = str(ac05['acct_no'])
+            c05 = get_conn()
+            with c05.cursor() as cur05:
+                cur05.execute("""
+                    INSERT INTO public."interestItem_interest_item"
+                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
+                         trend_high_price, trend_low_price, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                    ON CONFLICT (acct_no, code) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        through_price     = EXCLUDED.through_price,
+                        leave_price       = EXCLUDED.leave_price,
+                        resist_price      = EXCLUDED.resist_price,
+                        support_price     = EXCLUDED.support_price,
+                        trend_high_price  = EXCLUDED.trend_high_price,
+                        trend_low_price   = EXCLUDED.trend_low_price,
+                        last_chg_date     = EXCLUDED.last_chg_date
+                """, (acct05, ii_new_code, ii_new_name,
+                      today_high, today_low, d20_high, d20_low, y1_high, y1_low, now05))
+            c05.commit()
+            context.bot.send_message(
+                chat_id=user_id,
+                text=(f"✅ [{ii_new_name}(<code>{ii_new_code}</code>)] 관심종목 등록 완료\n"
+                      f"  1차저항가(금일고가): {format(today_high, ',d')}원\n"
+                      f"  1차지지가(금일저가): {format(today_low, ',d')}원\n"
+                      f"  2차저항가(20일고가): {format(d20_high, ',d')}원\n"
+                      f"  2차지지가(20일저가): {format(d20_low, ',d')}원\n"
+                      f"  추세상한가(1년고가): {format(y1_high, ',d')}원\n"
+                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원"),
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id,
+                text=f"[관심종목 신규 등록] 오류: {str(e)}")
+        return
+
     # 입력메시지가 6자리 이상인 경우,
     if len(user_text) >= 6:
         # 입력메시지가 앞의 1자리가 숫자인 경우,
@@ -2508,6 +2855,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_31, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_31.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_31:
                     t.join()
 
@@ -2595,6 +2943,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_32, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_32.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_32:
                     t.join()
 
@@ -2682,6 +3031,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_33, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_33.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_33:
                     t.join()
 
@@ -2842,6 +3192,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_51, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_51.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_51:
                     t.join()
 
@@ -2914,6 +3265,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_52, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret, parts52[1].strip()))
                     threads_52.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_52:
                     t.join()
         
@@ -3003,6 +3355,7 @@ def echo(update, context):
                         t = threading.Thread(target=process_nick_61, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                         threads_61.append(t)
                         t.start()
+                        time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                     for t in threads_61:
                         t.join()
 
@@ -3067,6 +3420,7 @@ def echo(update, context):
                     t = threading.Thread(target=process_nick_62, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                     threads_62.append(t)
                     t.start()
+                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
                 for t in threads_62:
                     t.join()
 
@@ -3123,6 +3477,7 @@ def echo(update, context):
                 t = threading.Thread(target=process_nick_63, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
                 threads_63.append(t)
                 t.start()
+                time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
             for t in threads_63:
                 t.join()               
 
