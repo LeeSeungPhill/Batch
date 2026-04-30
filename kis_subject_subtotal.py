@@ -193,7 +193,7 @@ def send_subject_summary():
                 continue
             lines = [f"▶ {subject} {market} {tr_type} TOP10"]
             for order, name, code, vol in rows:
-                lines.append(f"  {order}. {name}(<code>{code}</code>) : {format(vol, ',d')}주")
+                lines.append(f"  {order}. {str(name).strip()}(<code>{code}</code>) : {format(vol, ',d')}주")
             sections.append("\n".join(lines))
 
         # 4개 섹션씩 묶어서 전송 (메시지 길이 분산)
