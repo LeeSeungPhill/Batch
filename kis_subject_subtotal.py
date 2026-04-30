@@ -174,10 +174,6 @@ def send_subject_summary():
             print("봇 설정 미존재")
             return
         bot_token, chat_id = bot_row
-        print(f"  bot_token: {'설정됨' if bot_token else 'NULL'}, chat_id: {chat_id}")
-        if not bot_token or not chat_id:
-            print("  bot_token 또는 chat_id가 NULL — DB 확인 필요")
-            return
         bot = Bot(token=bot_token)
 
         sections = []
@@ -186,24 +182,19 @@ def send_subject_summary():
             cur_q.execute("""
                 SELECT tr_order, name, code, puri_volumn
                 FROM public.subject_sub_total
-                WHERE tr_day = %s
+                WHERE tr_day = prev_business_day_char(CURRENT_DATE)
                   AND tr_subject = %s AND market_type = %s AND tr_type = %s
                 ORDER BY tr_time DESC, tr_order
                 LIMIT 10
-            """, (today, subject, market, tr_type))
+            """, (subject, market, tr_type))
             rows = cur_q.fetchall()
             cur_q.close()
-            print(f"  {subject}/{market}/{tr_type}: {len(rows)}건")
             if not rows:
                 continue
-            lines = [f"▶ {subject} {market} {tr_type} TOP10 [{hms}]"]
+            lines = [f"▶ {subject} {market} {tr_type} TOP10"]
             for order, name, code, vol in rows:
                 lines.append(f"  {order}. {name}({code}) {format(vol, ',d')}주")
             sections.append("\n".join(lines))
-
-        if not sections:
-            print("  전송할 데이터 없음")
-            return
 
         # 4개 섹션씩 묶어서 전송 (메시지 길이 분산)
         chunk = 4
