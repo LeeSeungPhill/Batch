@@ -110,6 +110,7 @@ g_loss_price = 0
 g_risk_sum = 0
 g_low_price = 0
 g_selected_accounts = []  # 계좌 다중 선택 목록
+_pending_register = {}   # {chat_id: 관심종목 등록 대기 데이터}
 
 # 매수주문 미리보기 → 진행 콜백 공유 상태
 g_buy21_code = ""
@@ -866,6 +867,45 @@ def show_account_selection_keyboard(query, menu_num):
     buttons.append([InlineKeyboardButton("✔ 확인", callback_data=f"acc_{menu_num}_confirm")])
     query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
 
+def _do_interest_register(chat_id, context, pending):
+    try:
+        c_reg = get_conn()
+        with c_reg.cursor() as cur_reg:
+            cur_reg.execute("""
+                INSERT INTO public."interestItem_interest_item"
+                    (acct_no, code, name, through_price, leave_price, resist_price, support_price,
+                     trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                ON CONFLICT (acct_no, code) DO UPDATE SET
+                    name             = EXCLUDED.name,
+                    through_price    = EXCLUDED.through_price,
+                    leave_price      = EXCLUDED.leave_price,
+                    resist_price     = EXCLUDED.resist_price,
+                    support_price    = EXCLUDED.support_price,
+                    trend_high_price = EXCLUDED.trend_high_price,
+                    trend_low_price  = EXCLUDED.trend_low_price,
+                    last_chg_date    = EXCLUDED.last_chg_date
+            """, (pending['acct_reg'], pending['code'], pending['name'],
+                  pending['through_price'], pending['leave_price'],
+                  pending['d20_high'], pending['d20_low'],
+                  pending['y1_high'], pending['y1_low'],
+                  datetime.now().strftime('%Y%m%d'), datetime.now().strftime('%H%M%S'),
+                  datetime.now()))
+        c_reg.commit()
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=(f"✅ [{pending['name']}(<code>{pending['code']}</code>)] 관심종목 등록 완료\n"
+                  f"  1차저항가: {format(pending['through_price'], ',d')}원\n"
+                  f"  1차지지가: {format(pending['leave_price'], ',d')}원\n"
+                  f"  2차저항가(20일고가): {format(pending['d20_high'], ',d')}원\n"
+                  f"  2차지지가(20일저가): {format(pending['d20_low'], ',d')}원\n"
+                  f"  추세상한가(1년고가): {format(pending['y1_high'], ',d')}원\n"
+                  f"  추세이탈가(1년저가): {format(pending['y1_low'], ',d')}원"),
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        context.bot.send_message(chat_id=chat_id, text=f"[관심종목 등록] 오류: {str(e)}")
+
 def callback_get(update, context) :
     data_selected = update.callback_query.data
     query = update.callback_query
@@ -878,7 +918,42 @@ def callback_get(update, context) :
     global g_selected_accounts
 
     print("command : ", command)
-    if command == "취소":
+    if command.startswith("interest_confirm_"):
+        # 현재값으로 등록
+        chat_id = query.message.chat_id
+        pending = _pending_register.pop(chat_id, None)
+        try:
+            query.answer()
+        except Exception:
+            pass
+        if pending is None:
+            context.bot.send_message(chat_id=chat_id, text="등록 정보가 만료됐습니다. 다시 시도해주세요.")
+            return
+        try:
+            query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        _do_interest_register(chat_id, context, pending)
+
+    elif command.startswith("interest_manual_"):
+        # 직접입력 요청
+        chat_id = query.message.chat_id
+        pending = _pending_register.get(chat_id)
+        try:
+            query.answer()
+        except Exception:
+            pass
+        if pending is None:
+            context.bot.send_message(chat_id=chat_id, text="등록 정보가 만료됐습니다. 다시 시도해주세요.")
+            return
+        pending['waiting_input'] = True
+        try:
+            query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        context.bot.send_message(chat_id=chat_id, text="1차저항가(금일고가:0),1차지지가(금일저가:0)을 입력하세요")
+
+    elif command == "취소":
         context.bot.edit_message_text(text="취소하였습니다.",
                                       chat_id=query.message.chat_id,
                                       message_id=query.message.message_id)
@@ -2303,6 +2378,28 @@ def echo(update, context):
     global g_low_price
     global g_selected_accounts
 
+    # 관심종목 가격 직접입력 대기 처리
+    pending = _pending_register.get(user_id)
+    if pending and pending.get('waiting_input'):
+        parts = user_text.strip().replace(' ', '').split(',')
+        if len(parts) == 2 and all(p.isdigit() for p in parts):
+            input_high = int(parts[0])
+            input_low  = int(parts[1])
+            # 0 입력시 금일고가/금일저가(자동조회값) 사용
+            if input_high != 0:
+                pending['through_price'] = input_high
+            if input_low != 0:
+                pending['leave_price'] = input_low
+            del pending['waiting_input']
+            _pending_register.pop(user_id, None)
+            _do_interest_register(user_id, context, pending)
+        else:
+            context.bot.send_message(
+                chat_id=user_id,
+                text="입력 형식이 올바르지 않습니다. 쉼표로 구분된 숫자 두 개를 입력하세요.\n예) 75000,73000  (0 입력시 금일고가/저가 자동적용)"
+            )
+        return
+
     code = ""
     company = ""
     # 주식 현재가
@@ -2589,7 +2686,7 @@ def echo(update, context):
                 text=f"[{g_interest_edit_name}] {g_interest_edit_field} 업데이트 오류: {str(e)}")
         return
 
-    # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 자동 가격 설정
+    # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 가격 조회 → 2단계 확인
     if menuNum == '05':
         initMenuNum()
         try:
@@ -2608,49 +2705,47 @@ def echo(update, context):
                     return
                 ii_new_code = match05.code.values[0]
                 ii_new_name = input_stripped
-            context.bot.send_message(chat_id=user_id,
-                text=f"[{ii_new_name}({ii_new_code})] 가격 조회 중...")
             # 금일 고가/저가
             ap05 = inquire_price(ac05['access_token'], ac05['app_key'], ac05['app_secret'], ii_new_code)
             today_high = int(ap05['stck_hgpr'])
             today_low  = int(ap05['stck_lwpr'])
-            # 20일 최고가/최저가 (일봉 30일 중 최근 20일)
+            # 20일 최고가/최저가 (일봉 중 최근 20일)
             d20_high, d20_low = get_period_high_low(ac05['access_token'], ac05['app_key'], ac05['app_secret'],
                                                      ii_new_code, period="D", count=20)
             # 1년 최고가/최저가 (월봉 12개월)
             y1_high, y1_low = get_period_high_low(ac05['access_token'], ac05['app_key'], ac05['app_secret'],
                                                    ii_new_code, period="M", count=12)
-            now05 = datetime.now()
-            acct05 = str(ac05['acct_no'])
-            c05 = get_conn()
-            with c05.cursor() as cur05:
-                cur05.execute("""
-                    INSERT INTO public."interestItem_interest_item"
-                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                         trend_high_price, trend_low_price, proc_yn, last_chg_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
-                    ON CONFLICT (acct_no, code) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        through_price     = EXCLUDED.through_price,
-                        leave_price       = EXCLUDED.leave_price,
-                        resist_price      = EXCLUDED.resist_price,
-                        support_price     = EXCLUDED.support_price,
-                        trend_high_price  = EXCLUDED.trend_high_price,
-                        trend_low_price   = EXCLUDED.trend_low_price,
-                        last_chg_date     = EXCLUDED.last_chg_date
-                """, (acct05, ii_new_code, ii_new_name,
-                      today_high, today_low, d20_high, d20_low, y1_high, y1_low, now05))
-            c05.commit()
+            d20_high = d20_high if d20_high is not None else 0
+            d20_low  = d20_low  if d20_low  is not None else 0
+            y1_high  = y1_high  if y1_high  is not None else 0
+            y1_low   = y1_low   if y1_low   is not None else 0
+            _pending_register[user_id] = {
+                'code': ii_new_code,
+                'name': ii_new_name,
+                'acct_reg': str(ac05['acct_no']),
+                'through_price': today_high,
+                'leave_price': today_low,
+                'd20_high': d20_high,
+                'd20_low': d20_low,
+                'y1_high': y1_high,
+                'y1_low': y1_low,
+            }
+            markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton("현재값으로 등록", callback_data=f"menu,interest_confirm_{ii_new_code}"),
+                InlineKeyboardButton("직접입력", callback_data=f"menu,interest_manual_{ii_new_code}"),
+            ]])
             context.bot.send_message(
                 chat_id=user_id,
-                text=(f"✅ [{ii_new_name}(<code>{ii_new_code}</code>)] 관심종목 등록 완료\n"
+                text=(f"[{ii_new_name}(<code>{ii_new_code}</code>)] 관심종목 등록\n"
                       f"  1차저항가(금일고가): {format(today_high, ',d')}원\n"
                       f"  1차지지가(금일저가): {format(today_low, ',d')}원\n"
                       f"  2차저항가(20일고가): {format(d20_high, ',d')}원\n"
                       f"  2차지지가(20일저가): {format(d20_low, ',d')}원\n"
                       f"  추세상한가(1년고가): {format(y1_high, ',d')}원\n"
-                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원"),
-                parse_mode='HTML'
+                      f"  추세이탈가(1년저가): {format(y1_low, ',d')}원\n\n"
+                      f"등록하시겠습니까?"),
+                parse_mode='HTML',
+                reply_markup=markup
             )
         except Exception as e:
             context.bot.send_message(chat_id=user_id,
