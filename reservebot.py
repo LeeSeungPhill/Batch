@@ -1922,10 +1922,10 @@ def callback_get(update, context) :
         if menu_num == "71" and _trail71_from_signal:
             _trail71_from_signal = False
             selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
-            stock_prefix = f"[{g_trail71_company}(<code>{g_trail71_code}</code>)] " if g_trail71_company else ""
-            hint = f"{g_trail71_code}, {g_trail71_buy_price}, {g_trail71_loss_price}, {g_trail71_amt_buy_amt}, {g_trail71_item_loss_sum}"
+            stock_prefix = f"{g_trail71_company}(<code>{g_trail71_code}</code>)" if g_trail71_company else ""
+            hint = f"{g_trail71_code},{g_trail71_buy_price},{g_trail71_loss_price},{g_trail71_amt_buy_amt},{g_trail71_amt_buy_amt-g_trail71_item_loss_sum}"
             query.edit_message_text(
-                text=f"[선택계좌: {selected_str}]\n{stock_prefix}매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.\n참고: {hint}",
+                text=f"[선택계좌: {selected_str}]\n{stock_prefix}, 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.\n참고: {hint}",
                 parse_mode='HTML'
             )
             return
