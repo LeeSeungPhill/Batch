@@ -953,6 +953,54 @@ def callback_get(update, context) :
             pass
         context.bot.send_message(chat_id=chat_id, text="1차저항가(금일고가:0),1차지지가(금일저가:0)을 입력하세요")
 
+    elif command.startswith("interest_trail_buy_"):
+        # 돌파 신호 텔레그램 버튼 → 추적매수 미리보기(계좌선택 후 손절금액/매수금액 선택)
+        tail = command[len("interest_trail_buy_"):]
+        parts_tb = tail.split("_")
+        if len(parts_tb) != 5:
+            try: query.answer("파라미터 오류", show_alert=True)
+            except Exception: pass
+            return
+        tb_code    = parts_tb[0]
+        tb_price   = int(parts_tb[1])
+        tb_loss    = int(parts_tb[2])
+        tb_buy_amt = int(parts_tb[3])
+        tb_item_loss = int(parts_tb[4])
+        match_tb = stock_code[stock_code.code == tb_code]
+        tb_company = match_tb.company.values[0].strip() if len(match_tb) > 0 else tb_code
+        try: query.answer()
+        except Exception: pass
+        if tb_price <= tb_loss:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[{tb_company}] 매수가({format(tb_price,',d')})가 이탈가({format(tb_loss,',d')}) 이하 — 추적매수 불가"
+            )
+            return
+        loss_buy_qty_tb = int(round(tb_item_loss / (tb_price - tb_loss)))
+        loss_buy_amt_tb = tb_price * loss_buy_qty_tb
+        amt_buy_qty_tb  = int(round(tb_buy_amt / tb_price)) if tb_price > 0 else 0
+        amt_buy_amt_tb  = tb_price * amt_buy_qty_tb
+        global g_trail71_code, g_trail71_company, g_trail71_buy_price, g_trail71_loss_price
+        global g_trail71_item_loss_sum, g_trail71_buy_qty, g_trail71_buy_amt
+        global g_trail71_year_day, g_trail71_hour_minute
+        global g_trail71_loss_buy_qty, g_trail71_loss_buy_amt
+        global g_trail71_amt_buy_qty, g_trail71_amt_buy_amt
+        g_trail71_code          = tb_code
+        g_trail71_company       = tb_company
+        g_trail71_buy_price     = tb_price
+        g_trail71_loss_price    = tb_loss
+        g_trail71_item_loss_sum = tb_item_loss
+        g_trail71_buy_qty       = 0
+        g_trail71_buy_amt       = 0
+        g_trail71_loss_buy_qty  = loss_buy_qty_tb
+        g_trail71_loss_buy_amt  = loss_buy_amt_tb
+        g_trail71_amt_buy_qty   = amt_buy_qty_tb
+        g_trail71_amt_buy_amt   = amt_buy_amt_tb
+        g_trail71_year_day      = datetime.now().strftime("%Y%m%d")
+        g_trail71_hour_minute   = datetime.now().strftime('%H%M%S')
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "tb71")
+
     elif command == "취소":
         context.bot.edit_message_text(text="취소하였습니다.",
                                       chat_id=query.message.chat_id,
@@ -1863,6 +1911,26 @@ def callback_get(update, context) :
         else:
             g_selected_accounts.append(account_name)
         show_account_selection_keyboard(query, menu_num)
+
+    elif command == "acc_tb71_confirm":
+        # 추적매수 신호 버튼 → 계좌 확정 후 미리보기 직접 표시 (텍스트 입력 단계 생략)
+        selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "현재계좌"
+        amt_item_loss_tb = (g_trail71_buy_price - g_trail71_loss_price) * g_trail71_amt_buy_qty
+        loss_rate_tb = round((100 - (g_trail71_loss_price / g_trail71_buy_price) * 100) * -1, 2) if g_trail71_buy_price > 0 else 0
+        preview_text = (
+            "[선택계좌: " + selected_str + "]\n"
+            "[" + g_trail71_company + "(<code>" + g_trail71_code + "</code>)]\n"
+            "매수가: " + format(g_trail71_buy_price, ',d') + "원 | 이탈가: " + format(g_trail71_loss_price, ',d') + "원 | 손절율: " + str(loss_rate_tb) + "%\n"
+            "─────────────────\n"
+            "  손절금액 기준\n"
+            "  매수금액: " + format(g_trail71_loss_buy_amt, ',d') + "원 | 매수량: " + format(g_trail71_loss_buy_qty, ',d') + "주 | 손실금액: " + format(g_trail71_item_loss_sum, ',d') + "원\n"
+            "─────────────────\n"
+            "  매수금액 기준\n"
+            "  매수금액: " + format(g_trail71_amt_buy_amt, ',d') + "원 | 매수량: " + format(g_trail71_amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss_tb, ',d') + "원"
+        )
+        button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
+        show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
+        query.edit_message_text(text=preview_text, reply_markup=show_markup, parse_mode='HTML')
 
     elif command.startswith("acc_") and command.endswith("_confirm"):
         # 계좌 선택 확인: callback_data = "acc_{menu_num}_confirm"
