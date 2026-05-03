@@ -769,7 +769,6 @@ def process_account(nick):
                                         if n_buy_amount > 0:
                                             telegram_text = (f"[시장하락]{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(int(a['stck_prpr']), ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매수량 : {format(int(round(n_buy_amount)), ',d')}주, 매수금액 : {format(int(n_buy_sum), ',d')}원, 손절가 : {format(int(loss_price), ',d')}, 손절금액 : {format(int(item_loss_sum), ',d')}원")
                                         else:
-                                            # telegram_text = "[시장하락-거래증가]" + i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                             telegram_text = "[시장하락]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                         # 텔레그램 메시지 전송 (추적정보 존재시 — 매수주문등록 버튼 포함)
                                         try:
@@ -827,7 +826,11 @@ def process_account(nick):
                                     telegram_text = "[시장상승]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                 # 텔레그램 메시지 전송 (추적정보 미존재 신규 등록)
                                 try:
-                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                                    send_markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+                                        "매수주문등록",
+                                        callback_data=f"menu,interest_trail_buy_{i[0]}_{int(a['stck_prpr'])}_{int(i[3])}_{int(n_buy_sum)}_{int(item_loss_sum or 0)}"
+                                    )]]) if n_buy_amount > 0 else None
+                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=send_markup)
                                 except Exception as te:
                                     print(f"텔레그램 전송 오류: {te}")
 
@@ -856,7 +859,11 @@ def process_account(nick):
                                     telegram_text = "[시장하락]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                                 # 텔레그램 메시지 전송 (추적정보 미존재 신규 등록)
                                 try:
-                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                                    send_markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+                                        "매수주문등록",
+                                        callback_data=f"menu,interest_trail_buy_{i[0]}_{int(a['stck_prpr'])}_{int(i[3])}_{int(n_buy_sum)}_{int(item_loss_sum or 0)}"
+                                    )]]) if n_buy_amount > 0 else None
+                                    bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=send_markup)
                                 except Exception as te:
                                     print(f"텔레그램 전송 오류: {te}")
 
