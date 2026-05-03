@@ -1915,30 +1915,19 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, menu_num)
 
     elif command.startswith("acc_") and command.endswith("_confirm"):
-        global _trail71_from_signal
         # 계좌 선택 확인: callback_data = "acc_{menu_num}_confirm"
         menu_num = command.split("_")[1]
         menuNum = menu_num
-        # 신호 버튼 경유 시 입력 단계 생략하고 미리보기 직접 표시
+        # 신호 버튼 경유 시 종목 컨텍스트와 신호값 힌트를 포함한 텍스트 입력 프롬프트 표시
         if menu_num == "71" and _trail71_from_signal:
             _trail71_from_signal = False
-            selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "현재계좌"
-            amt_item_loss_tb = (g_trail71_buy_price - g_trail71_loss_price) * g_trail71_amt_buy_qty
-            loss_rate_tb = round((100 - (g_trail71_loss_price / g_trail71_buy_price) * 100) * -1, 2) if g_trail71_buy_price > 0 else 0
-            preview_text = (
-                "[선택계좌: " + selected_str + "]\n"
-                "[" + g_trail71_company + "(<code>" + g_trail71_code + "</code>)]\n"
-                "매수가: " + format(g_trail71_buy_price, ',d') + "원 | 이탈가: " + format(g_trail71_loss_price, ',d') + "원 | 손절율: " + str(loss_rate_tb) + "%\n"
-                "─────────────────\n"
-                "  손절금액 기준\n"
-                "  매수금액: " + format(g_trail71_loss_buy_amt, ',d') + "원 | 매수량: " + format(g_trail71_loss_buy_qty, ',d') + "주 | 손실금액: " + format(g_trail71_item_loss_sum, ',d') + "원\n"
-                "─────────────────\n"
-                "  매수금액 기준\n"
-                "  매수금액: " + format(g_trail71_amt_buy_amt, ',d') + "원 | 매수량: " + format(g_trail71_amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss_tb, ',d') + "원"
+            selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
+            stock_prefix = f"[{g_trail71_company}(<code>{g_trail71_code}</code>)] " if g_trail71_company else ""
+            hint = f"{g_trail71_code}, {g_trail71_buy_price}, {g_trail71_loss_price}, {g_trail71_amt_buy_amt}, {g_trail71_item_loss_sum}"
+            query.edit_message_text(
+                text=f"[선택계좌: {selected_str}]\n{stock_prefix}매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.\n참고: {hint}",
+                parse_mode='HTML'
             )
-            button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
-            show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
-            query.edit_message_text(text=preview_text, reply_markup=show_markup, parse_mode='HTML')
             return
         prompt_texts = {
             "01": "매도가(현재가:0), 매도율(%)을 입력하세요.",
