@@ -614,7 +614,7 @@ def process_account(nick):
                   FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) B,
                  (SELECT acct_no, risk_rate, item_number FROM "stockMarketMng_stock_market_mng"
                   WHERE acct_no = %s AND aply_end_dt = '99991231') C
-            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1
+            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1 AND A.interest_day = TO_CHAR(now(), 'YYYYMMDD')
         """, (str(acct_no), str(acct_no), str(acct_no)))
         result_three = cur03.fetchall()
         cur03.close()
