@@ -1205,9 +1205,9 @@ def callback_get(update, context) :
                     SELECT name, code, through_price, leave_price, resist_price, support_price,
                            trend_high_price, trend_low_price
                     FROM public."interestItem_interest_item"
-                    WHERE acct_no = %s AND proc_yn = 'Y'
+                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
                     ORDER BY name
-                """, (str(acct_no),))
+                """, (str(acct_no), post_business_day_char(datetime.now().strftime("%Y-%m-%d"))))
                 rows = cur_ii.fetchall()
             if not rows:
                 query.edit_message_text(text="[관심종목 조회] 조회된 종목이 없습니다.")
@@ -1252,9 +1252,9 @@ def callback_get(update, context) :
                 cur_ii.execute("""
                     SELECT name, code
                     FROM public."interestItem_interest_item"
-                    WHERE acct_no = %s AND proc_yn = 'Y'
+                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
                     ORDER BY name
-                """, (str(acct_no),))
+                """, (str(acct_no), post_business_day_char(datetime.now().strftime("%Y-%m-%d"))))
                 rows = cur_ii.fetchall()
             ii_buttons = [
                 InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
@@ -1274,9 +1274,11 @@ def callback_get(update, context) :
         ii_code = command[len("interest_edit_"):]
         try:
             with get_conn().cursor() as cur_ie:
-                cur_ie.execute(
-                    'SELECT name FROM public."interestItem_interest_item" WHERE acct_no = %s AND code = %s AND proc_yn = \'Y\'',
-                    (str(account()['acct_no']), ii_code)
+                cur_ie.execute("""
+                    SELECT name 
+                    FROM public."interestItem_interest_item" 
+                    WHERE acct_no = %s AND code = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
+                """, (str(account()['acct_no']), ii_code, post_business_day_char(datetime.now().strftime("%Y-%m-%d")))
                 )
                 row_ie = cur_ie.fetchone()
             ii_name = row_ie[0] if row_ie else ii_code
@@ -2685,8 +2687,8 @@ def echo(update, context):
                 cur_r.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" '
-                    "WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
-                    (acct04, g_interest_edit_code)
+                    "WHERE acct_no = %s AND code = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4",
+                    (acct04, g_interest_edit_code, post_business_day_char(datetime.now().strftime("%Y-%m-%d")))
                 )
                 cur_row = cur_r.fetchone()
             if cur_row:
@@ -3697,7 +3699,20 @@ def echo(update, context):
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
-                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')         
+                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
+                    
+                    try:
+                        c71 = get_conn()
+                        with c71.cursor() as cur71:
+                            cur71.execute(
+                                """UPDATE public."interestItem_interest_item"
+                                   SET proc_yn = 'N'
+                                   WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                                (str(acct_no), code)
+                            )
+                        c71.commit()
+                    except Exception as e71:
+                        print(f"[menuNum=71] interestItem proc_yn 업데이트 오류: {e71}")
 
         elif menuNum == '72':
             initMenuNum()
