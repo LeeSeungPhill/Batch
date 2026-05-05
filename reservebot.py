@@ -1205,9 +1205,9 @@ def callback_get(update, context) :
                     SELECT name, code, through_price, leave_price, resist_price, support_price,
                            trend_high_price, trend_low_price
                     FROM public."interestItem_interest_item"
-                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
+                    WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                     ORDER BY name
-                """, (str(acct_no), post_business_day_char(datetime.now().strftime("%Y-%m-%d"))))
+                """)
                 rows = cur_ii.fetchall()
             if not rows:
                 query.edit_message_text(text="[관심종목 조회] 조회된 종목이 없습니다.")
@@ -1252,9 +1252,9 @@ def callback_get(update, context) :
                 cur_ii.execute("""
                     SELECT name, code
                     FROM public."interestItem_interest_item"
-                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
+                    WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                     ORDER BY name
-                """, (str(acct_no), post_business_day_char(datetime.now().strftime("%Y-%m-%d"))))
+                """)
                 rows = cur_ii.fetchall()
             ii_buttons = [
                 InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
@@ -1277,8 +1277,8 @@ def callback_get(update, context) :
                 cur_ie.execute("""
                     SELECT name 
                     FROM public."interestItem_interest_item" 
-                    WHERE acct_no = %s AND code = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4
-                """, (str(account()['acct_no']), ii_code, post_business_day_char(datetime.now().strftime("%Y-%m-%d")))
+                    WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                """, (ii_code,)
                 )
                 row_ie = cur_ie.fetchone()
             ii_name = row_ie[0] if row_ie else ii_code
@@ -1292,6 +1292,7 @@ def callback_get(update, context) :
                 InlineKeyboardButton("2차지지가",  callback_data="menu,interest_edit_field_2차지지가"),
                 InlineKeyboardButton("추세상한가", callback_data="menu,interest_edit_field_추세상한가"),
                 InlineKeyboardButton("추세이탈가", callback_data="menu,interest_edit_field_추세이탈가"),
+                InlineKeyboardButton("관심제외",   callback_data="menu,interest_edit_field_관심제외"),
                 InlineKeyboardButton("취소",       callback_data="menu,취소"),
             ]
             rows_f = [field_btns[i:i+2] for i in range(0, len(field_btns), 2)]
@@ -1305,10 +1306,28 @@ def callback_get(update, context) :
     elif command.startswith("interest_edit_field_"):
         global g_interest_edit_field
         g_interest_edit_field = command[len("interest_edit_field_"):]
-        menuNum = '04'
-        query.edit_message_text(
-            text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field} 값을 입력하세요. (숫자만 입력)"
-        )
+        if g_interest_edit_field == "관심제외":
+            try:
+                with get_conn().cursor() as cur_exc:
+                    cur_exc.execute(
+                        """UPDATE public."interestItem_interest_item"
+                           SET proc_yn = 'N'
+                           WHERE code = %s AND proc_yn = 'Y'""",
+                        (g_interest_edit_code,)
+                    )
+                get_conn().commit()
+                query.edit_message_text(
+                    text=f"[{g_interest_edit_name}({g_interest_edit_code})] 관심종목에서 제외되었습니다."
+                )
+            except Exception as e_exc:
+                query.edit_message_text(
+                    text=f"[관심제외] 오류: {str(e_exc)}"
+                )
+        else:
+            menuNum = '04'
+            query.edit_message_text(
+                text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field} 값을 입력하세요. (숫자만 입력)"
+            )
 
     elif command == "interest_new":
         menuNum = '05'
@@ -2687,8 +2706,8 @@ def echo(update, context):
                 cur_r.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" '
-                    "WHERE acct_no = %s AND code = %s AND proc_yn = 'Y' AND interest_day = %s AND length(code) > 4",
-                    (acct04, g_interest_edit_code, post_business_day_char(datetime.now().strftime("%Y-%m-%d")))
+                    "WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4",
+                    (g_interest_edit_code,)
                 )
                 cur_row = cur_r.fetchone()
             if cur_row:
@@ -2726,11 +2745,11 @@ def echo(update, context):
                     changed_labels.append("추세이탈가")
 
             set_clause = ", ".join(f"{k} = %s" for k in updates)
-            values = list(updates.values()) + [acct04, g_interest_edit_code]
+            values = list(updates.values()) + [g_interest_edit_code]
             with c04.cursor() as cur04:
                 cur04.execute(
-                    f'UPDATE public."interestItem_interest_item" SET {set_clause} '
-                    f"WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'",
+                    f'UPDATE public."interestItem_interest_item" SET last_chg_date = now(), {set_clause} '
+                    f"WHERE code = %s AND proc_yn = 'Y'",
                     values
                 )
                 updated04 = cur04.rowcount
@@ -3706,9 +3725,9 @@ def echo(update, context):
                         with c71.cursor() as cur71:
                             cur71.execute(
                                 """UPDATE public."interestItem_interest_item"
-                                   SET proc_yn = 'N'
-                                   WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
-                                (str(acct_no), code)
+                                   SET proc_yn = 'N', last_chg_date = now()
+                                   WHERE code = %s AND proc_yn = 'Y'""",
+                                (code)
                             )
                         c71.commit()
                     except Exception as e71:
