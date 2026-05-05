@@ -115,6 +115,38 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
+def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
+    """전일 종가(현재가 근사)와 전일 저가를 반환. 실패 시 (0, 0)."""
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010400"
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": code,
+        "FID_PERIOD_DIV_CODE": "D",
+        "FID_ORG_ADJ_PRC": "0"
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
+    URL = f"{URL_BASE}/{PATH}"
+    try:
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if ar.isOK():
+            output = ar.getBody().output
+            if output:
+                for row in output:
+                    if row.get('stck_bsop_date', '') == prev_date:
+                        return int(row.get('stck_clpr') or 0), int(row.get('stck_lwpr') or 0)
+                first = output[0]
+                return int(first.get('stck_clpr') or 0), int(first.get('stck_lwpr') or 0)
+    except Exception as e:
+        print(f"[get_prev_day_price_info] {code} 오류: {e}")
+    return 0, 0
+
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
 for nick in nickname_list:
@@ -323,6 +355,11 @@ for nick in nickname_list:
                 for row in trading_trail_create_list:
                     acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt = row
                     try:
+                        current_price, prev_day_low = get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date)
+                        time.sleep(0.2)
+                        if current_price > 0 and stop_price < current_price and prev_day_low > 0:
+                            print(f"[{nick}] {code} stop_price({stop_price}) < 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
+                            stop_price = prev_day_low
                         cur201.execute(insert_query1, (
                             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
                         ))
