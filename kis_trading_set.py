@@ -135,6 +135,21 @@ for nick in nickname_list:
         trail_day = post_business_day_char(business_day)
         prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
 
+        # 관심종목 interest_day 갱신 (전 영업일 이후 proc_yn=Y 대상 → 오늘 날짜로 갱신)
+        try:
+            cur_iday = conn.cursor()
+            cur_iday.execute("""
+                UPDATE public."interestItem_interest_item"
+                SET interest_day = %s
+                WHERE acct_no = %s AND proc_yn = 'Y' AND length(code) > 4
+                  AND interest_day >= prev_business_day_char(CURRENT_DATE)
+            """, (today, str(acct_no)))
+            conn.commit()
+            print(f"[{nick}] 관심종목 interest_day 갱신: {cur_iday.rowcount}건")
+            cur_iday.close()
+        except Exception as e_iday:
+            print(f"[{nick}] 관심종목 interest_day 갱신 오류: {e_iday}")
+
         # 계좌잔고 조회
         c = stock_balance(access_token, app_key, app_secret, acct_no, "")
         
