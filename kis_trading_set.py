@@ -357,8 +357,8 @@ for nick in nickname_list:
                     try:
                         current_price, prev_day_low = get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date)
                         time.sleep(0.2)
-                        if current_price > 0 and stop_price < current_price and prev_day_low > 0:
-                            print(f"[{nick}] {code} stop_price({stop_price}) < 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
+                        if current_price > 0 and stop_price > current_price and prev_day_low > 0:
+                            print(f"[{nick}] {code} stop_price({stop_price}) > 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
                             stop_price = prev_day_low
                         cur201.execute(insert_query1, (
                             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
