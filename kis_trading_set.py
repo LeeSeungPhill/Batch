@@ -324,6 +324,7 @@ for nick in nickname_list:
             cur200.close()
 
             inserted_count = 0
+            replace_candidates = []
             if not trading_trail_create_list or len(trading_trail_create_list) < 1:
                 print(f"[{nick}] No trading simulation data found.")
             else:
@@ -352,6 +353,7 @@ for nick in nickname_list:
                 """
                 
                 cur201 = conn.cursor()
+                inserted_rows_info = []
                 for row in trading_trail_create_list:
                     acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, crt_dt, mod_dt = row
                     try:
@@ -363,6 +365,15 @@ for nick in nickname_list:
                         cur201.execute(insert_query1, (
                             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
                         ))
+                        if cur201.rowcount > 0:
+                            inserted_rows_info.append({
+                                'code': code, 'name': name, 'trail_tp': trail_tp,
+                                'basic_price': basic_price or 0,
+                                'stop_price': stop_price or 0,
+                                'target_price': target_price or 0,
+                                'exit_price': exit_price or 0,
+                                'current_price': current_price,
+                            })
                         inserted_count += cur201.rowcount
                     except Exception as e:
                         print(f"[{nick}] Error trading_trail inserting row {row}: {e}")
@@ -370,14 +381,77 @@ for nick in nickname_list:
                 conn.commit()
                 cur201.close()
 
+                # 종목 교체 고려 대상 분석
+                for info in inserted_rows_info:
+                    i_code      = info['code']
+                    i_name      = info['name']
+                    i_trail_tp  = info['trail_tp']
+                    i_basic     = info['basic_price']
+                    i_stop      = info['stop_price']
+                    i_target    = info['target_price']
+                    i_exit      = info['exit_price']
+                    i_cur       = info['current_price']
+
+                    if i_trail_tp == '1':
+                        try:
+                            cur_oc = conn.cursor()
+                            cur_oc.execute("""
+                                SELECT order_dt FROM public."stockOrderComplete_stock_order_complete"
+                                WHERE code = %s AND acct_no = %s
+                                  AND order_type LIKE '%매수%'
+                                  AND total_complete_qty::int > 0
+                                  AND order_dt >= COALESCE(
+                                      (SELECT MAX(order_dt)
+                                       FROM public."stockOrderComplete_stock_order_complete"
+                                       WHERE code = %s AND acct_no = %s
+                                         AND order_type LIKE '%매도%'
+                                         AND total_complete_qty::int > 0),
+                                      '00000000'
+                                  )
+                                ORDER BY order_dt DESC LIMIT 1
+                            """, (i_code, str(acct_no), i_code, str(acct_no)))
+                            oc_row = cur_oc.fetchone()
+                            cur_oc.close()
+                        except Exception as e_oc:
+                            print(f"[{nick}] {i_code} 매수주문 조회 오류: {e_oc}")
+                            oc_row = None
+
+                        reason = None
+                        if oc_row:
+                            try:
+                                order_date = datetime.strptime(str(oc_row[0])[:8], '%Y%m%d')
+                                days_since_buy = (datetime.now() - order_date).days
+                                if days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
+                                    reason = f"3일이상 목표가({i_target:,}) 미달성(매수후 {days_since_buy}일, 현재가:{i_cur:,})"
+                                elif i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
+                                    drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
+                                    reason = f"이탈미발동 기준가 {drop_pct}%하락(기준가:{i_basic:,}→현재가:{i_cur:,})"
+                            except Exception as e_dt:
+                                print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
+
+                        if reason:
+                            replace_candidates.append(f"  - {i_name}({i_code}): {reason}")
+
+                    elif i_trail_tp == 'L':
+                        reason = None
+                        if i_cur > 0:
+                            if i_basic > 0 and i_cur < i_basic:
+                                reason = f"기준가({i_basic:,}) 하회(현재가:{i_cur:,})"
+                            elif i_exit > 0 and i_cur < i_exit:
+                                reason = f"청산가({i_exit:,}) 하회(현재가:{i_cur:,})"
+                        if reason:
+                            replace_candidates.append(f"  - {i_name}({i_code})[장기]: {reason}")
+
             skipped_count = len(trading_trail_create_list) - inserted_count
-            
+
             message = (
                 f"[{today}-{nick}] 추적준비 등록 \n"
                 f"(전체 : {len(trading_trail_create_list)}건, "
                 f"생성 : {inserted_count}건, "
                 f"미생성 : {skipped_count}건)"
             )
+            if replace_candidates:
+                message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(replace_candidates)
             print(message)
             bot.send_message(
                 chat_id=chat_id,
