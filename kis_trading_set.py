@@ -398,13 +398,13 @@ for nick in nickname_list:
                             cur_oc.execute("""
                                 SELECT order_dt FROM public."stockOrderComplete_stock_order_complete"
                                 WHERE name = %s AND acct_no = %s
-                                  AND order_type LIKE '%매수%'
+                                  AND order_type LIKE '%%매수%%'
                                   AND total_complete_qty::int > 0
                                   AND order_dt >= COALESCE(
                                       (SELECT MAX(order_dt)
                                        FROM public."stockOrderComplete_stock_order_complete"
                                        WHERE name = %s AND acct_no = %s
-                                         AND order_type LIKE '%매도%'
+                                         AND order_type LIKE '%%매도%%'
                                          AND total_complete_qty::int > 0),
                                       '00000000'
                                   )
