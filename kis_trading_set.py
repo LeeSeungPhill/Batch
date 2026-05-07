@@ -368,11 +368,11 @@ for nick in nickname_list:
                         if cur201.rowcount > 0:
                             inserted_rows_info.append({
                                 'code': code, 'name': name, 'trail_tp': trail_tp,
-                                'basic_price': basic_price or 0,
-                                'stop_price': stop_price or 0,
-                                'target_price': target_price or 0,
-                                'exit_price': exit_price or 0,
-                                'current_price': current_price,
+                                'basic_price': float(basic_price or 0),
+                                'stop_price': float(stop_price or 0),
+                                'target_price': float(target_price or 0),
+                                'exit_price': float(exit_price or 0),
+                                'current_price': float(current_price),
                             })
                         inserted_count += cur201.rowcount
                     except Exception as e:
@@ -398,13 +398,13 @@ for nick in nickname_list:
                             cur_oc.execute("""
                                 SELECT order_dt FROM public."stockOrderComplete_stock_order_complete"
                                 WHERE name = %s AND acct_no = %s
-                                  AND order_type LIKE '%매수%'
+                                  AND order_type LIKE '%%매수%%'
                                   AND total_complete_qty::int > 0
                                   AND order_dt >= COALESCE(
                                       (SELECT MAX(order_dt)
                                        FROM public."stockOrderComplete_stock_order_complete"
                                        WHERE name = %s AND acct_no = %s
-                                         AND order_type LIKE '%매도%'
+                                         AND order_type LIKE '%%매도%%'
                                          AND total_complete_qty::int > 0),
                                       '00000000'
                                   )
@@ -422,10 +422,10 @@ for nick in nickname_list:
                                 order_date = datetime.strptime(str(oc_row[0])[:8], '%Y%m%d')
                                 days_since_buy = (datetime.now() - order_date).days
                                 if days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
-                                    reason = f"{days_since_buy}일전 매수 목표가:{i_target:,}원 미달성→현재가:{i_cur:,}원"
+                                    reason = f"{days_since_buy}일전 매수 목표가:{int(i_target):,}원 미달성→현재가:{int(i_cur):,}원"
                                 elif i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                     drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
-                                    reason = f"기준가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{i_cur:,}원"
+                                    reason = f"기준가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
                             except Exception as e_dt:
                                 print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
 
@@ -436,9 +436,9 @@ for nick in nickname_list:
                         reason = None
                         if i_cur > 0:
                             if i_basic > 0 and i_cur < i_basic:
-                                reason = f"기준가({int(i_basic):,}원) 하회(현재가:{i_cur:,}원)"
+                                reason = f"기준가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
                             elif i_exit > 0 and i_cur < i_exit:
-                                reason = f"청산가({i_exit:,}원) 하회(현재가:{i_cur:,}원)"
+                                reason = f"청산가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
                         if reason:
                             replace_candidates.append(f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}")
 
