@@ -2390,20 +2390,21 @@ def callback_get(update, context) :
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
         parts = data_selected.split(':')
-        if len(parts) == 6:
+        if len(parts) == 7:
             global g_tp_pending
             g_tp_pending[query.message.chat_id] = {
                 'acct_no':   parts[1],
-                'code':      parts[2],
-                'trail_day': parts[3],
-                'trail_dtm': parts[4],
-                'trail_tp':  parts[5],
+                'name':      parts[2],
+                'code':      parts[3],
+                'trail_day': parts[4],
+                'trail_dtm': parts[5],
+                'trail_tp':  parts[6],
             }
             menuNum = 'tp'
             # 버튼 메시지는 그대로 유지 — 새 메시지로 입력 요청
             context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"[{parts[2]}] trail_plan 값을 입력하세요 (1~100, 취소: 0):"
+                text=f"[{parts[2]}] 매도비율을 입력하세요 (1~100, 취소: 0):"
             )
 
 get_handler = CommandHandler('reserve', get_command)
@@ -2888,14 +2889,14 @@ def echo(update, context):
             c_tp.commit()
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{item['code']}] trail_plan={val} 저장 완료 ({updated}건)"
+                text=f"[{item['name']}] 매도비율 : {val}% 저장({updated}건)"
             )
         except Exception as e_tp:
             try:
                 get_conn().rollback()
             except Exception:
                 pass
-            context.bot.send_message(chat_id=user_id, text=f"trail_plan 업데이트 오류: {str(e_tp)}")
+            context.bot.send_message(chat_id=user_id, text=f"매도비율 업데이트 오류: {str(e_tp)}")
         return
 
     # 입력메시지가 6자리 이상인 경우,

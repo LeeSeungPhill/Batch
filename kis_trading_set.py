@@ -487,13 +487,13 @@ for nick in nickname_list:
                 tp_buttons = [
                     [InlineKeyboardButton(
                         f"{c['name']}({c['code']})",
-                        callback_data=f"tp:{c['acct_no']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
+                        callback_data=f"tp:{c['acct_no']}:{c['name']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
                     )]
                     for c in replace_candidates
                 ]
                 bot.send_message(
                     chat_id=chat_id,
-                    text="[종목 교체 고려 대상 - trail_plan 설정]\n종목을 선택하세요:",
+                    text="[종목 교체 고려 대상 매도비율 설정] 종목을 선택하세요:",
                     reply_markup=InlineKeyboardMarkup(tp_buttons)
                 )
 
