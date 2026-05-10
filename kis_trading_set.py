@@ -5,8 +5,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 import kis_api_resp as resp
 from psycopg2.extras import execute_values
-from telegram import Bot
-from telegram.ext import Updater
+import threading
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CallbackQueryHandler, MessageHandler, Filters
 import traceback
 import time
 
@@ -150,6 +151,7 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
 all_replace_candidates = []
+g_interactive_bot_info = None   # trail_plan 설정에 사용할 봇 (첫 번째 후보 발생 nick)
 
 for nick in nickname_list:
     try:
@@ -476,6 +478,8 @@ for nick in nickname_list:
             if replace_candidates:
                 message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
                 all_replace_candidates.extend(replace_candidates)
+                if g_interactive_bot_info is None:
+                    g_interactive_bot_info = {'token': token, 'chat_id': chat_id}
             print(message)
             bot.send_message(
                 chat_id=chat_id,
@@ -501,52 +505,109 @@ for nick in nickname_list:
         except Exception as te:
             print(f"[{nick}] Telegram error send failed: {te}")
 
-# 종목 교체 고려 대상 trail_plan 설정 메뉴
-if all_replace_candidates:
-    print("\n" + "="*60)
-    print("[종목 교체 고려 대상 - trail_plan 설정]")
-    print("="*60)
-    for idx, c in enumerate(all_replace_candidates, 1):
-        print(f"  {idx}. {c['display_plain']}")
-    print("="*60)
+# 종목 교체 고려 대상 trail_plan 설정 - 텔레그램 인라인 버튼 메뉴
+_g_pending = {}          # {chat_id: candidate dict}
+_g_stop    = threading.Event()
 
-    while True:
-        sel = input("번호 선택 (취소: 0 또는 Enter): ").strip()
-        if sel == '' or sel == '0':
-            print("취소되었습니다.")
-            break
-        if not sel.isdigit() or not (1 <= int(sel) <= len(all_replace_candidates)):
-            print(f"  1~{len(all_replace_candidates)} 사이의 번호를 입력하세요.")
-            continue
+def _build_menu(buttons, n_cols):
+    return [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
 
-        item = all_replace_candidates[int(sel) - 1]
-        print(f"  선택: [{item['nick']}] {item['name']}({item['code']})")
+def _cb_trail_plan(update, _context):
+    query = update.callback_query
+    query.answer()
+    data     = query.data
+    chat_id  = query.message.chat_id
 
-        val = input("  trail_plan 값 입력 (1-100, 취소: 0 또는 Enter): ").strip()
-        if val == '' or val == '0':
-            print("취소되었습니다.")
-            break
-        if not val.isdigit() or not (1 <= int(val) <= 100):
-            print("  1~100 사이의 정수를 입력하세요.")
-            continue
+    if data == 'tp_cancel':
+        query.edit_message_text("취소하였습니다.")
+        _g_stop.set()
+        return
 
-        try:
-            cur_upd = conn.cursor()
-            cur_upd.execute("""
-                UPDATE trading_trail
-                SET trail_plan = %s, mod_dt = now()
-                WHERE acct_no = %s AND code = %s
-                  AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
-            """, (str(int(val)), item['acct_no'], item['code'],
-                  item['trail_day'], item['trail_dtm'], item['trail_tp']))
-            conn.commit()
-            updated = cur_upd.rowcount
-            cur_upd.close()
-            print(f"  → [{item['nick']}] {item['name']} trail_plan={val} 저장 완료 ({updated}건)")
-        except Exception as e_upd:
-            conn.rollback()
-            print(f"  → UPDATE 오류: {e_upd}")
-        break
+    if data.startswith('tp_select_'):
+        idx  = int(data[len('tp_select_'):])
+        item = all_replace_candidates[idx]
+        _g_pending[chat_id] = item
+        query.edit_message_text(
+            text=(
+                f"[{item['nick']}] {item['name']}({item['code']})\n"
+                "trail_plan 값을 입력하세요 (1~100, 취소: 0):"
+            )
+        )
+
+def _echo_trail_plan(update, context):
+    chat_id = update.effective_chat.id
+    text    = update.message.text.strip()
+
+    item = _g_pending.get(chat_id)
+    if not item:
+        return
+
+    if text == '0':
+        _g_pending.pop(chat_id, None)
+        context.bot.send_message(chat_id=chat_id, text="취소하였습니다.")
+        _g_stop.set()
+        return
+
+    if not text.isdigit() or not (1 <= int(text) <= 100):
+        context.bot.send_message(
+            chat_id=chat_id,
+            text="1~100 사이의 정수를 입력하세요. (취소: 0)"
+        )
+        return
+
+    _g_pending.pop(chat_id)
+    val = str(int(text))
+    try:
+        _conn = db.connect(conn_string)
+        cur_upd = _conn.cursor()
+        cur_upd.execute("""
+            UPDATE trading_trail
+            SET trail_plan = %s, mod_dt = now()
+            WHERE acct_no = %s AND code = %s
+              AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
+        """, (val, item['acct_no'], item['code'],
+              item['trail_day'], item['trail_dtm'], item['trail_tp']))
+        _conn.commit()
+        updated = cur_upd.rowcount
+        cur_upd.close()
+        _conn.close()
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=f"[{item['nick']}] {item['name']} trail_plan={val} 저장 완료 ({updated}건)"
+        )
+    except Exception as e_upd:
+        context.bot.send_message(chat_id=chat_id, text=f"UPDATE 오류: {e_upd}")
+
+    _g_stop.set()
+
+if all_replace_candidates and g_interactive_bot_info:
+    i_token   = g_interactive_bot_info['token']
+    i_chat_id = g_interactive_bot_info['chat_id']
+
+    i_updater = Updater(token=i_token, use_context=True)
+    i_updater.dispatcher.add_handler(CallbackQueryHandler(_cb_trail_plan))
+    i_updater.dispatcher.add_handler(
+        MessageHandler(Filters.text & ~Filters.command, _echo_trail_plan)
+    )
+
+    buttons = [
+        InlineKeyboardButton(
+            f"[{c['nick']}] {c['name']}({c['code']})",
+            callback_data=f"tp_select_{idx}"
+        )
+        for idx, c in enumerate(all_replace_candidates)
+    ]
+    buttons.append(InlineKeyboardButton("취소", callback_data="tp_cancel"))
+
+    i_updater.bot.send_message(
+        chat_id=i_chat_id,
+        text="[종목 교체 고려 대상 - trail_plan 설정]\n종목을 선택하세요:",
+        reply_markup=InlineKeyboardMarkup(_build_menu(buttons, 1))
+    )
+
+    i_updater.start_polling()
+    _g_stop.wait(timeout=300)   # 최대 5분 대기
+    i_updater.stop()
 
 # 연결 종료
 conn.close()
