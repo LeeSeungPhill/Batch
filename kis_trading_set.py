@@ -174,8 +174,8 @@ for nick in nickname_list:
                 UPDATE public."interestItem_interest_item"
                 SET interest_day = %s
                 WHERE acct_no = %s AND proc_yn = 'Y' AND length(code) > 4
-                  AND interest_day >= prev_business_day_char(CURRENT_DATE)
-            """, (today, str(acct_no)))
+                  AND interest_day >= %s
+            """, (today, str(acct_no)), prev_date)
             conn.commit()
             print(f"[{nick}] 관심종목 interest_day 갱신: {cur_iday.rowcount}건")
             cur_iday.close()
