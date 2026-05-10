@@ -166,8 +166,8 @@ for nick in nickname_list:
         updater = Updater(token=token, use_context=True)
         bot = updater.bot
 
-        business_day = datetime.now().strftime("%Y-%m-%d")
-        # business_day = '2026-03-13'
+        # business_day = datetime.now().strftime("%Y-%m-%d")
+        business_day = '2026-05-08'
         trail_day = post_business_day_char(business_day)
         prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
 
