@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import kis_api_resp as resp
 from psycopg2.extras import execute_values
-from telegram import Bot
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
 import traceback
 import time
@@ -19,7 +19,7 @@ URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
-# today = '20260313'
+# today = '20260508'
 
 def auth(APP_KEY, APP_SECRET):
     headers = {"content-type": "application/json"}
@@ -163,7 +163,7 @@ for nick in nickname_list:
         bot = updater.bot
 
         business_day = datetime.now().strftime("%Y-%m-%d")
-        # business_day = '2026-03-13'
+        # business_day = '2026-05-08'
         trail_day = post_business_day_char(business_day)
         prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
 
@@ -174,8 +174,8 @@ for nick in nickname_list:
                 UPDATE public."interestItem_interest_item"
                 SET interest_day = %s
                 WHERE acct_no = %s AND proc_yn = 'Y' AND length(code) > 4
-                  AND interest_day >= prev_business_day_char(CURRENT_DATE)
-            """, (today, str(acct_no)))
+                  AND interest_day >= %s
+            """, (today, str(acct_no), prev_date))
             conn.commit()
             print(f"[{nick}] 관심종목 interest_day 갱신: {cur_iday.rowcount}건")
             cur_iday.close()
@@ -368,6 +368,7 @@ for nick in nickname_list:
                         if cur201.rowcount > 0:
                             inserted_rows_info.append({
                                 'code': code, 'name': name, 'trail_tp': trail_tp,
+                                'trail_day': trail_day, 'trail_dtm': trail_dtm,
                                 'basic_price': float(basic_price or 0),
                                 'stop_price': float(stop_price or 0),
                                 'target_price': float(target_price or 0),
@@ -430,7 +431,19 @@ for nick in nickname_list:
                                 print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
 
                         if reason:
-                            replace_candidates.append(f"  - {i_name}(<code>{i_code}</code>): {reason}")
+                            replace_candidates.append({
+                                'nick': nick,
+                                'acct_no': acct_no,
+                                'token': token,
+                                'chat_id': chat_id,
+                                'name': i_name,
+                                'code': i_code,
+                                'trail_day': info['trail_day'],
+                                'trail_dtm': info['trail_dtm'],
+                                'trail_tp': i_trail_tp,
+                                'display': f"  - {i_name}(<code>{i_code}</code>): {reason}",
+                                'display_plain': f"  - [{nick}] {i_name}({i_code}): {reason}",
+                            })
 
                     elif i_trail_tp == 'L':
                         reason = None
@@ -440,7 +453,19 @@ for nick in nickname_list:
                             elif i_exit > 0 and i_cur < i_exit:
                                 reason = f"청산가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
                         if reason:
-                            replace_candidates.append(f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}")
+                            replace_candidates.append({
+                                'nick': nick,
+                                'acct_no': acct_no,
+                                'token': token,
+                                'chat_id': chat_id,
+                                'name': i_name,
+                                'code': i_code,
+                                'trail_day': info['trail_day'],
+                                'trail_dtm': info['trail_dtm'],
+                                'trail_tp': i_trail_tp,
+                                'display': f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}",
+                                'display_plain': f"  - [{nick}] {i_name}({i_code})[장기]: {reason}",
+                            })
 
             skipped_count = len(trading_trail_create_list) - inserted_count
 
@@ -451,13 +476,26 @@ for nick in nickname_list:
                 f"미생성 : {skipped_count}건)"
             )
             if replace_candidates:
-                message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(replace_candidates)
+                message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
             print(message)
             bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode='HTML'
             )
+            if replace_candidates:
+                tp_buttons = [
+                    [InlineKeyboardButton(
+                        f"{c['name']}({c['code']})",
+                        callback_data=f"tp:{c['acct_no']}:{c['name']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
+                    )]
+                    for c in replace_candidates
+                ]
+                bot.send_message(
+                    chat_id=chat_id,
+                    text="[종목 교체 고려 대상 매도비율 설정] 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(tp_buttons)
+                )
 
         time.sleep(3)                                              
 
