@@ -1220,7 +1220,7 @@ def get_kis_1min_from_datetime(
                                         "tenmin_key": current_10min_key,
                                         "tenmin_low": None,
                                         "tenmin_vol_ok": None,
-                                        "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·B불가·수익률:{gain_pct:.1f}%]",
+                                        "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
                                         "signal_type": "FIXED_STOP",
                                         "effective_stop": fixed_stop,
                                         "order_price": 0,

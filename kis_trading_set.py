@@ -19,7 +19,7 @@ URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
-# today = '20260313'
+# today = '20260508'
 
 def auth(APP_KEY, APP_SECRET):
     headers = {"content-type": "application/json"}
@@ -162,8 +162,8 @@ for nick in nickname_list:
         updater = Updater(token=token, use_context=True)
         bot = updater.bot
 
-        # business_day = datetime.now().strftime("%Y-%m-%d")
-        business_day = '2026-05-08'
+        business_day = datetime.now().strftime("%Y-%m-%d")
+        # business_day = '2026-05-08'
         trail_day = post_business_day_char(business_day)
         prev_date = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
 
