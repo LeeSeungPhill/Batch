@@ -149,6 +149,8 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
 
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
+all_replace_candidates = []
+
 for nick in nickname_list:
     try:
         ac = account(nick)
@@ -368,6 +370,7 @@ for nick in nickname_list:
                         if cur201.rowcount > 0:
                             inserted_rows_info.append({
                                 'code': code, 'name': name, 'trail_tp': trail_tp,
+                                'trail_day': trail_day, 'trail_dtm': trail_dtm,
                                 'basic_price': float(basic_price or 0),
                                 'stop_price': float(stop_price or 0),
                                 'target_price': float(target_price or 0),
@@ -430,7 +433,17 @@ for nick in nickname_list:
                                 print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
 
                         if reason:
-                            replace_candidates.append(f"  - {i_name}(<code>{i_code}</code>): {reason}")
+                            replace_candidates.append({
+                                'nick': nick,
+                                'acct_no': acct_no,
+                                'name': i_name,
+                                'code': i_code,
+                                'trail_day': info['trail_day'],
+                                'trail_dtm': info['trail_dtm'],
+                                'trail_tp': i_trail_tp,
+                                'display': f"  - {i_name}(<code>{i_code}</code>): {reason}",
+                                'display_plain': f"  - [{nick}] {i_name}({i_code}): {reason}",
+                            })
 
                     elif i_trail_tp == 'L':
                         reason = None
@@ -440,7 +453,17 @@ for nick in nickname_list:
                             elif i_exit > 0 and i_cur < i_exit:
                                 reason = f"청산가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
                         if reason:
-                            replace_candidates.append(f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}")
+                            replace_candidates.append({
+                                'nick': nick,
+                                'acct_no': acct_no,
+                                'name': i_name,
+                                'code': i_code,
+                                'trail_day': info['trail_day'],
+                                'trail_dtm': info['trail_dtm'],
+                                'trail_tp': i_trail_tp,
+                                'display': f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}",
+                                'display_plain': f"  - [{nick}] {i_name}({i_code})[장기]: {reason}",
+                            })
 
             skipped_count = len(trading_trail_create_list) - inserted_count
 
@@ -451,7 +474,8 @@ for nick in nickname_list:
                 f"미생성 : {skipped_count}건)"
             )
             if replace_candidates:
-                message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(replace_candidates)
+                message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
+                all_replace_candidates.extend(replace_candidates)
             print(message)
             bot.send_message(
                 chat_id=chat_id,
@@ -476,6 +500,53 @@ for nick in nickname_list:
                 )
         except Exception as te:
             print(f"[{nick}] Telegram error send failed: {te}")
+
+# 종목 교체 고려 대상 trail_plan 설정 메뉴
+if all_replace_candidates:
+    print("\n" + "="*60)
+    print("[종목 교체 고려 대상 - trail_plan 설정]")
+    print("="*60)
+    for idx, c in enumerate(all_replace_candidates, 1):
+        print(f"  {idx}. {c['display_plain']}")
+    print("="*60)
+
+    while True:
+        sel = input("번호 선택 (취소: 0 또는 Enter): ").strip()
+        if sel == '' or sel == '0':
+            print("취소되었습니다.")
+            break
+        if not sel.isdigit() or not (1 <= int(sel) <= len(all_replace_candidates)):
+            print(f"  1~{len(all_replace_candidates)} 사이의 번호를 입력하세요.")
+            continue
+
+        item = all_replace_candidates[int(sel) - 1]
+        print(f"  선택: [{item['nick']}] {item['name']}({item['code']})")
+
+        val = input("  trail_plan 값 입력 (1-100, 취소: 0 또는 Enter): ").strip()
+        if val == '' or val == '0':
+            print("취소되었습니다.")
+            break
+        if not val.isdigit() or not (1 <= int(val) <= 100):
+            print("  1~100 사이의 정수를 입력하세요.")
+            continue
+
+        try:
+            cur_upd = conn.cursor()
+            cur_upd.execute("""
+                UPDATE trading_trail
+                SET trail_plan = %s, mod_dt = now()
+                WHERE acct_no = %s AND code = %s
+                  AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
+            """, (str(int(val)), item['acct_no'], item['code'],
+                  item['trail_day'], item['trail_dtm'], item['trail_tp']))
+            conn.commit()
+            updated = cur_upd.rowcount
+            cur_upd.close()
+            print(f"  → [{item['nick']}] {item['name']} trail_plan={val} 저장 완료 ({updated}건)")
+        except Exception as e_upd:
+            conn.rollback()
+            print(f"  → UPDATE 오류: {e_upd}")
+        break
 
 # 연결 종료
 conn.close()
