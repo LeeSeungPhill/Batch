@@ -5,9 +5,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import kis_api_resp as resp
 from psycopg2.extras import execute_values
-import threading
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CallbackQueryHandler, MessageHandler, Filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater
 import traceback
 import time
 
@@ -149,8 +148,6 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
     return 0, 0
 
 nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
-
-all_replace_candidates = []
 
 for nick in nickname_list:
     try:
@@ -480,13 +477,25 @@ for nick in nickname_list:
             )
             if replace_candidates:
                 message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
-                all_replace_candidates.extend(replace_candidates)
             print(message)
             bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 parse_mode='HTML'
             )
+            if replace_candidates:
+                tp_buttons = [
+                    [InlineKeyboardButton(
+                        f"{c['name']}({c['code']})",
+                        callback_data=f"tp:{c['acct_no']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
+                    )]
+                    for c in replace_candidates
+                ]
+                bot.send_message(
+                    chat_id=chat_id,
+                    text="[종목 교체 고려 대상 - trail_plan 설정]\n종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(tp_buttons)
+                )
 
         time.sleep(3)                                              
 
@@ -505,123 +514,6 @@ for nick in nickname_list:
                 )
         except Exception as te:
             print(f"[{nick}] Telegram error send failed: {te}")
-
-# 종목 교체 고려 대상 trail_plan 설정 - 텔레그램 인라인 버튼 메뉴
-# _g_pending 키: (chat_id, bot_token) — 동일 chat에 여러 봇이 있어도 충돌 없음
-_g_pending = {}
-_g_stop    = threading.Event()
-
-def _build_menu(buttons, n_cols):
-    return [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
-
-def _make_markup():
-    """전체 후보 종목 버튼 + 완료 버튼 생성"""
-    buttons = [
-        InlineKeyboardButton(
-            f"[{c['nick']}] {c['name']}({c['code']})",
-            callback_data=f"tp_select_{idx}"
-        )
-        for idx, c in enumerate(all_replace_candidates)
-    ]
-    buttons.append(InlineKeyboardButton("완료", callback_data="tp_done"))
-    return InlineKeyboardMarkup(_build_menu(buttons, 1))
-
-def _cb_trail_plan(update, context):
-    query   = update.callback_query
-    query.answer()
-    data    = query.data
-    chat_id = query.message.chat_id
-    key     = (chat_id, context.bot.token)
-
-    if data == 'tp_done':
-        query.edit_message_text("완료하였습니다.")
-        _g_stop.set()
-        return
-
-    if data.startswith('tp_select_'):
-        idx  = int(data[len('tp_select_'):])
-        item = all_replace_candidates[idx]
-        _g_pending[key] = item
-        # 버튼 메시지는 그대로 유지 — 새 메시지로 입력 요청
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=(
-                f"[{item['nick']}] {item['name']}({item['code']})\n"
-                "trail_plan 값을 입력하세요 (1~100, 취소: 0):"
-            )
-        )
-
-def _echo_trail_plan(update, context):
-    chat_id = update.effective_chat.id
-    text    = update.message.text.strip()
-    key     = (chat_id, context.bot.token)
-
-    item = _g_pending.get(key)
-    if not item:
-        return
-
-    if text == '0':
-        _g_pending.pop(key, None)
-        context.bot.send_message(chat_id=chat_id, text="취소하였습니다.")
-        return
-
-    if not text.isdigit() or not (1 <= int(text) <= 100):
-        context.bot.send_message(
-            chat_id=chat_id,
-            text="1~100 사이의 정수를 입력하세요. (취소: 0)"
-        )
-        return
-
-    _g_pending.pop(key)
-    val = str(int(text))
-    try:
-        _conn = db.connect(conn_string)
-        cur_upd = _conn.cursor()
-        cur_upd.execute("""
-            UPDATE trading_trail
-            SET trail_plan = %s, mod_dt = now()
-            WHERE acct_no = %s AND code = %s
-              AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
-        """, (val, item['acct_no'], item['code'],
-              item['trail_day'], item['trail_dtm'], item['trail_tp']))
-        _conn.commit()
-        updated = cur_upd.rowcount
-        cur_upd.close()
-        _conn.close()
-        context.bot.send_message(
-            chat_id=chat_id,
-            text=f"[{item['nick']}] {item['name']} trail_plan={val} 저장 완료 ({updated}건)"
-        )
-    except Exception as e_upd:
-        context.bot.send_message(chat_id=chat_id, text=f"UPDATE 오류: {e_upd}")
-
-if all_replace_candidates:
-    markup     = _make_markup()
-    i_updaters = []
-    seen_tokens = set()
-
-    for c in all_replace_candidates:
-        t = c['token']
-        if t in seen_tokens:
-            continue
-        seen_tokens.add(t)
-
-        upd = Updater(token=t, use_context=True)
-        upd.dispatcher.add_handler(CallbackQueryHandler(_cb_trail_plan))
-        upd.dispatcher.add_handler(
-            MessageHandler(Filters.text & ~Filters.command, _echo_trail_plan)
-        )
-        upd.bot.send_message(
-            chat_id=c['chat_id'],
-            text="[종목 교체 고려 대상 - trail_plan 설정]\n종목을 선택하세요:",
-            reply_markup=markup
-        )
-        upd.start_polling()
-        i_updaters.append(upd)
-
-    _g_stop.wait(timeout=300)   # 최대 5분 대기 (완료 버튼 클릭 시 즉시 종료)
-    for upd in i_updaters:
-        upd.stop()
 
 # 연결 종료
 conn.close()

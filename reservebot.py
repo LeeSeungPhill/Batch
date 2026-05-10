@@ -111,6 +111,7 @@ g_risk_sum = 0
 g_low_price = 0
 g_selected_accounts = []  # 계좌 다중 선택 목록
 _pending_register = {}   # {chat_id: 관심종목 등록 대기 데이터}
+g_tp_pending = {}        # {chat_id: trail_plan 설정 대기 데이터 (acct_no, code, trail_day, trail_dtm, trail_tp)}
 
 # 매수주문 미리보기 → 진행 콜백 공유 상태
 g_buy21_code = ""
@@ -2384,8 +2385,27 @@ def callback_get(update, context) :
 
         context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
                                         chat_id=query.message.chat_id,
-                                        message_id=query.message.message_id)                                                                  
-            
+                                        message_id=query.message.message_id)
+
+    elif data_selected.startswith('tp:'):
+        # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
+        parts = data_selected.split(':')
+        if len(parts) == 6:
+            global g_tp_pending
+            g_tp_pending[query.message.chat_id] = {
+                'acct_no':   parts[1],
+                'code':      parts[2],
+                'trail_day': parts[3],
+                'trail_dtm': parts[4],
+                'trail_tp':  parts[5],
+            }
+            menuNum = 'tp'
+            # 버튼 메시지는 그대로 유지 — 새 메시지로 입력 요청
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[{parts[2]}] trail_plan 값을 입력하세요 (1~100, 취소: 0):"
+            )
+
 get_handler = CommandHandler('reserve', get_command)
 updater.dispatcher.add_handler(get_handler)
 
@@ -2832,6 +2852,50 @@ def echo(update, context):
         except Exception as e:
             context.bot.send_message(chat_id=user_id,
                 text=f"[관심종목 신규 등록] 오류: {str(e)}")
+        return
+
+    # trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
+    if menuNum == 'tp':
+        val_text = user_text.strip()
+        if val_text == '0':
+            initMenuNum()
+            g_tp_pending.pop(user_id, None)
+            context.bot.send_message(chat_id=user_id, text="취소하였습니다.")
+            return
+        if not val_text.isdigit() or not (1 <= int(val_text) <= 100):
+            context.bot.send_message(
+                chat_id=user_id,
+                text="1~100 사이의 정수를 입력하세요. (취소: 0)"
+            )
+            return
+        initMenuNum()
+        item = g_tp_pending.pop(user_id, None)
+        if not item:
+            context.bot.send_message(chat_id=user_id, text="선택된 종목이 없습니다. 버튼을 다시 선택하세요.")
+            return
+        val = str(int(val_text))
+        try:
+            c_tp = get_conn()
+            with c_tp.cursor() as cur_tp:
+                cur_tp.execute("""
+                    UPDATE trading_trail
+                    SET trail_plan = %s, mod_dt = now()
+                    WHERE acct_no = %s AND code = %s
+                      AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
+                """, (val, item['acct_no'], item['code'],
+                      item['trail_day'], item['trail_dtm'], item['trail_tp']))
+                updated = cur_tp.rowcount
+            c_tp.commit()
+            context.bot.send_message(
+                chat_id=user_id,
+                text=f"[{item['code']}] trail_plan={val} 저장 완료 ({updated}건)"
+            )
+        except Exception as e_tp:
+            try:
+                get_conn().rollback()
+            except Exception:
+                pass
+            context.bot.send_message(chat_id=user_id, text=f"trail_plan 업데이트 오류: {str(e_tp)}")
         return
 
     # 입력메시지가 6자리 이상인 경우,
