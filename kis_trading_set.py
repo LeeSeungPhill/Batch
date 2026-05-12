@@ -422,13 +422,13 @@ for nick in nickname_list:
                             try:
                                 order_date = datetime.strptime(str(oc_row[0])[:8], '%Y%m%d')
                                 days_since_buy = (datetime.now() - order_date).days
-                                if days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
-                                    reason = f"{days_since_buy}일전 매수 목표가:{int(i_target):,}원 미달성→현재가:{int(i_cur):,}원"
-                                    plain = f"{days_since_buy}일 소요"
-                                elif i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
+                                if i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                     drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
                                     reason = f"매수가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
                                     plain = f"{drop_pct}% 하락"
+                                elif days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
+                                    reason = f"{days_since_buy}일전 매수 목표가:{int(i_target):,}원 미달성→현재가:{int(i_cur):,}원"
+                                    plain = f"{days_since_buy}일 소요"
                             except Exception as e_dt:
                                 print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
 
@@ -450,12 +450,12 @@ for nick in nickname_list:
                     elif i_trail_tp == 'L':
                         reason = None
                         if i_cur > 0:
-                            if i_basic > 0 and i_cur < i_basic:
-                                reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
-                                plain = f"{int(i_basic):,}원 하회"
-                            elif i_exit > 0 and i_cur < i_exit:
+                            if i_exit > 0 and i_cur < i_exit:
                                 reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
-                                plain = f"{int(i_exit):,}원 하회"
+                                plain = f"{int(i_exit):,}원 최종이탈가 하회"
+                            elif i_basic > 0 and i_cur < i_basic:
+                                reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                plain = f"{int(i_basic):,}원 매수가 하회"
                         if reason:
                             replace_candidates.append({
                                 'nick': nick,
@@ -468,7 +468,7 @@ for nick in nickname_list:
                                 'trail_dtm': info['trail_dtm'],
                                 'trail_tp': i_trail_tp,
                                 'display': f"  - {i_name}(<code>{i_code}</code>)[장기]: {reason}",
-                                'display_plain': f"-{plain}",
+                                'display_plain': f"[장기]-{plain}",
                             })
 
             skipped_count = len(trading_trail_create_list) - inserted_count
@@ -490,7 +490,7 @@ for nick in nickname_list:
             if replace_candidates:
                 tp_buttons = [
                     [InlineKeyboardButton(
-                        f"{c['name']}({c['code']}){c['display_plain']}",
+                        f"{c['name']}{c['display_plain']}",
                         callback_data=f"tp:{c['acct_no']}:{c['name']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
                     )]
                     for c in replace_candidates
