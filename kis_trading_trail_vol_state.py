@@ -1237,21 +1237,21 @@ def get_kis_1min_from_datetime(
                                         except Exception as te:
                                             print(f"텔레그램 발송 실패: {te}")
 
-                                        try:
-                                            cur_p = conn.cursor()
-                                            cur_p.execute("""
-                                                UPDATE public.trading_trail
-                                                SET trail_tp = 'P', mod_dt = %s
-                                                WHERE acct_no = %s
-                                                    AND code = %s
-                                                    AND trail_day = %s
-                                                    AND trail_tp NOT IN ('3', '4')
-                                            """, (datetime.now(), acct_no, stock_code, trade_date))
-                                            conn.commit()
-                                            cur_p.close()
-                                            print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                        except Exception as de:
-                                            print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
+                                        # try:
+                                        #     cur_p = conn.cursor()
+                                        #     cur_p.execute("""
+                                        #         UPDATE public.trading_trail
+                                        #         SET trail_tp = 'P', mod_dt = %s
+                                        #         WHERE acct_no = %s
+                                        #             AND code = %s
+                                        #             AND trail_day = %s
+                                        #             AND trail_tp NOT IN ('3', '4')
+                                        #     """, (datetime.now(), acct_no, stock_code, trade_date))
+                                        #     conn.commit()
+                                        #     cur_p.close()
+                                        #     print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
+                                        # except Exception as de:
+                                        #     print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
 
                     else:
                         # ===============================
@@ -1282,21 +1282,21 @@ def get_kis_1min_from_datetime(
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
 
-                                try:
-                                    cur_p = conn.cursor()
-                                    cur_p.execute("""
-                                        UPDATE public.trading_trail
-                                        SET trail_tp = 'P', mod_dt = %s
-                                        WHERE acct_no = %s
-                                            AND code = %s
-                                            AND trail_day = %s
-                                            AND trail_tp NOT IN ('3', '4')
-                                    """, (datetime.now(), acct_no, stock_code, trade_date))
-                                    conn.commit()
-                                    cur_p.close()
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                except Exception as de:
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
+                                # try:
+                                #     cur_p = conn.cursor()
+                                #     cur_p.execute("""
+                                #         UPDATE public.trading_trail
+                                #         SET trail_tp = 'P', mod_dt = %s
+                                #         WHERE acct_no = %s
+                                #             AND code = %s
+                                #             AND trail_day = %s
+                                #             AND trail_tp NOT IN ('3', '4')
+                                #     """, (datetime.now(), acct_no, stock_code, trade_date))
+                                #     conn.commit()
+                                #     cur_p.close()
+                                #     print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
+                                # except Exception as de:
+                                #     print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
 
                 # ===============================
                 # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
@@ -1328,22 +1328,22 @@ def get_kis_1min_from_datetime(
                                 print(f"텔레그램 발송 실패: {te}")
                             # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
                             # (이미 매도 트리거된 경우 'L' 상태 유지 필요 — 매도 실행 DB 업데이트 조건 보호)
-                            if not sell_trigger:
-                                try:
-                                    cur_p = conn.cursor()
-                                    cur_p.execute("""
-                                        UPDATE public.trading_trail
-                                        SET trail_tp = 'P', mod_dt = %s
-                                        WHERE acct_no = %s
-                                            AND code = %s
-                                            AND trail_day = %s
-                                            AND trail_tp NOT IN ('3', '4')
-                                    """, (datetime.now(), acct_no, stock_code, trade_date))
-                                    conn.commit()
-                                    cur_p.close()
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                except Exception as de:
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
+                            # if not sell_trigger:
+                            #     try:
+                            #         cur_p = conn.cursor()
+                            #         cur_p.execute("""
+                            #             UPDATE public.trading_trail
+                            #             SET trail_tp = 'P', mod_dt = %s
+                            #             WHERE acct_no = %s
+                            #                 AND code = %s
+                            #                 AND trail_day = %s
+                            #                 AND trail_tp NOT IN ('3', '4')
+                            #         """, (datetime.now(), acct_no, stock_code, trade_date))
+                            #         conn.commit()
+                            #         cur_p.close()
+                            #         print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
+                            #     except Exception as de:
+                            #         print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
 
                 # ===============================
                 # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
@@ -1506,13 +1506,14 @@ def get_kis_1min_from_datetime(
                 return cur_vol >= avg_vol * mult, cur_vol, avg_vol
 
             breakdown_wait_1 = {
-                "active": False,        # 이탈 감시 활성화 여부
-                "tenmin_key": None,     # 이탈 발생 10분봉 키
-                "tenmin_low": None,     # 이탈 발생 10분봉 저가 (완성 후 확정)
-                "tenmin_vol_ok": None,  # 거래량 조건 충족 여부 (완성 후 확정)
-                "tenmin_vol": 0,        # 이탈 발생 10분봉 거래량
-                "tenmin_avg_vol": 0,    # 직전 20개 10분봉 평균 거래량
-                "sell_label": "",       # 매도 사유 ('손절매도' / '이탈매도')
+                "active": False,             # 이탈 감시 활성화 여부
+                "tenmin_key": None,          # 이탈 발생 10분봉 키
+                "tenmin_low": None,          # 이탈 발생 10분봉 저가 (완성 후 확정)
+                "tenmin_vol_ok": None,       # 거래량 조건 충족 여부 (완성 후 확정)
+                "tenmin_vol": 0,             # 이탈 발생 10분봉 거래량
+                "tenmin_avg_vol": 0,         # 직전 20개 10분봉 평균 거래량
+                "sell_label": "",            # 매도 사유 ('손절매도' / '이탈매도')
+                "last_alert_tenmin_key": None,  # 마지막 이탈감지 텔레그램 전송 10분봉 키 (10분 중복 방지)
             }
 
         # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
@@ -1598,6 +1599,7 @@ def get_kis_1min_from_datetime(
                                             breakdown_wait_1["tenmin_avg_vol"] = avg_vol_1
                                             if not vol_ok_1:
                                                 # 거래량 미충족 → 잔존 상태 방지를 위해 전체 리셋
+                                                # last_alert_tenmin_key 는 유지 (동일 10분봉 내 재알림 방지)
                                                 breakdown_wait_1.update({
                                                     "active": False,
                                                     "tenmin_key": None,
@@ -1660,15 +1662,18 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "손절매도",
                                     })
-                                    try:
-                                        message = (
-                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" 손절매수 대상: 최종이탈가({exit_price:,})원 이탈 대기"
-                                        )
-                                        print(message)
-                                        bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
-                                    except Exception as te:
-                                        print(f"텔레그램 발송 실패: {te}")
+                                    # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
+                                    if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
+                                        try:
+                                            message = (
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                                f" 손절매수 대상: 최종이탈가({exit_price:,})원 이탈 대기"
+                                            )
+                                            print(message)
+                                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                        except Exception as te:
+                                            print(f"텔레그램 발송 실패: {te}")
 
                                 # 매수금액 대상: 손절가(stop_price) 이탈
                                 elif not pre_market and trade_tp is not None and trade_tp == 'M' and breakdown_check <= stop_price and acml_vol > chk_vol:
@@ -1680,15 +1685,18 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "이탈매도",
                                     })
-                                    try:
-                                        message = (
-                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" 매수금액 대상: 손절가({stop_price:,})원 이탈 대기"
-                                        )
-                                        print(message)
-                                        bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
-                                    except Exception as te:
-                                        print(f"텔레그램 발송 실패: {te}")
+                                    # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
+                                    if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
+                                        try:
+                                            message = (
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                                f" 매수금액 대상: 손절가({stop_price:,})원 이탈 대기"
+                                            )
+                                            print(message)
+                                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                        except Exception as te:
+                                            print(f"텔레그램 발송 실패: {te}")
 
                             # 목표가 돌파
                             if breakout_check >= target_price:
@@ -1815,16 +1823,21 @@ def get_kis_1min_from_datetime(
                                 sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈 (매도가:{sell_price:,})"
 
                             if sell_trigger:
-                                trail_rate = round((100 - (sell_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                                # 매도가 > 기준봉저가 → 주문가 = 매도가 eise 주문가 = 기준봉저가
+                                if sell_price > tenmin_state['base_low']:
+                                    order_price = sell_price
+                                else:
+                                    order_price = tenmin_state['base_low']
+                                trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "50"
                                 trail_qty = basic_qty * int(i_trail_plan) * 0.01
-                                trail_amt = sell_price * trail_qty
+                                trail_amt = order_price * trail_qty
                                 u_basic_qty = basic_qty - trail_qty
                                 u_basic_amt = basic_price * u_basic_qty
 
                                 if basic_qty == trail_qty:
                                     try:
-                                        result = update_trading_close(nick, sell_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료', conn, bot, chat_id)
+                                        result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료', conn, bot, chat_id)
                                         if result:
                                             if verbose:
                                                 try:
@@ -1844,7 +1857,7 @@ def get_kis_1min_from_datetime(
 
                                 else:
                                     try:
-                                        result = update_trading_close(nick, sell_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진', conn, bot, chat_id)
+                                        result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진', conn, bot, chat_id)
                                         if result:
                                             if verbose:
                                                 try:
