@@ -2311,16 +2311,19 @@ def callback_get(update, context) :
             result_two00 = cur200.fetchall()
             cur200.close()
 
+            after_1520 = datetime.now().strftime('%H%M') >= '1520'
+            nxt_targets = []  # (code, name) for NXT buttons
+
             if len(result_two00) > 0:
-            
+
                 for row in result_two00:
                     # 각 값이 None이면 0으로, 아니면 원래 값 유지
                     r = [val if val is not None else 0 for val in row]
                     # 각 컬럼을 변수에 할당 (언패킹)
-                    (code, name, trail_day, trail_dtm, trail_tp, 
-                    trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt, 
+                    (code, name, trail_day, trail_dtm, trail_tp,
+                    trail_price, trail_qty, trail_amt, trail_rate, basic_price, basic_qty, basic_amt,
                     stop_price, target_price, proc_min, exit_price, trade_tp, trade_result) = r
-                    
+
                     # 일자별 종가
                     stck_prpr = get_kis_daily_chart(
                         stock_code=code,
@@ -2341,8 +2344,12 @@ def callback_get(update, context) :
                     msg = (f"[{trail_day}-{proc_min[:2]}:{proc_min[2:4]}]{name}[<code>{code}</code>] -{trail_tp}- "
                         f"보유가:{basic_price:,}원({basic_qty:,}주), 보유금액:{basic_price*basic_qty:,}원, 현재가:{stck_prpr:,}원, "
                         f"수익율:{str(stck_rate)}%, 손절가:{stop_price:,}원, 목표가:{target_price:,}원, 최종이탈가:{exit_price:,}원{trail}")
-                    
+
                     result_msgs.append(msg)
+
+                    # 15:20 이후 trail_tp '1','2' 대상 NXT 버튼 수집
+                    if after_1520 and trail_tp in ('1', '2'):
+                        nxt_targets.append((code, name))
 
             if result_msgs:
                 # 메시지를 10개씩 묶어서 보냅니다 (원하는 개수로 조정 가능)
@@ -2373,12 +2380,101 @@ def callback_get(update, context) :
                     chat_id=query.message.chat_id,
                     message_id=query.message.message_id
                 )
-            
+
+            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 존재 시 전송
+            if nxt_targets:
+                nxt_buttons = [
+                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{acct_no}:{code}")
+                    for code, name in nxt_targets
+                ]
+                nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text="다음날 매매추적 등록",
+                    reply_markup=nxt_markup
+                )
+
         except Exception as e:
             print('매매 추적 오류.', e)
             context.bot.edit_message_text(text="[매매 추적] 오류 : "+str(e),
                                             chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)       
+                                            message_id=query.message.message_id)
+
+    elif command.startswith("trail_nxt:"):
+        parts = command.split(":")
+        nxt_acct_no = parts[1]
+        nxt_code = parts[2]
+        today = datetime.now().strftime('%Y%m%d')
+        user_id = query.message.chat_id
+
+        try:
+            cur_sel = get_conn().cursor()
+            cur_sel.execute("""
+                SELECT acct_no, name, code, trail_day, trail_dtm,
+                       basic_price, basic_qty, basic_amt,
+                       stop_price, target_price, trail_plan, exit_price, loss_amt
+                FROM trading_trail
+                WHERE acct_no = %s
+                AND trail_day = %s
+                AND code = %s
+                AND trail_tp IN ('1','2')
+            """, (nxt_acct_no, today, nxt_code))
+            nxt_row = cur_sel.fetchone()
+            cur_sel.close()
+
+            if nxt_row is None:
+                context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] 조회된 데이터가 없습니다. (code={nxt_code})")
+                return
+
+            (acct_no, name, code, trail_day, _,
+             basic_price, basic_qty, basic_amt,
+             stop_price, target_price, trail_plan, exit_price, loss_amt) = nxt_row
+
+            basic_price  = basic_price  or 0
+            basic_qty    = basic_qty    or 0
+            basic_amt    = basic_amt    or 0
+            stop_price   = stop_price   or 0
+            target_price = target_price or 0
+            trail_plan   = trail_plan   or 0
+            exit_price   = exit_price   or 0
+            loss_amt     = loss_amt     or 0
+
+            thread_conn = db.connect(conn_string)
+            try:
+                cur = thread_conn.cursor()
+                merge_query = """
+                    WITH ins AS (
+                        INSERT INTO trading_trail_nxt (
+                            acct_no, code, name, trail_day, trail_dtm,
+                            trail_tp, stop_price, target_price, trail_plan,
+                            basic_price, basic_qty, basic_amt, proc_min,
+                            trade_tp, exit_price, loss_amt, crt_dt, mod_dt
+                        )
+                        SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        RETURNING 1 AS flag
+                    )
+                    SELECT flag FROM ins;
+                """
+                cur.execute(merge_query, (
+                    acct_no, code, name, trail_day, datetime.now().strftime('%H%M%S'),
+                    "1", stop_price, target_price, trail_plan,
+                    basic_price, basic_qty, basic_amt, datetime.now().strftime('%H%M%S'),
+                    'M', exit_price, loss_amt, datetime.now(), datetime.now()
+                ))
+                was_updated = cur.fetchone() is not None
+                thread_conn.commit()
+                cur.close()
+
+                if was_updated:
+                    context.bot.send_message(chat_id=user_id, text="[" + name + "{<code>"+code+"</code>}] 보유가 : " + format(basic_price, ',d') + "원, 보유량 : " + format(basic_qty, ',d') + "주, 보유금액 : " + format(basic_amt, ',d') + "원, 매도가 : " + format(target_price, ',d') + "원, 손절가 : " + format(stop_price, ',d') + "원, 최종이탈가 : " + format(exit_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
+                else:
+                    context.bot.send_message(chat_id=user_id, text="[" + name + "] 매도가 : " + format(target_price, ',d') + "원, 손절가 : " + format(stop_price, ',d') + "원, 최종이탈가 : " + format(exit_price, ',d') + "원 매매추적 미처리")
+            finally:
+                thread_conn.close()
+
+        except Exception as e:
+            print('매매추적 NXT 오류.', e)
+            context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 오류 : " + str(e))
 
     elif command == "손실금액계산":
         menuNum = "91"
