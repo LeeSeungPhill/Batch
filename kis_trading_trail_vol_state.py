@@ -27,6 +27,10 @@ _daily_cache_lock = threading.Lock()
 _daily_chart_full_cache = {}    # {stock_code: [daily_data]}
 _prev_day_info_cache = {}       # {(stock_code, trade_date): {low_price, hight_price, ...}}
 
+# 이탈 감지 알림 캐시 (1분 스케줄러 호출 간 상태 유지 — 동일 10분봉 중복 발송 방지)
+_breakdown_alert_cache = {}     # {f"{acct_no}_{code}_{date}": {"L": last_key, "1": last_key}}
+_breakdown_alert_lock = threading.Lock()
+
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
 
@@ -951,6 +955,7 @@ def get_kis_1min_from_datetime(
     # start_time 기준 다음 완성 10분봉 시각
     loop_start_dt = get_next_completed_10min_dt(start_dt)
     trade_date = start_dt.strftime("%Y%m%d")
+    _alert_ck = f"{acct_no}_{stock_code}_{trade_date}"  # 이탈 감지 캐시 키
     signals = []
 
     if verbose:
@@ -1054,8 +1059,9 @@ def get_kis_1min_from_datetime(
         }
         # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (중복 방지)
         prevlow_warn_last_key = None  # 전일저가 이탈 경고 마지막 전송 10분봉 키
-        # 이탈 감지 메시지 10분봉 중복 전송 방지
-        breakdown_notify_last_key = None  # 이탈 감지 메시지 마지막 전송 10분봉 키
+        # 이탈 감지 메시지 10분봉 중복 전송 방지 (스케줄러 재호출 간 상태 유지)
+        with _breakdown_alert_lock:
+            breakdown_notify_last_key = _breakdown_alert_cache.get(_alert_ck, {}).get("L")
 
         for _, row in df.iterrows():
 
@@ -1227,6 +1233,8 @@ def get_kis_1min_from_datetime(
                                     })
                                     if verbose and current_10min_key != breakdown_notify_last_key:
                                         breakdown_notify_last_key = current_10min_key
+                                        with _breakdown_alert_lock:
+                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["L"] = breakdown_notify_last_key
                                         try:
                                             msg_wait = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1272,6 +1280,8 @@ def get_kis_1min_from_datetime(
                             })
                             if verbose and current_10min_key != breakdown_notify_last_key:
                                 breakdown_notify_last_key = current_10min_key
+                                with _breakdown_alert_lock:
+                                    _breakdown_alert_cache.setdefault(_alert_ck, {})["L"] = breakdown_notify_last_key
                                 try:
                                     msg_wait = (
                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1505,6 +1515,8 @@ def get_kis_1min_from_datetime(
                 avg_vol = int(prev.mean())
                 return cur_vol >= avg_vol * mult, cur_vol, avg_vol
 
+            with _breakdown_alert_lock:
+                _cached_alert_key_1 = _breakdown_alert_cache.get(_alert_ck, {}).get("1")
             breakdown_wait_1 = {
                 "active": False,             # 이탈 감시 활성화 여부
                 "tenmin_key": None,          # 이탈 발생 10분봉 키
@@ -1513,7 +1525,7 @@ def get_kis_1min_from_datetime(
                 "tenmin_vol": 0,             # 이탈 발생 10분봉 거래량
                 "tenmin_avg_vol": 0,         # 직전 20개 10분봉 평균 거래량
                 "sell_label": "",            # 매도 사유 ('손절매도' / '이탈매도')
-                "last_alert_tenmin_key": None,  # 마지막 이탈감지 텔레그램 전송 10분봉 키 (10분 중복 방지)
+                "last_alert_tenmin_key": _cached_alert_key_1,  # 스케줄러 재호출 간 유지 (10분 중복 방지)
             }
 
         # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
@@ -1665,6 +1677,8 @@ def get_kis_1min_from_datetime(
                                     # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
                                     if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
                                         breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
+                                        with _breakdown_alert_lock:
+                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["1"] = current_10min_key_1
                                         try:
                                             message = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1688,6 +1702,8 @@ def get_kis_1min_from_datetime(
                                     # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
                                     if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
                                         breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
+                                        with _breakdown_alert_lock:
+                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["1"] = current_10min_key_1
                                         try:
                                             message = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
