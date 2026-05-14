@@ -2384,7 +2384,7 @@ def callback_get(update, context) :
             # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 존재 시 전송
             if nxt_targets:
                 nxt_buttons = [
-                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{acct_no}:{code}")
+                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{acct_no}:{access_token}:{app_key}:{app_secret}:{code}")
                     for code, name in nxt_targets
                 ]
                 nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
@@ -2403,8 +2403,10 @@ def callback_get(update, context) :
     elif command.startswith("trail_nxt:"):
         parts = command.split(":")
         nxt_acct_no = parts[1]
-        nxt_code = parts[2]
-        today = datetime.now().strftime('%Y%m%d')
+        nxt_access_token = parts[2]
+        nxt_app_key = parts[3]
+        nxt_app_secret = parts[4]
+        nxt_code = parts[5]
         user_id = query.message.chat_id
 
         # 버튼 메뉴 즉시 제거
@@ -2418,21 +2420,14 @@ def callback_get(update, context) :
             pass
 
         try:
-            ac = account()
-            acct_no     = ac['acct_no']
-            access_token = ac['access_token']
-            app_key     = ac['app_key']
-            app_secret  = ac['app_secret']
-            trail_day   = today
-
-            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
+            c = stock_balance(nxt_access_token, nxt_app_key, nxt_app_secret, nxt_acct_no, "")
 
             balance_rows = []
             if c is not None:
                 for i in range(len(c)):
-                    if int(c['hldg_qty'][i]) > 0:
+                    if nxt_code == c['pdno'][i] and int(c['hldg_qty'][i]) > 0:
                         balance_rows.append((
-                            acct_no,
+                            nxt_acct_no,
                             c['pdno'][i],
                             c['prdt_name'][i],
                             float(c['pchs_avg_pric'][i]),
@@ -2523,10 +2518,9 @@ def callback_get(update, context) :
 
                 conn200 = get_conn()
                 cur200 = conn200.cursor()
-                now_hms = datetime.now().strftime('%H%M%S')
                 full_query = cur200.mogrify(
                     balance_sql_tmpl + insert_query_tmpl,
-                    (int(acct_no), trail_day, now_hms, now_hms)
+                    (int(nxt_acct_no), datetime.now().strftime('%Y%m%d'), datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
                 ).decode()
 
                 execute_values(
