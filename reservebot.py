@@ -2411,6 +2411,7 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_nxt:"):
         user_id = query.message.chat_id
+        clicked_code = command.split(":")[1]
 
         # 클릭된 버튼만 제거, 나머지 버튼은 유지
         try:
@@ -2452,7 +2453,7 @@ def callback_get(update, context) :
             balance_rows = []
             if c is not None:
                 for i in range(len(c)):
-                    if int(c['hldg_qty'][i]) > 0:
+                    if c['pdno'][i] == clicked_code and int(c['hldg_qty'][i]) > 0:
                         balance_rows.append((
                             acct_no,
                             c['pdno'][i],
