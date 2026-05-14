@@ -112,6 +112,7 @@ g_low_price = 0
 g_selected_accounts = []  # 계좌 다중 선택 목록
 _pending_register = {}   # {chat_id: 관심종목 등록 대기 데이터}
 g_tp_pending = {}        # {chat_id: trail_plan 설정 대기 데이터 (acct_no, code, trail_day, trail_dtm, trail_tp)}
+g_nxt_pending = {}       # {chat_id: trail_nxt 처리용 계정 정보 (acct_no, access_token, app_key, app_secret, trail_day)}
 
 # 매수주문 미리보기 → 진행 콜백 공유 상태
 g_buy21_code = ""
@@ -2383,8 +2384,16 @@ def callback_get(update, context) :
 
             # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 존재 시 전송
             if nxt_targets:
+                global g_nxt_pending
+                g_nxt_pending[query.message.chat_id] = {
+                    'acct_no':      acct_no,
+                    'access_token': access_token,
+                    'app_key':      app_key,
+                    'app_secret':   app_secret,
+                    'trail_day':    trail_day,
+                }
                 nxt_buttons = [
-                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{acct_no}:{code}")
+                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{code}")
                     for code, name in nxt_targets
                 ]
                 nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
@@ -2401,36 +2410,50 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)
 
     elif command.startswith("trail_nxt:"):
-        parts = command.split(":")
-        nxt_acct_no = parts[1]
-        nxt_code = parts[2]
-        today = datetime.now().strftime('%Y%m%d')
         user_id = query.message.chat_id
+        clicked_code = command.split(":")[1]
 
-        # 버튼 메뉴 즉시 제거
+        # 클릭된 버튼만 제거, 나머지 버튼은 유지
         try:
-            context.bot.edit_message_reply_markup(
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id,
-                reply_markup=None
-            )
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
         except Exception:
             pass
 
         try:
-            ac = account()
-            acct_no     = ac['acct_no']
-            access_token = ac['access_token']
-            app_key     = ac['app_key']
-            app_secret  = ac['app_secret']
-            trail_day   = today
+            pending = g_nxt_pending.get(query.message.chat_id)
+            if pending is None:
+                context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 세션 정보가 없습니다. 매매추적을 다시 조회해주세요.")
+                return
+
+            acct_no      = pending['acct_no']
+            access_token = pending['access_token']
+            app_key      = pending['app_key']
+            app_secret   = pending['app_secret']
+            trail_day    = pending['trail_day']
 
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
             balance_rows = []
             if c is not None:
                 for i in range(len(c)):
-                    if int(c['hldg_qty'][i]) > 0:
+                    if c['pdno'][i] == clicked_code and int(c['hldg_qty'][i]) > 0:
                         balance_rows.append((
                             acct_no,
                             c['pdno'][i],
@@ -2510,7 +2533,7 @@ def callback_get(update, context) :
                         now(),
                         now()
                     FROM balance BAL
-                    LEFT JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
+                    JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
                     WHERE NOT EXISTS (
                         SELECT 1
                         FROM trading_trail_nxt T
@@ -2523,10 +2546,29 @@ def callback_get(update, context) :
 
                 conn200 = get_conn()
                 cur200 = conn200.cursor()
-                now_hms = datetime.now().strftime('%H%M%S')
+
+                # 실제 삽입될 종목명 사전 조회 (trading_trail 매칭 + NOT EXISTS 조건)
+                balance_codes = [row[1] for row in balance_rows]
+                cur200.execute("""
+                    SELECT t.name
+                    FROM trading_trail t
+                    WHERE t.acct_no = %s
+                    AND t.trail_day = %s
+                    AND t.trail_tp IN ('1','2')
+                    AND t.code = ANY(%s)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM trading_trail_nxt n
+                        WHERE n.acct_no = t.acct_no
+                        AND n.code = t.code
+                        AND n.trail_day = t.trail_day
+                        AND n.trail_dtm >= t.trail_dtm
+                    )
+                """, (int(acct_no), trail_day, balance_codes))
+                insert_names = [row[0] for row in cur200.fetchall()]
+
                 full_query = cur200.mogrify(
                     balance_sql_tmpl + insert_query_tmpl,
-                    (int(acct_no), trail_day, now_hms, now_hms)
+                    (int(acct_no), trail_day, datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
                 ).decode()
 
                 execute_values(
@@ -2540,9 +2582,10 @@ def callback_get(update, context) :
                 cur200.close()
 
                 if inserted > 0:
-                    context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] {inserted}건 처리 완료")
+                    name_list = ", ".join(insert_names) if insert_names else f"{inserted}건"
+                    context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] {name_list} 등록 완료")
                 else:
-                    context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 처리 대상이 없습니다.")
+                    context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 등록 대상이 없습니다.")
             else:
                 context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 잔고 조회 결과가 없습니다.")
 
