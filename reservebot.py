@@ -2453,10 +2453,12 @@ def callback_get(update, context) :
                                 code,
                                 trail_day,
                                 trail_dtm,
+                                trail_tp,
                                 basic_price,
                                 basic_qty,
                                 stop_price,
                                 target_price,
+                                trade_tp,
                                 trail_plan,
                                 exit_price
                             FROM trading_trail
