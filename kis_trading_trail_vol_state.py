@@ -1057,8 +1057,9 @@ def get_kis_1min_from_datetime(
             "effective_stop": 0,      # 트리거 시점 스탑 가격
             "order_price": 0,         # 확정 매도가 (stop_price or close_price)
         }
-        # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (중복 방지)
-        prevlow_warn_last_key = None  # 전일저가 이탈 경고 마지막 전송 10분봉 키
+        # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (스케줄러 재호출 간 상태 유지)
+        with _breakdown_alert_lock:
+            prevlow_warn_last_key = _breakdown_alert_cache.get(_alert_ck, {}).get("prevlow_warn")
         # 이탈 감지 메시지 10분봉 중복 전송 방지 (스케줄러 재호출 간 상태 유지)
         with _breakdown_alert_lock:
             breakdown_notify_last_key = _breakdown_alert_cache.get(_alert_ck, {}).get("L")
@@ -1317,6 +1318,8 @@ def get_kis_1min_from_datetime(
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
                         if current_10min_key != prevlow_warn_last_key:
                             prevlow_warn_last_key = current_10min_key
+                            with _breakdown_alert_lock:
+                                _breakdown_alert_cache.setdefault(_alert_ck, {})["prevlow_warn"] = prevlow_warn_last_key
                             gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
                             try:
                                 msg_warn = (
