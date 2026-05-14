@@ -112,6 +112,7 @@ g_low_price = 0
 g_selected_accounts = []  # 계좌 다중 선택 목록
 _pending_register = {}   # {chat_id: 관심종목 등록 대기 데이터}
 g_tp_pending = {}        # {chat_id: trail_plan 설정 대기 데이터 (acct_no, code, trail_day, trail_dtm, trail_tp)}
+g_nxt_pending = {}       # {chat_id: trail_nxt 처리용 계정 정보 (acct_no, access_token, app_key, app_secret, trail_day)}
 
 # 매수주문 미리보기 → 진행 콜백 공유 상태
 g_buy21_code = ""
@@ -2383,8 +2384,16 @@ def callback_get(update, context) :
 
             # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 존재 시 전송
             if nxt_targets:
+                global g_nxt_pending
+                g_nxt_pending[query.message.chat_id] = {
+                    'acct_no':      acct_no,
+                    'access_token': access_token,
+                    'app_key':      app_key,
+                    'app_secret':   app_secret,
+                    'trail_day':    trail_day,
+                }
                 nxt_buttons = [
-                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{acct_no}:{access_token}:{app_key}:{app_secret}:{code}")
+                    InlineKeyboardButton(f"{name} NXT", callback_data="trail_nxt")
                     for code, name in nxt_targets
                 ]
                 nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
@@ -2400,13 +2409,7 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
 
-    elif command.startswith("trail_nxt:"):
-        parts = command.split(":")
-        nxt_acct_no = parts[1]
-        nxt_access_token = parts[2]
-        nxt_app_key = parts[3]
-        nxt_app_secret = parts[4]
-        nxt_code = parts[5]
+    elif command == "trail_nxt":
         user_id = query.message.chat_id
 
         # 버튼 메뉴 즉시 제거
@@ -2420,14 +2423,25 @@ def callback_get(update, context) :
             pass
 
         try:
-            c = stock_balance(nxt_access_token, nxt_app_key, nxt_app_secret, nxt_acct_no, "")
+            pending = g_nxt_pending.get(query.message.chat_id)
+            if pending is None:
+                context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 세션 정보가 없습니다. 매매추적을 다시 조회해주세요.")
+                return
+
+            acct_no      = pending['acct_no']
+            access_token = pending['access_token']
+            app_key      = pending['app_key']
+            app_secret   = pending['app_secret']
+            trail_day    = pending['trail_day']
+
+            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
             balance_rows = []
             if c is not None:
                 for i in range(len(c)):
-                    if nxt_code == c['pdno'][i] and int(c['hldg_qty'][i]) > 0:
+                    if int(c['hldg_qty'][i]) > 0:
                         balance_rows.append((
-                            nxt_acct_no,
+                            acct_no,
                             c['pdno'][i],
                             c['prdt_name'][i],
                             float(c['pchs_avg_pric'][i]),
@@ -2520,7 +2534,7 @@ def callback_get(update, context) :
                 cur200 = conn200.cursor()
                 full_query = cur200.mogrify(
                     balance_sql_tmpl + insert_query_tmpl,
-                    (int(nxt_acct_no), datetime.now().strftime('%Y%m%d'), datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
+                    (int(acct_no), trail_day, datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
                 ).decode()
 
                 execute_values(
