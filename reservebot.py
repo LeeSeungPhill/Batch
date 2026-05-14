@@ -2393,7 +2393,7 @@ def callback_get(update, context) :
                     'trail_day':    trail_day,
                 }
                 nxt_buttons = [
-                    InlineKeyboardButton(f"{name} NXT", callback_data="trail_nxt")
+                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{code}")
                     for code, name in nxt_targets
                 ]
                 nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
@@ -2409,16 +2409,29 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
 
-    elif command == "trail_nxt":
+    elif command.startswith("trail_nxt:"):
         user_id = query.message.chat_id
 
-        # 버튼 메뉴 즉시 제거
+        # 클릭된 버튼만 제거, 나머지 버튼은 유지
         try:
-            context.bot.edit_message_reply_markup(
-                chat_id=query.message.chat_id,
-                message_id=query.message.message_id,
-                reply_markup=None
-            )
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
         except Exception:
             pass
 
@@ -2532,6 +2545,26 @@ def callback_get(update, context) :
 
                 conn200 = get_conn()
                 cur200 = conn200.cursor()
+
+                # 실제 삽입될 종목명 사전 조회 (trading_trail 매칭 + NOT EXISTS 조건)
+                balance_codes = [row[1] for row in balance_rows]
+                cur200.execute("""
+                    SELECT t.name
+                    FROM trading_trail t
+                    WHERE t.acct_no = %s
+                    AND t.trail_day = %s
+                    AND t.trail_tp IN ('1','2')
+                    AND t.code = ANY(%s)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM trading_trail_nxt n
+                        WHERE n.acct_no = t.acct_no
+                        AND n.code = t.code
+                        AND n.trail_day = t.trail_day
+                        AND n.trail_dtm >= t.trail_dtm
+                    )
+                """, (int(acct_no), trail_day, balance_codes))
+                insert_names = [row[0] for row in cur200.fetchall()]
+
                 full_query = cur200.mogrify(
                     balance_sql_tmpl + insert_query_tmpl,
                     (int(acct_no), trail_day, datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
@@ -2548,9 +2581,10 @@ def callback_get(update, context) :
                 cur200.close()
 
                 if inserted > 0:
-                    context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] {inserted}건 처리 완료")
+                    name_list = ", ".join(insert_names) if insert_names else f"{inserted}건"
+                    context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] {name_list} 등록 완료")
                 else:
-                    context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 처리 대상이 없습니다.")
+                    context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 등록 대상이 없습니다.")
             else:
                 context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 잔고 조회 결과가 없습니다.")
 
