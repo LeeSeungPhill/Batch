@@ -27,9 +27,6 @@ _daily_cache_lock = threading.Lock()
 _daily_chart_full_cache = {}    # {stock_code: [daily_data]}
 _prev_day_info_cache = {}       # {(stock_code, trade_date): {low_price, hight_price, ...}}
 
-# 이탈 감지 알림 캐시 (1분 스케줄러 호출 간 상태 유지 — 동일 10분봉 중복 발송 방지)
-_breakdown_alert_cache = {}     # {f"{acct_no}_{code}_{date}": {"L": last_key, "1": last_key}}
-_breakdown_alert_lock = threading.Lock()
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -924,6 +921,38 @@ def get_valid_sell_price(price: int) -> int:
         tick = 1000
     return (price // tick) * tick
 
+def _read_alert_keys_db(conn, acct_no, stock_code, trail_day, trail_dtm, table="public.trading_trail"):
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT COALESCE(last_alert_keys, '{{}}')
+            FROM {table}
+            WHERE acct_no = %s AND code = %s
+              AND trail_day = %s AND trail_dtm = %s
+            LIMIT 1
+        """, (acct_no, stock_code, trail_day, trail_dtm))
+        row = cur.fetchone()
+        cur.close()
+        return row[0] if row else {}
+    except Exception as e:
+        print(f"알림 상태 조회 실패: {e}")
+        return {}
+
+def _write_alert_key_db(conn, acct_no, stock_code, trail_day, trail_dtm, key_name, key_value, table="public.trading_trail"):
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            UPDATE {table}
+            SET last_alert_keys = COALESCE(last_alert_keys, '{{}}') || %s::jsonb
+            WHERE acct_no = %s AND code = %s
+              AND trail_day = %s AND trail_dtm = %s
+        """, (json.dumps({key_name: key_value}),
+              acct_no, stock_code, trail_day, trail_dtm))
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(f"알림 상태 저장 실패: {e}")
+
 def get_kis_1min_from_datetime(
     nick: str,
     stock_code: str,
@@ -955,7 +984,7 @@ def get_kis_1min_from_datetime(
     # start_time 기준 다음 완성 10분봉 시각
     loop_start_dt = get_next_completed_10min_dt(start_dt)
     trade_date = start_dt.strftime("%Y%m%d")
-    _alert_ck = f"{acct_no}_{stock_code}_{trade_date}"  # 이탈 감지 캐시 키
+    _alert_keys = _read_alert_keys_db(conn, acct_no, stock_code, start_date, start_time)
     signals = []
 
     if verbose:
@@ -1057,12 +1086,8 @@ def get_kis_1min_from_datetime(
             "effective_stop": 0,      # 트리거 시점 스탑 가격
             "order_price": 0,         # 확정 매도가 (stop_price or close_price)
         }
-        # 15:00 전일저가 이탈 사전 경고 알림 발송 여부 (스케줄러 재호출 간 상태 유지)
-        with _breakdown_alert_lock:
-            prevlow_warn_last_key = _breakdown_alert_cache.get(_alert_ck, {}).get("prevlow_warn")
-        # 이탈 감지 메시지 10분봉 중복 전송 방지 (스케줄러 재호출 간 상태 유지)
-        with _breakdown_alert_lock:
-            breakdown_notify_last_key = _breakdown_alert_cache.get(_alert_ck, {}).get("L")
+        prevlow_warn_last_key = _alert_keys.get("prevlow_warn")
+        breakdown_notify_last_key = _alert_keys.get("L")
 
         for _, row in df.iterrows():
 
@@ -1232,10 +1257,9 @@ def get_kis_1min_from_datetime(
                                         "effective_stop": fixed_stop,
                                         "order_price": 0,
                                     })
-                                    if verbose and current_10min_key != breakdown_notify_last_key:
-                                        breakdown_notify_last_key = current_10min_key
-                                        with _breakdown_alert_lock:
-                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["L"] = breakdown_notify_last_key
+                                    if verbose and current_10min_key.strftime("%Y%m%d%H%M") != breakdown_notify_last_key:
+                                        breakdown_notify_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                                        _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                         try:
                                             msg_wait = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1279,10 +1303,9 @@ def get_kis_1min_from_datetime(
                                 "effective_stop": fixed_stop,
                                 "order_price": 0,
                             })
-                            if verbose and current_10min_key != breakdown_notify_last_key:
-                                breakdown_notify_last_key = current_10min_key
-                                with _breakdown_alert_lock:
-                                    _breakdown_alert_cache.setdefault(_alert_ck, {})["L"] = breakdown_notify_last_key
+                            if verbose and current_10min_key.strftime("%Y%m%d%H%M") != breakdown_notify_last_key:
+                                breakdown_notify_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                                _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                 try:
                                     msg_wait = (
                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1316,10 +1339,9 @@ def get_kis_1min_from_datetime(
                 _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
                 if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                        if current_10min_key != prevlow_warn_last_key:
-                            prevlow_warn_last_key = current_10min_key
-                            with _breakdown_alert_lock:
-                                _breakdown_alert_cache.setdefault(_alert_ck, {})["prevlow_warn"] = prevlow_warn_last_key
+                        if current_10min_key.strftime("%Y%m%d%H%M") != prevlow_warn_last_key:
+                            prevlow_warn_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                            _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
                             gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
                             try:
                                 msg_warn = (
@@ -1518,8 +1540,7 @@ def get_kis_1min_from_datetime(
                 avg_vol = int(prev.mean())
                 return cur_vol >= avg_vol * mult, cur_vol, avg_vol
 
-            with _breakdown_alert_lock:
-                _cached_alert_key_1 = _breakdown_alert_cache.get(_alert_ck, {}).get("1")
+            _cached_alert_key_1 = _alert_keys.get("1")
             breakdown_wait_1 = {
                 "active": False,             # 이탈 감시 활성화 여부
                 "tenmin_key": None,          # 이탈 발생 10분봉 키
@@ -1678,10 +1699,9 @@ def get_kis_1min_from_datetime(
                                         "sell_label": "손절매도",
                                     })
                                     # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
-                                    if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
-                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
-                                        with _breakdown_alert_lock:
-                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["1"] = current_10min_key_1
+                                    if current_10min_key_1.strftime("%Y%m%d%H%M") != breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                        _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                         try:
                                             message = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
@@ -1703,10 +1723,9 @@ def get_kis_1min_from_datetime(
                                         "sell_label": "이탈매도",
                                     })
                                     # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
-                                    if current_10min_key_1 != breakdown_wait_1["last_alert_tenmin_key"]:
-                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1
-                                        with _breakdown_alert_lock:
-                                            _breakdown_alert_cache.setdefault(_alert_ck, {})["1"] = current_10min_key_1
+                                    if current_10min_key_1.strftime("%Y%m%d%H%M") != breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                        _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                         try:
                                             message = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
