@@ -835,7 +835,7 @@ def get_kis_1min_from_datetime(
             "base_key": None,         # 돌파 발생 10분봉 키
         }
 
-    _start_time = "163000" if trade_date.endswith("1119") else "153000"
+    _start_time = "200000"
 
     df = get_kis_1min_full_day(
         stock_code=stock_code,
