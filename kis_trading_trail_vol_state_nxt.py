@@ -27,9 +27,6 @@ _daily_cache_lock = threading.Lock()
 _daily_chart_full_cache = {}    # {stock_code: [daily_data]}
 _prev_day_info_cache = {}       # {(stock_code, trade_date): {low_price, hight_price, ...}}
 
-# 이탈 감지 알림 캐시 (1분 스케줄러 호출 간 상태 유지 — 동일 10분봉 중복 발송 방지)
-_breakdown_alert_cache = {}     # {f"{acct_no}_{code}_{date}": {"1": last_key}}
-_breakdown_alert_lock = threading.Lock()
 
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
@@ -764,6 +761,38 @@ def get_valid_sell_price(price: int) -> int:
     else:
         tick = 1000
     return (price // tick) * tick
+
+def _read_alert_keys_db(conn, acct_no, stock_code, trail_day, trail_dtm, table="public.trading_trail_nxt"):
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            SELECT COALESCE(last_alert_keys, '{{}}')
+            FROM {table}
+            WHERE acct_no = %s AND code = %s
+              AND trail_day = %s AND trail_dtm = %s
+            LIMIT 1
+        """, (acct_no, stock_code, trail_day, trail_dtm))
+        row = cur.fetchone()
+        cur.close()
+        return row[0] if row else {}
+    except Exception as e:
+        print(f"알림 상태 조회 실패: {e}")
+        return {}
+
+def _write_alert_key_db(conn, acct_no, stock_code, trail_day, trail_dtm, key_name, key_value, table="public.trading_trail_nxt"):
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            UPDATE {table}
+            SET last_alert_keys = COALESCE(last_alert_keys, '{{}}') || %s::jsonb
+            WHERE acct_no = %s AND code = %s
+              AND trail_day = %s AND trail_dtm = %s
+        """, (json.dumps({key_name: key_value}),
+              acct_no, stock_code, trail_day, trail_dtm))
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(f"알림 상태 저장 실패: {e}")
 
 def get_kis_1min_from_datetime(
     nick: str,
