@@ -857,7 +857,11 @@ def show_account_selection_keyboard(query, menu_num):
     current_acc = arguments[1] if len(arguments) > 1 else ""
     extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
     all_accounts = extra + SELECTABLE_ACCOUNTS
-    buttons = []
+    all_checked = len(g_selected_accounts) == len(all_accounts) and all(a in g_selected_accounts for a in all_accounts)
+    buttons = [[InlineKeyboardButton(
+        f"{'✅' if all_checked else '⬜'} 전체선택",
+        callback_data=f"acc_{menu_num}_all"
+    )]]
     row = []
     for acc in all_accounts:
         check = "✅" if acc in g_selected_accounts else "⬜"
@@ -1926,11 +1930,23 @@ def callback_get(update, context) :
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "81")
 
+    elif command.startswith("acc_") and command.endswith("_all"):
+        # 전체선택/해제: callback_data = "acc_{menu_num}_all"
+        menu_num = command.split("_")[1]
+        current_acc = arguments[1] if len(arguments) > 1 else ""
+        extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
+        all_accounts = extra + SELECTABLE_ACCOUNTS
+        all_checked = len(g_selected_accounts) == len(all_accounts) and all(a in g_selected_accounts for a in all_accounts)
+        g_selected_accounts.clear()
+        if not all_checked:
+            g_selected_accounts.extend(all_accounts)
+        show_account_selection_keyboard(query, menu_num)
+
     elif command.startswith("acc_") and "_t_" in command:
         # 계좌 토글: callback_data = "acc_{menu_num}_t_{account_name}"
-        parts = command.split("_t_", 1)          
+        parts = command.split("_t_", 1)
         account_name = parts[1]
-        menu_num = parts[0].split("_", 1)[1]    
+        menu_num = parts[0].split("_", 1)[1]
         if account_name in g_selected_accounts:
             g_selected_accounts.remove(account_name)
         else:
