@@ -1132,7 +1132,7 @@ def get_kis_1min_from_datetime(
                 if exit_price and int(exit_price) > 0 and close_price <= int(exit_price):
                     _ep = int(exit_price)
                     i_trail_plan = trail_plan if trail_plan else "100"
-                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                    trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                     trail_amt = _ep * trail_qty
                     trail_rate = round((100 - (_ep / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                     u_basic_qty = basic_qty - trail_qty
@@ -1398,7 +1398,7 @@ def get_kis_1min_from_datetime(
                     breakdown_wait["active"] = False
 
                     i_trail_plan = trail_plan if trail_plan else "100"
-                    trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                    trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                     trail_amt = order_price * trail_qty
                     trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                     u_basic_qty = basic_qty - trail_qty
@@ -1656,7 +1656,7 @@ def get_kis_1min_from_datetime(
                                         # 10분봉 저가 이탈 확정 → 매도 실행                                            
                                         trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                         i_trail_plan = trail_plan if trail_plan else "100"
-                                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                        trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                                         trail_amt = order_price * trail_qty
                                         u_basic_qty = basic_qty - trail_qty
                                         u_basic_amt = basic_price * u_basic_qty
@@ -1868,7 +1868,7 @@ def get_kis_1min_from_datetime(
                                     order_price = tenmin_state['base_low']
                                 trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                 i_trail_plan = trail_plan if trail_plan else "50"
-                                trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                                trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                                 trail_amt = order_price * trail_qty
                                 u_basic_qty = basic_qty - trail_qty
                                 u_basic_amt = basic_price * u_basic_qty
