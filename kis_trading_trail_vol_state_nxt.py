@@ -1051,7 +1051,7 @@ def get_kis_1min_from_datetime(
                             order_price = tenmin_state['base_low']
                         trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                         i_trail_plan = trail_plan if trail_plan else "50"
-                        trail_qty = basic_qty * int(i_trail_plan) * 0.01
+                        trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                         trail_amt = order_price * trail_qty
                         u_basic_qty = basic_qty - trail_qty
                         u_basic_amt = basic_price * u_basic_qty
