@@ -1220,11 +1220,12 @@ def get_kis_1min_from_datetime(
 
                         if is_last_of_tenmin and current_10min_key_b != tenmin_completed_key_last:
                             tenmin_completed_key_last = current_10min_key_b
-                            tenmin_high_b = tenmin_df_b["고가"].astype(int).max()
+                            # numpy.int64 → 파이썬 int 변환 (psycopg2 SQL 파라미터 호환)
+                            tenmin_high_b = int(tenmin_df_b["고가"].astype(int).max())
                             tenmin_close_b = close_price  # 마지막 1분봉 종가 = 10분봉 종가
 
                             # 10분봉 완성 기준 고점 갱신
-                            peak_high_tenmin = max(peak_high_tenmin, tenmin_high_b)
+                            peak_high_tenmin = int(max(peak_high_tenmin, tenmin_high_b))
 
                             safety_margin_L = int(basic_price * 1.10)
                             peak_to_safety_L = peak_high_tenmin - safety_margin_L
@@ -1257,8 +1258,10 @@ def get_kis_1min_from_datetime(
                                         "effective_stop": fixed_stop,
                                         "order_price": 0,
                                     })
-                                    if verbose and current_10min_key.strftime("%Y%m%d%H%M") != breakdown_notify_last_key:
-                                        breakdown_notify_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                                    # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                                    _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
+                                    if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                        breakdown_notify_last_key = _cur_key_str
                                         _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                         try:
                                             msg_wait = (
@@ -1303,8 +1306,10 @@ def get_kis_1min_from_datetime(
                                 "effective_stop": fixed_stop,
                                 "order_price": 0,
                             })
-                            if verbose and current_10min_key.strftime("%Y%m%d%H%M") != breakdown_notify_last_key:
-                                breakdown_notify_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                            # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                            _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
+                            if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                breakdown_notify_last_key = _cur_key_str
                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                 try:
                                     msg_wait = (
@@ -1339,8 +1344,10 @@ def get_kis_1min_from_datetime(
                 _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
                 if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
                     if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                        if current_10min_key.strftime("%Y%m%d%H%M") != prevlow_warn_last_key:
-                            prevlow_warn_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                        # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                        _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
+                        if prevlow_warn_last_key is None or _cur_key_str > prevlow_warn_last_key:
+                            prevlow_warn_last_key = _cur_key_str
                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
                             gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
                             try:
@@ -1698,9 +1705,11 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "손절매도",
                                     })
-                                    # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
-                                    if current_10min_key_1.strftime("%Y%m%d%H%M") != breakdown_wait_1["last_alert_tenmin_key"]:
-                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                    # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                    # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                    _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                    if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                         _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                         try:
                                             message = (
@@ -1722,9 +1731,11 @@ def get_kis_1min_from_datetime(
                                         "tenmin_vol_ok": None,
                                         "sell_label": "이탈매도",
                                     })
-                                    # 동일 10분봉 내 중복 알림 방지: 10분봉 키가 바뀐 경우에만 전송
-                                    if current_10min_key_1.strftime("%Y%m%d%H%M") != breakdown_wait_1["last_alert_tenmin_key"]:
-                                        breakdown_wait_1["last_alert_tenmin_key"] = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                    # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                    # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                    _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                    if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                        breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                         _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                         try:
                                             message = (
