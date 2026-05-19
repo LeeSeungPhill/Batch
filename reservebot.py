@@ -1255,8 +1255,75 @@ def callback_get(update, context) :
                             text=text, parse_mode='HTML',
                             chat_id=query.message.chat_id
                         )
+
+                # 관심종목 삭제 선택 버튼
+                del_buttons = [
+                    InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"interest_del_{r[1]}")
+                    for r in rows
+                ]
+                del_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                del_rows = [del_buttons[i:i+2] for i in range(0, len(del_buttons), 2)]
+                context.bot.send_message(
+                    text="삭제할 관심 종목을 선택하세요:",
+                    chat_id=query.message.chat_id,
+                    reply_markup=InlineKeyboardMarkup(del_rows)
+                )
         except Exception as e:
             query.edit_message_text(text=f"[관심종목 조회] 오류: {str(e)}")
+
+    elif command.startswith("interest_del_"):
+        del_code = command[len("interest_del_"):]
+        try:
+            # 클릭된 버튼만 제거, 나머지 유지
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            # 취소 버튼만 남은 경우도 메시지 삭제
+            remaining_no_cancel = [b for b in remaining if b.callback_data != "취소"]
+            if remaining_no_cancel:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(
+                        [remaining[i:i+2] for i in range(0, len(remaining), 2)]
+                    )
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+
+            with get_conn().cursor() as cur_del:
+                cur_del.execute(
+                    """SELECT name FROM public."interestItem_interest_item"
+                       WHERE code = %s AND proc_yn = 'Y'""",
+                    (del_code,)
+                )
+                row_del = cur_del.fetchone()
+            del_name = row_del[0] if row_del else del_code
+
+            with get_conn().cursor() as cur_upd:
+                cur_upd.execute(
+                    """UPDATE public."interestItem_interest_item"
+                       SET proc_yn = 'N'
+                       WHERE code = %s AND proc_yn = 'Y'""",
+                    (del_code,)
+                )
+            get_conn().commit()
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[{del_name}({del_code})] 관심종목에서 삭제되었습니다."
+            )
+        except Exception as e:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[관심종목 삭제] 오류: {str(e)}"
+            )
 
     elif command == "관심종목_변경":
         ac = account()
