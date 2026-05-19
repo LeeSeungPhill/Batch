@@ -892,7 +892,7 @@ def _do_interest_register(chat_id, context, pending):
                     (acct_no, code, name, through_price, leave_price, resist_price, support_price,
                      trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
-                ON CONFLICT (acct_no, code) DO UPDATE SET
+                ON CONFLICT (code, interest_day, proc_yn) DO UPDATE SET
                     name             = EXCLUDED.name,
                     through_price    = EXCLUDED.through_price,
                     leave_price      = EXCLUDED.leave_price,
