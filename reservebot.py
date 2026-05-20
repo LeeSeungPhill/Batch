@@ -1418,7 +1418,8 @@ def callback_get(update, context) :
                 )
         else:
             menuNum = '04'
-            query.edit_message_text(
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
                 text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field} 값을 입력하세요. (숫자만 입력)"
             )
 
@@ -1476,7 +1477,8 @@ def callback_get(update, context) :
         field = command[len("holding_edit_field_"):]
         g_holding_edit_field = field
         menuNum = '02'
-        query.edit_message_text(
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
             text=f"[{g_holding_edit_name}({g_holding_edit_code})] {field} 값을 입력하세요. (숫자만 입력)"
         )
 
@@ -2741,7 +2743,8 @@ def callback_get(update, context) :
         global g_kk_field
         g_kk_field = command[len("kk_field_"):]
         menuNum = '06'
-        query.edit_message_text(
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
             text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} 값을 입력하세요. (숫자만 입력)"
         )
 
