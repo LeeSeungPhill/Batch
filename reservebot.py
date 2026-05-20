@@ -144,6 +144,11 @@ g_interest_edit_code  = ""
 g_interest_edit_name  = ""
 g_interest_edit_field = ""   # 수정할 필드명 (1차저항가/1차지지가/2차저항가/2차지지가/추세상한가/추세이탈가)
 
+# 코스피/코스닥 변경 상태
+g_kk_code  = ""   # '0001':코스피, '1001':코스닥
+g_kk_name  = ""
+g_kk_field = ""   # 수정할 필드명
+
 # 추적등록(손절금액) 미리보기 → 진행 콜백 공유 상태
 g_trail71_code = ""
 g_trail71_company = ""
@@ -333,7 +338,7 @@ def get_command(update, context) :
                                  "전체예약", "예약주문", "예약정정", "예약철회", 
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "손실금액계산"], callback_header="menu")
+                                 "손실금액계산", "코스피변경", "코스닥변경"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
@@ -1357,25 +1362,31 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_ie:
                 cur_ie.execute("""
-                    SELECT name 
-                    FROM public."interestItem_interest_item" 
+                    SELECT name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
+                    FROM public."interestItem_interest_item"
                     WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                 """, (ii_code,)
                 )
                 row_ie = cur_ie.fetchone()
-            ii_name = row_ie[0] if row_ie else ii_code
+            if row_ie:
+                ii_name, ii_through, ii_leave, ii_resist, ii_support, ii_trend_high, ii_trend_low = row_ie
+            else:
+                ii_name = ii_code
+                ii_through = ii_leave = ii_resist = ii_support = ii_trend_high = ii_trend_low = None
             global g_interest_edit_code, g_interest_edit_name
             g_interest_edit_code = ii_code
             g_interest_edit_name = ii_name
+            def _ifmt(v):
+                return format(int(v), ',d') if v is not None else '-'
             field_btns = [
-                InlineKeyboardButton("1차저항가",  callback_data="menu,interest_edit_field_1차저항가"),
-                InlineKeyboardButton("1차지지가",  callback_data="menu,interest_edit_field_1차지지가"),
-                InlineKeyboardButton("2차저항가",  callback_data="menu,interest_edit_field_2차저항가"),
-                InlineKeyboardButton("2차지지가",  callback_data="menu,interest_edit_field_2차지지가"),
-                InlineKeyboardButton("추세상한가", callback_data="menu,interest_edit_field_추세상한가"),
-                InlineKeyboardButton("추세이탈가", callback_data="menu,interest_edit_field_추세이탈가"),
-                InlineKeyboardButton("관심제외",   callback_data="menu,interest_edit_field_관심제외"),
-                InlineKeyboardButton("취소",       callback_data="menu,취소"),
+                InlineKeyboardButton(f"1차저항가({_ifmt(ii_through)})",   callback_data="menu,interest_edit_field_1차저항가"),
+                InlineKeyboardButton(f"1차지지가({_ifmt(ii_leave)})",     callback_data="menu,interest_edit_field_1차지지가"),
+                InlineKeyboardButton(f"2차저항가({_ifmt(ii_resist)})",    callback_data="menu,interest_edit_field_2차저항가"),
+                InlineKeyboardButton(f"2차지지가({_ifmt(ii_support)})",   callback_data="menu,interest_edit_field_2차지지가"),
+                InlineKeyboardButton(f"추세상한가({_ifmt(ii_trend_high)})", callback_data="menu,interest_edit_field_추세상한가"),
+                InlineKeyboardButton(f"추세이탈가({_ifmt(ii_trend_low)})", callback_data="menu,interest_edit_field_추세이탈가"),
+                InlineKeyboardButton("관심제외",                           callback_data="menu,interest_edit_field_관심제외"),
+                InlineKeyboardButton("취소",                               callback_data="menu,취소"),
             ]
             rows_f = [field_btns[i:i+2] for i in range(0, len(field_btns), 2)]
             query.edit_message_text(
@@ -1428,24 +1439,29 @@ def callback_get(update, context) :
             g_holding_edit_code = h_code
             g_holding_edit_name = h_name
             h_tp = None
+            h_target = h_loss = h_end_target = h_end_loss = None
             try:
                 with get_conn().cursor() as cur_tp:
                     cur_tp.execute(
-                        'SELECT trading_plan FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
+                        'SELECT trading_plan, sign_resist_price, sign_support_price, end_target_price, end_loss_price '
+                        'FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
                         (h_code,)
                     )
                     tp_row = cur_tp.fetchone()
-                    h_tp = tp_row[0] if tp_row else None
+                    if tp_row:
+                        h_tp, h_target, h_loss, h_end_target, h_end_loss = tp_row
             except Exception:
                 pass
+            def _hfmt(v):
+                return format(int(v), ',d') if v is not None else '-'
             plan_btn_text = "매매계획(투자)" if h_tp == 'i' else "매매계획(일반)"
             field_buttons = [
-                InlineKeyboardButton("이탈가",        callback_data=f"menu,holding_edit_field_이탈가"),
-                InlineKeyboardButton("최종이탈가",    callback_data=f"menu,holding_edit_field_최종이탈가"),
-                InlineKeyboardButton("목표가",        callback_data=f"menu,holding_edit_field_목표가"),
-                InlineKeyboardButton("최종목표가",    callback_data=f"menu,holding_edit_field_최종목표가"),
-                InlineKeyboardButton(plan_btn_text,   callback_data="menu,holding_plan_toggle"),
-                InlineKeyboardButton("취소",          callback_data="menu,취소"),
+                InlineKeyboardButton(f"목표가({_hfmt(h_target)})",      callback_data=f"menu,holding_edit_field_목표가"),
+                InlineKeyboardButton(f"이탈가({_hfmt(h_loss)})",        callback_data=f"menu,holding_edit_field_이탈가"),
+                InlineKeyboardButton(f"최종목표가({_hfmt(h_end_target)})", callback_data=f"menu,holding_edit_field_최종목표가"),
+                InlineKeyboardButton(f"최종이탈가({_hfmt(h_end_loss)})", callback_data=f"menu,holding_edit_field_최종이탈가"),
+                InlineKeyboardButton(plan_btn_text,                      callback_data="menu,holding_plan_toggle"),
+                InlineKeyboardButton("취소",                             callback_data="menu,취소"),
             ]
             rows = [field_buttons[i:i+2] for i in range(0, len(field_buttons), 2)]
             query.edit_message_text(
@@ -2689,6 +2705,46 @@ def callback_get(update, context) :
             print('매매추적 NXT 오류.', e)
             context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 오류 : " + str(e))
 
+    elif command in ("코스피변경", "코스닥변경"):
+        global g_kk_code, g_kk_name, g_kk_field
+        g_kk_code = '0001' if command == "코스피변경" else '1001'
+        g_kk_name = '코스피' if command == "코스피변경" else '코스닥'
+        try:
+            with get_conn().cursor() as cur_kk:
+                cur_kk.execute(
+                    'SELECT through_price, leave_price, support_price, resist_price, trend_high_price, trend_low_price '
+                    'FROM public."interestItem_interest_item" WHERE code = %s',
+                    (g_kk_code,)
+                )
+                kk_row = cur_kk.fetchone()
+            def _fmt(v):
+                return format(int(v), ',d') if v is not None else '-'
+            through_v, leave_v, support_v, resist_v, trend_high_v, trend_low_v = kk_row if kk_row else (None,)*6
+            kk_field_btns = [
+                InlineKeyboardButton(f"돌파가({_fmt(through_v)})",       callback_data="menu,kk_field_돌파가"),
+                InlineKeyboardButton(f"이탈가({_fmt(leave_v)})",         callback_data="menu,kk_field_이탈가"),
+                InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
+                InlineKeyboardButton(f"저항가({_fmt(resist_v)})",        callback_data="menu,kk_field_저항가"),
+                InlineKeyboardButton(f"추세상한가({_fmt(trend_high_v)})", callback_data="menu,kk_field_추세상한가"),
+                InlineKeyboardButton(f"추세이탈가({_fmt(trend_low_v)})", callback_data="menu,kk_field_추세이탈가"),
+                InlineKeyboardButton("취소",                              callback_data="menu,취소"),
+            ]
+            rows_kk = [kk_field_btns[i:i+2] for i in range(0, len(kk_field_btns), 2)]
+            query.edit_message_text(
+                text=f"[{g_kk_name}({g_kk_code})] 변경할 항목을 선택하세요:",
+                reply_markup=InlineKeyboardMarkup(rows_kk)
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[{g_kk_name} 변경] 오류: {str(e)}")
+
+    elif command.startswith("kk_field_"):
+        global g_kk_field
+        g_kk_field = command[len("kk_field_"):]
+        menuNum = '06'
+        query.edit_message_text(
+            text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} 값을 입력하세요. (숫자만 입력)"
+        )
+
     elif command == "손실금액계산":
         menuNum = "91"
 
@@ -3096,6 +3152,49 @@ def echo(update, context):
             except Exception: pass
             context.bot.send_message(chat_id=user_id,
                 text=f"[{g_interest_edit_name}] {g_interest_edit_field} 업데이트 오류: {str(e)}")
+        return
+
+    # 코스피/코스닥 필드값 변경 — 숫자만 입력
+    if menuNum == '06':
+        initMenuNum()
+        global g_kk_code, g_kk_name, g_kk_field
+        kk_field_col_map = {
+            "돌파가":    "through_price",
+            "이탈가":    "leave_price",
+            "지지가":    "support_price",
+            "저항가":    "resist_price",
+            "추세상한가": "trend_high_price",
+            "추세이탈가": "trend_low_price",
+        }
+        col06 = kk_field_col_map.get(g_kk_field)
+        if not col06:
+            context.bot.send_message(chat_id=user_id, text="변경할 항목이 선택되지 않았습니다.")
+            return
+        if not user_text.strip().lstrip('-').isdecimal():
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field}: 숫자만 입력하세요.")
+            return
+        new_val06 = int(user_text.strip())
+        try:
+            c06 = get_conn()
+            with c06.cursor() as cur06:
+                cur06.execute(
+                    f'UPDATE public."interestItem_interest_item" '
+                    f'SET last_chg_date = now(), {col06} = %s '
+                    f"WHERE code = %s",
+                    (new_val06, g_kk_code)
+                )
+                updated06 = cur06.rowcount
+            c06.commit()
+            context.bot.send_message(
+                chat_id=user_id,
+                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} → {format(new_val06, ',d')}원 ({updated06}건 업데이트)"
+            )
+        except Exception as e:
+            try: get_conn().rollback()
+            except Exception: pass
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
         return
 
     # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 가격 조회 → 2단계 확인
