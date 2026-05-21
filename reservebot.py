@@ -298,7 +298,6 @@ def _show_holding_edit_keyboard(query, context_bot=None):
             h_name = c['prdt_name'][i]
             if int(c['hldg_qty'][i]) > 0:
                 edit_buttons.append(InlineKeyboardButton(f"{h_name}({h_code})", callback_data=f"menu,holding_edit_{h_code}"))
-        edit_buttons.append(InlineKeyboardButton("뒤로가기", callback_data="menu,holding_back"))
         rows = [edit_buttons[i:i+2] for i in range(0, len(edit_buttons), 2)]
         query.edit_message_text(text="수정할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rows))
     except Exception as e:
@@ -322,7 +321,6 @@ def _show_interest_edit_keyboard(query):
             for r in rows
         ]
         ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
-        ii_buttons.append(InlineKeyboardButton("뒤로가기",  callback_data="menu,interest_edit_back"))
         rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
         query.edit_message_text(text="변경할 관심종목을 선택하거나 신규 등록하세요:", reply_markup=InlineKeyboardMarkup(rows_kb))
     except Exception as e:
@@ -1396,7 +1394,7 @@ def callback_get(update, context) :
                 InlineKeyboardButton(f"추세상한가({_ifmt(ii_trend_high)})", callback_data="menu,interest_edit_field_추세상한가"),
                 InlineKeyboardButton(f"추세이탈가({_ifmt(ii_trend_low)})", callback_data="menu,interest_edit_field_추세이탈가"),
                 InlineKeyboardButton("관심제외",                           callback_data="menu,interest_edit_field_관심제외"),
-                InlineKeyboardButton("취소",                               callback_data="menu,취소"),
+                InlineKeyboardButton("뒤로가기",                           callback_data="menu,interest_edit_back"),
             ]
             rows_f = [field_btns[i:i+2] for i in range(0, len(field_btns), 2)]
             query.edit_message_text(
@@ -1415,7 +1413,7 @@ def callback_get(update, context) :
                     cur_exc.execute(
                         """UPDATE public."interestItem_interest_item"
                            SET proc_yn = 'N'
-                           WHERE code = %s AND proc_yn = 'Y'""",
+                           WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE)""",
                         (g_interest_edit_code,)
                     )
                 get_conn().commit()
@@ -1493,7 +1491,7 @@ def callback_get(update, context) :
                 InlineKeyboardButton(f"최종목표가({_hfmt(h_end_target)})", callback_data=f"menu,holding_edit_field_최종목표가"),
                 InlineKeyboardButton(f"최종이탈가({_hfmt(h_end_loss)})", callback_data=f"menu,holding_edit_field_최종이탈가"),
                 InlineKeyboardButton(plan_btn_text,                      callback_data="menu,holding_plan_toggle"),
-                InlineKeyboardButton("취소",                             callback_data="menu,취소"),
+                InlineKeyboardButton("뒤로가기",                         callback_data="menu,holding_back"),
             ]
             rows = [field_buttons[i:i+2] for i in range(0, len(field_buttons), 2)]
             query.edit_message_text(
