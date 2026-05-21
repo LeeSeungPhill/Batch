@@ -144,6 +144,10 @@ g_interest_edit_code  = ""
 g_interest_edit_name  = ""
 g_interest_edit_field = ""   # 수정할 필드명 (1차저항가/1차지지가/2차저항가/2차지지가/추세상한가/추세이탈가)
 
+# 추적상태 재개/멈춤 버튼 선택 상태
+g_trail_state_code = ""
+g_trail_state_name = ""
+
 # 코스피/코스닥 변경 상태
 g_kk_code  = ""   # '0001':코스피, '1001':코스닥
 g_kk_name  = ""
@@ -278,6 +282,52 @@ def build_date_buttons3(days=7):
         cnt += 1
 
     return InlineKeyboardMarkup(build_menu(buttons, 2))
+
+def _show_holding_edit_keyboard(query, context_bot=None):
+    """보유종목 수정 종목 선택 키보드 표시 (보유종목_수정 / 뒤로가기 공용)"""
+    ac = account()
+    try:
+        query.edit_message_text(text="[보유종목 수정] 조회 중...")
+        c = stock_balance(ac['access_token'], ac['app_key'], ac['app_secret'], ac['acct_no'], "")
+        if len(c.index) == 0:
+            query.edit_message_text(text="보유종목이 없습니다.")
+            return
+        edit_buttons = []
+        for i, _ in enumerate(c.index):
+            h_code = c['pdno'][i]
+            h_name = c['prdt_name'][i]
+            if int(c['hldg_qty'][i]) > 0:
+                edit_buttons.append(InlineKeyboardButton(f"{h_name}({h_code})", callback_data=f"menu,holding_edit_{h_code}"))
+        edit_buttons.append(InlineKeyboardButton("뒤로가기", callback_data="menu,holding_back"))
+        rows = [edit_buttons[i:i+2] for i in range(0, len(edit_buttons), 2)]
+        query.edit_message_text(text="수정할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rows))
+    except Exception as e:
+        query.edit_message_text(text=f"[보유종목 수정] 오류: {str(e)}")
+
+
+def _show_interest_edit_keyboard(query):
+    """관심종목 변경 종목 선택 키보드 표시 (관심종목_변경 / 뒤로가기 공용)"""
+    try:
+        query.edit_message_text(text="[관심종목 변경] 조회 중...")
+        with get_conn().cursor() as cur_ii:
+            cur_ii.execute("""
+                SELECT name, code
+                FROM public."interestItem_interest_item"
+                WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                ORDER BY name
+            """)
+            rows = cur_ii.fetchall()
+        ii_buttons = [
+            InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
+            for r in rows
+        ]
+        ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
+        ii_buttons.append(InlineKeyboardButton("뒤로가기",  callback_data="menu,interest_edit_back"))
+        rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
+        query.edit_message_text(text="변경할 관심종목을 선택하거나 신규 등록하세요:", reply_markup=InlineKeyboardMarkup(rows_kb))
+    except Exception as e:
+        query.edit_message_text(text=f"[관심종목 변경] 오류: {str(e)}")
+
 
 def build_date_buttons4(days=7):
     today = datetime.now().date()
@@ -632,6 +682,8 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
+    if not ar.isOK():
+        raise Exception(f"[{ar.getBody().msg_cd}] {ar.getBody().msg1}")
     return ar.getBody().output
 
 # 일별주문체결 조회
@@ -726,6 +778,8 @@ def order_reserve(access_token, app_key, app_secret, acct_no, code, ord_qty, ord
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
     #ar.printAll()
+    if not ar.isOK():
+        raise Exception(f"{ar.getErrorCode()} {ar.getErrorMessage()}")
     return ar.getBody().output
 
 # 주식예약주문정정취소 : 15시 40분 ~ 다음 영업일 07시 30분까지 가능(23시 40분 ~ 0시 10분까지 서버초기화 작업시간 불가)
@@ -897,7 +951,7 @@ def _do_interest_register(chat_id, context, pending):
                     (acct_no, code, name, through_price, leave_price, resist_price, support_price,
                      trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
-                ON CONFLICT (code, interest_day, proc_yn) DO UPDATE SET
+                ON CONFLICT (acct_no, code, interest_day, proc_yn) DO UPDATE SET
                     name             = EXCLUDED.name,
                     through_price    = EXCLUDED.through_price,
                     leave_price      = EXCLUDED.leave_price,
@@ -1192,28 +1246,8 @@ def callback_get(update, context) :
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
 
-    elif command == "보유종목_수정":
-        ac = account()
-        try:
-            query.edit_message_text(text="[보유종목 수정] 조회 중...")
-            c = stock_balance(ac['access_token'], ac['app_key'], ac['app_secret'], ac['acct_no'], "")
-            if len(c.index) == 0:
-                query.edit_message_text(text="보유종목이 없습니다.")
-            else:
-                global g_holding_edit_code, g_holding_edit_name
-                edit_buttons = []
-                for i, _ in enumerate(c.index):
-                    h_code = c['pdno'][i]
-                    h_name = c['prdt_name'][i]
-                    if int(c['hldg_qty'][i]) > 0:
-                        edit_buttons.append(
-                            InlineKeyboardButton(f"{h_name}({h_code})", callback_data=f"menu,holding_edit_{h_code}")
-                        )
-                edit_buttons.append(InlineKeyboardButton("취소", callback_data="menu,취소"))
-                rows = [edit_buttons[i:i+2] for i in range(0, len(edit_buttons), 2)]
-                query.edit_message_text(text="수정할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rows))
-        except Exception as e:
-            query.edit_message_text(text=f"[보유종목 수정] 오류: {str(e)}")
+    elif command in ("보유종목_수정", "holding_back"):
+        _show_holding_edit_keyboard(query)
 
     elif command == "관심종목_조회":
         ac = account()
@@ -1330,32 +1364,8 @@ def callback_get(update, context) :
                 text=f"[관심종목 삭제] 오류: {str(e)}"
             )
 
-    elif command == "관심종목_변경":
-        ac = account()
-        acct_no = ac['acct_no']
-        try:
-            query.edit_message_text(text="[관심종목 변경] 조회 중...")
-            with get_conn().cursor() as cur_ii:
-                cur_ii.execute("""
-                    SELECT name, code
-                    FROM public."interestItem_interest_item"
-                    WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
-                    ORDER BY name
-                """)
-                rows = cur_ii.fetchall()
-            ii_buttons = [
-                InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
-                for r in rows
-            ]
-            ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
-            ii_buttons.append(InlineKeyboardButton("취소",      callback_data="menu,취소"))
-            rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
-            query.edit_message_text(
-                text="변경할 관심종목을 선택하거나 신규 등록하세요:",
-                reply_markup=InlineKeyboardMarkup(rows_kb)
-            )
-        except Exception as e:
-            query.edit_message_text(text=f"[관심종목 변경] 오류: {str(e)}")
+    elif command in ("관심종목_변경", "interest_edit_back"):
+        _show_interest_edit_keyboard(query)
 
     elif command.startswith("interest_edit_") and not command.startswith("interest_edit_field_"):
         ii_code = command[len("interest_edit_"):]
@@ -1418,6 +1428,27 @@ def callback_get(update, context) :
                 )
         else:
             menuNum = '04'
+            try:
+                current_markup = query.message.reply_markup
+                remaining = [
+                    btn
+                    for row in current_markup.inline_keyboard
+                    for btn in row
+                    if btn.callback_data != data_selected
+                ]
+                if remaining:
+                    context.bot.edit_message_reply_markup(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id,
+                        reply_markup=InlineKeyboardMarkup([remaining[i:i+2] for i in range(0, len(remaining), 2)])
+                    )
+                else:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+            except Exception:
+                pass
             context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field} 값을 입력하세요. (숫자만 입력)"
@@ -1477,6 +1508,27 @@ def callback_get(update, context) :
         field = command[len("holding_edit_field_"):]
         g_holding_edit_field = field
         menuNum = '02'
+        try:
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != data_selected
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup([remaining[i:i+2] for i in range(0, len(remaining), 2)])
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+        except Exception:
+            pass
         context.bot.send_message(
             chat_id=query.message.chat_id,
             text=f"[{g_holding_edit_name}({g_holding_edit_code})] {field} 값을 입력하세요. (숫자만 입력)"
@@ -2377,18 +2429,52 @@ def callback_get(update, context) :
                                         reply_markup=show_markup)
 
     elif command == "재개" and "추적상태" in data_selected:
-        menuNum = "41"
+        try:
+            with get_conn().cursor() as cur_rs:
+                cur_rs.execute("""
+                    SELECT DISTINCT code, name FROM trading_trail
+                    WHERE trail_tp IN ('P', 'C', 'U')
+                    AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    ORDER BY name
+                """)
+                resume_rows = cur_rs.fetchall()
+            if resume_rows:
+                rs_buttons = [
+                    InlineKeyboardButton(name, callback_data=f"trail_resume_{code}")
+                    for code, name in resume_rows
+                ]
+                query.edit_message_text(
+                    text="재개할 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(rs_buttons, 2))
+                )
+            else:
+                query.edit_message_text(text="재개할 종목이 없습니다.")
+        except Exception as e:
+            query.edit_message_text(text=f"[추적재개] 오류: {str(e)}")
 
-        context.bot.edit_message_text(text="재개 종목코드(종목명), 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2)를 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
-        
     elif command == "멈춤" and "추적상태" in data_selected:
-        menuNum = "42"
-
-        context.bot.edit_message_text(text="멈춤 종목코드(종목명)를 입력하세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id)
+        try:
+            with get_conn().cursor() as cur_st:
+                cur_st.execute("""
+                    SELECT DISTINCT code, name FROM trading_trail
+                    WHERE trail_tp IN ('1', '2', 'L')
+                    AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    ORDER BY name
+                """)
+                stop_rows = cur_st.fetchall()
+            if stop_rows:
+                st_buttons = [
+                    InlineKeyboardButton(name, callback_data=f"trail_stop_{code}")
+                    for code, name in stop_rows
+                ]
+                query.edit_message_text(
+                    text="멈출 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(st_buttons, 2))
+                )
+            else:
+                query.edit_message_text(text="멈출 종목이 없습니다.")
+        except Exception as e:
+            query.edit_message_text(text=f"[추적멈춤] 오류: {str(e)}")
 
     elif command == "매매추적":
         query.edit_message_text(
@@ -2706,6 +2792,101 @@ def callback_get(update, context) :
         except Exception as e:
             print('매매추적 NXT 오류.', e)
             context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 오류 : " + str(e))
+
+    elif command.startswith("trail_resume_"):
+        ts_code = command[len("trail_resume_"):]
+        try:
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+        except Exception:
+            pass
+        try:
+            with get_conn().cursor() as cur_rn:
+                cur_rn.execute(
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    (ts_code,)
+                )
+                rn_row = cur_rn.fetchone()
+            ts_name = rn_row[0] if rn_row else ts_code
+        except Exception:
+            ts_name = ts_code
+        global g_trail_state_code, g_trail_state_name
+        g_trail_state_code = ts_code
+        g_trail_state_name = ts_name
+        menuNum = '41B'
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"[{ts_name}({ts_code})] 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2)를 입력하세요."
+        )
+
+    elif command.startswith("trail_stop_"):
+        ts_code = command[len("trail_stop_"):]
+        try:
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+        except Exception:
+            pass
+        try:
+            c_sp = get_conn()
+            with c_sp.cursor() as cur_sn:
+                cur_sn.execute(
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    (ts_code,)
+                )
+                sn_row = cur_sn.fetchone()
+            ts_name = sn_row[0] if sn_row else ts_code
+            with c_sp.cursor() as cur_sp:
+                cur_sp.execute("""
+                    UPDATE trading_trail SET trail_tp = 'P', mod_dt = now()
+                    WHERE code = %s
+                    AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND trail_tp IN ('1', '2', 'L')
+                """, (ts_code,))
+                updated_sp = cur_sp.rowcount
+            c_sp.commit()
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[{ts_name}({ts_code})] 추적멈춤 처리 ({updated_sp}건)"
+            )
+        except Exception as e:
+            try: get_conn().rollback()
+            except Exception: pass
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적멈춤] 오류: {str(e)}"
+            )
 
     elif command in ("코스피변경", "코스닥변경"):
         global g_kk_code, g_kk_name, g_kk_field
@@ -3198,6 +3379,73 @@ def echo(update, context):
             except Exception: pass
             context.bot.send_message(chat_id=user_id,
                 text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
+        return
+
+    # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 추적상태만 입력
+    if menuNum == '41B':
+        initMenuNum()
+        global g_trail_state_code, g_trail_state_name
+        ts_code = g_trail_state_code
+        ts_name = g_trail_state_name
+        parts41B = user_text.strip().split(',')
+        if (len(parts41B) < 3
+                or not parts41B[0].strip().isdecimal()
+                or not parts41B[1].strip().isdecimal()
+                or parts41B[2].strip() not in ('L', '1', '2')):
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{ts_name}] 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 형식이 올바르지 않습니다.")
+            return
+        try:
+            ac_41b = account()
+            ap_41b = inquire_price(ac_41b['access_token'], ac_41b['app_key'], ac_41b['app_secret'], ts_code)
+            stck_lwpr_41b = int(ap_41b['stck_lwpr'])
+            stck_hgpr_41b = int(ap_41b['stck_hgpr'])
+            c_41b = stock_balance(ac_41b['access_token'], ac_41b['app_key'], ac_41b['app_secret'], ac_41b['acct_no'], "")
+            hold_price_41b = 0
+            hldg_qty_41b = 0
+            hold_amt_41b = 0
+            for i in range(len(c_41b)):
+                if c_41b['pdno'][i] == ts_code:
+                    hold_price_41b = float(c_41b['pchs_avg_pric'][i])
+                    hldg_qty_41b = int(c_41b['hldg_qty'][i])
+                    hold_amt_41b = int(c_41b['pchs_amt'][i])
+            stop_price_41b = stck_lwpr_41b if int(parts41B[0].strip()) == 0 else int(parts41B[0].strip())
+            target_price_41b = stck_hgpr_41b if int(parts41B[1].strip()) == 0 else int(parts41B[1].strip())
+            trail_tp_41b = parts41B[2].strip()
+            c41b = get_conn()
+            with c41b.cursor() as cur_41b:
+                cur_41b.execute("""
+                    UPDATE trading_trail SET
+                        trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s,
+                        proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
+                        trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
+                        trail_qty = NULL, trail_amt = NULL, volumn = NULL
+                    WHERE code = %s
+                    AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND trail_tp IN ('C', 'U', 'P')
+                    RETURNING 1
+                """, (
+                    datetime.now().strftime('%H%M%S'), trail_tp_41b,
+                    stop_price_41b, target_price_41b,
+                    datetime.now().strftime('%H%M%S'), datetime.now(),
+                    int(hold_price_41b), hldg_qty_41b, hold_amt_41b,
+                    ts_code
+                ))
+                was_updated_41b = cur_41b.fetchone() is not None
+            c41b.commit()
+            if was_updated_41b:
+                context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"[{ts_name}(<code>{ts_code}</code>)] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 처리",
+                    parse_mode='HTML'
+                )
+            else:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"[{ts_name}({ts_code})] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 미처리")
+        except Exception as e:
+            try: get_conn().rollback()
+            except Exception: pass
+            context.bot.send_message(chat_id=user_id, text=f"[추적재개] 오류: {str(e)}")
         return
 
     # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 가격 조회 → 2단계 확인
