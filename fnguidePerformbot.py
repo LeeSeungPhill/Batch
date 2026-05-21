@@ -424,27 +424,38 @@ def echo(update, context):
 def _do_interest_register(chat_id, context, pending):
     try:
         c_reg = get_conn()
+        now = datetime.now()
+        interest_day = now.strftime('%Y%m%d')
+        interest_dtm = now.strftime('%H%M%S')
         with c_reg.cursor() as cur_reg:
             cur_reg.execute("""
-                INSERT INTO public."interestItem_interest_item"
-                    (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                     trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
-                ON CONFLICT (acct_no, code, interest_day, proc_yn) DO UPDATE SET
-                    name             = EXCLUDED.name,
-                    through_price    = EXCLUDED.through_price,
-                    leave_price      = EXCLUDED.leave_price,
-                    resist_price     = EXCLUDED.resist_price,
-                    support_price    = EXCLUDED.support_price,
-                    trend_high_price = EXCLUDED.trend_high_price,
-                    trend_low_price  = EXCLUDED.trend_low_price,
-                    last_chg_date    = EXCLUDED.last_chg_date
-            """, (pending['acct_reg'], pending['code'], pending['name'],
+                UPDATE public."interestItem_interest_item"
+                SET name             = %s,
+                    through_price    = %s,
+                    leave_price      = %s,
+                    resist_price     = %s,
+                    support_price    = %s,
+                    trend_high_price = %s,
+                    trend_low_price  = %s,
+                    last_chg_date    = %s
+                WHERE acct_no = %s AND code = %s AND interest_day = %s AND proc_yn = 'Y'
+            """, (pending['name'],
                   pending['through_price'], pending['leave_price'],
                   pending['d20_high'], pending['d20_low'],
                   pending['y1_high'], pending['y1_low'],
-                  datetime.now().strftime('%Y%m%d'), datetime.now().strftime('%H%M%S'),
-                  datetime.now()))
+                  now,
+                  pending['acct_reg'], pending['code'], interest_day))
+            if cur_reg.rowcount == 0:
+                cur_reg.execute("""
+                    INSERT INTO public."interestItem_interest_item"
+                        (acct_no, code, name, through_price, leave_price, resist_price, support_price,
+                         trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                """, (pending['acct_reg'], pending['code'], pending['name'],
+                      pending['through_price'], pending['leave_price'],
+                      pending['d20_high'], pending['d20_low'],
+                      pending['y1_high'], pending['y1_low'],
+                      interest_day, interest_dtm, now))
         c_reg.commit()
         context.bot.send_message(
             chat_id=chat_id,
