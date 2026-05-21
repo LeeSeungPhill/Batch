@@ -478,9 +478,9 @@ def fundTrail_proc(acct_no, conn):
 
         # 자산정보 변경
         cur400 = conn.cursor()
-        update_query100 = "update \"stockFundMng_stock_fund_mng\" set cash_rate = %s, cash_rate_amt = %s, sell_plan_amt = %s, buy_plan_amt = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
+        update_query100 = "update \"stockFundMng_stock_fund_mng\" set cash_rate = %s, cash_rate_amt = %s, sell_plan_amt = %s, buy_plan_amt = %s,  kospi_signal = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
         # update 인자값 설정
-        record_to_update100 = ([cash_rate, cash_rate_amt, sell_plan_amt, buy_plan_amt, datetime.now(), asset_num, acct_no])
+        record_to_update100 = ([cash_rate, cash_rate_amt, sell_plan_amt, buy_plan_amt, trail_signal_result1, datetime.now(), asset_num, acct_no])
         # DB 연결된 커서의 쿼리 수행
         cur400.execute(update_query100, record_to_update100)
         conn.commit()
@@ -534,9 +534,9 @@ def fundTrail_proc(acct_no, conn):
 
         # 자산정보 변경
         cur600 = conn.cursor()
-        update_query200 = "update \"stockFundMng_stock_fund_mng\" set market_ratio = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
+        update_query200 = "update \"stockFundMng_stock_fund_mng\" set market_ratio = %s, kosdak_signal = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
         # update 인자값 설정
-        record_to_update200 = ([market_ratio, datetime.now(), asset_num, acct_no])
+        record_to_update200 = ([market_ratio, trail_signal_result2, datetime.now(), asset_num, acct_no])
         # DB 연결된 커서의 쿼리 수행
         cur600.execute(update_query200, record_to_update200)
         conn.commit()
@@ -551,9 +551,9 @@ def fundTrail_proc(acct_no, conn):
 
             if int(new_asset_num) != asset_num:
 
-                # 자산정보 생성
+                # 자산정보 이력 생성
                 cur601 = conn.cursor()
-                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_signal, kosdak_signal) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_signal, kosdak_signal from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert001 = ([acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
@@ -561,9 +561,9 @@ def fundTrail_proc(acct_no, conn):
                 conn.commit()
                 cur601.close()
 
-                # 자산정보 이력 생성
+                # 자산정보 생성
                 cur602 = conn.cursor()
-                insert_query002 = "insert into \"stockFundMng_stock_fund_mng\"(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select %s, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query002 = "insert into \"stockFundMng_stock_fund_mng\"(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_signal, kosdak_signal) select %s, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_signal, kosdak_signal from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert002 = ([int(new_asset_num), acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
@@ -614,7 +614,7 @@ def process_account(nick):
                   FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) B,
                  (SELECT acct_no, risk_rate, item_number FROM "stockMarketMng_stock_market_mng"
                   WHERE acct_no = %s AND aply_end_dt = '99991231') C
-            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1 AND A.interest_day = TO_CHAR(now(), 'YYYYMMDD')
+            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1 AND A.interest_day = TO_CHAR(now(), 'YYYYMMDD') AND A.proc_yn = 'Y'
         """, (str(acct_no), str(acct_no), str(acct_no)))
         result_three = cur03.fetchall()
         cur03.close()
