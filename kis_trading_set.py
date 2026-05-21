@@ -173,15 +173,29 @@ for nick in nickname_list:
             cur_iday = conn.cursor()
             cur_iday.execute("""
                 UPDATE public."interestItem_interest_item"
-                SET interest_day = %s
+                SET interest_day = %s, interest_dtm = %s
                 WHERE acct_no = %s AND proc_yn = 'Y' AND length(code) > 4
                   AND interest_day >= %s
-            """, (today, str(acct_no), prev_date))
+            """, (today, datetime.now().strftime('%H%M%S'), str(acct_no), prev_date))
             conn.commit()
             print(f"[{nick}] 관심종목 interest_day 갱신: {cur_iday.rowcount}건")
             cur_iday.close()
         except Exception as e_iday:
             print(f"[{nick}] 관심종목 interest_day 갱신 오류: {e_iday}")
+
+        # 코스피 코스닥 대상 interest_day 갱신(오늘 날짜로 갱신)
+        try:
+            cur_iday2 = conn.cursor()
+            cur_iday2.execute("""
+                UPDATE public."interestItem_interest_item"
+                SET interest_day = %s, interest_dtm = %s
+                WHERE acct_no = %s AND proc_yn = 'Y' AND code IN ('0001', '1001')
+            """, (today, datetime.now().strftime('%H%M%S'), str(acct_no)))
+            conn.commit()
+            print(f"[{nick}] 코스피 코스닥 interest_day 갱신: {cur_iday2.rowcount}건")
+            cur_iday2.close()
+        except Exception as e_iday2:
+            print(f"[{nick}] 코스피 코스닥 interest_day 갱신 오류: {e_iday2}")
 
         # 계좌잔고 조회
         c = stock_balance(access_token, app_key, app_secret, acct_no, "")
