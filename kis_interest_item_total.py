@@ -235,6 +235,45 @@ def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
 
     return candle_list
 
+def compute_market_ratio(
+    kospi_short, kospi_mid, kospi_long,
+    kosdak_short, kosdak_mid, kosdak_long,
+):
+    """6개 timeframe 신호를 종합한 시장 승률 (0~100)"""
+    rules = [
+        (kospi_short,  '01', '02', 5),
+        (kospi_mid,    '03', '04', 8),
+        (kospi_long,   '05', '06', 12),
+        (kosdak_short, '01', '02', 5),
+        (kosdak_mid,   '03', '04', 8),
+        (kosdak_long,  '05', '06', 12),
+    ]
+    score = 0
+    for signal, bull, bear, weight in rules:
+        if signal == bull:
+            score += weight
+        elif signal == bear:
+            score -= weight
+    return max(0, min(100, 50 + score))
+
+
+def fetch_market_state(conn, asset_num, acct_no):
+    """현재 DB에 저장된 6개 시간프레임 신호 조회"""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT kospi_short, kospi_mid, kospi_long,
+               kosdak_short, kosdak_mid, kosdak_long
+          FROM "stockFundMng_stock_fund_mng"
+         WHERE asset_num = %s AND acct_no = %s
+    """, (asset_num, acct_no))
+    row = cur.fetchone()
+    cur.close()
+    return dict(zip(
+        ('kospi_short','kospi_mid','kospi_long',
+         'kosdak_short','kosdak_mid','kosdak_long'),
+        row if row else (None,) * 6
+    ))
+
 # 자산정보 및 시장레벨정보 처리
 def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no, conn):
     # 계좌잔고 조회
@@ -406,139 +445,160 @@ def fundTrail_proc(acct_no, conn):
     conn.commit()
     cur200.close()
 
-    # 추적신호 조회(코스피) : 추적신호코드별 총평가금액 기준 현금비중금액 설정, 매도예정자금 설정(총평가금액 기준 현금비중금액 - 가수도정산금액), 매수예정자금 설정(가수도정산금액 - 총평가금액 기준 현금비중금액)
+    # 추적신호 조회(코스피) : 현금비중·예정자금·시장승률 설정
     cur300 = conn.cursor()
     cur300.execute("""
         SELECT trail_signal_code, tot_evlu_amt, prvs_rcdl_excc_amt, asset_num
         FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
-                     A.trail_signal_code, B.tot_evlu_amt, B.prvs_rcdl_excc_amt, B.asset_num
-              FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
-              WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '0001' AND A.acct_no = %s) T
+                    A.trail_signal_code, B.tot_evlu_amt, B.prvs_rcdl_excc_amt, B.asset_num
+            FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
+            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '0001' AND A.acct_no = %s) T
         WHERE num = 1
     """, (str(acct_no),))
     result_one100 = cur300.fetchall()
     cur300.close()
 
-    kospi_ratio = ""
-
     for i in result_one100:
-
         trail_signal_result1 = i[0]
-        tot_evlu_amt = i[1]
-        prvs_rcdl_excc_amt = i[2]
-        asset_num = i[3]
-        # print("코스피 추적 신호 : " + str(trail_signal_result1))   
-        # print("총평가금액 : " + str(tot_evlu_amt))
-        # print("가수도정산금액 : " + str(prvs_rcdl_excc_amt))
-        # print("자산번호 : " + str(asset_num))
-            
-        # 시장 신호 정보 변경 기준 현금 비율 변경
+        tot_evlu_amt         = i[1]
+        prvs_rcdl_excc_amt   = i[2]
+        asset_num            = i[3]
+
+        # ★ 루프마다 set_pairs 초기화 (이전 자산 데이터 오염 방지)
+        set_pairs = [("last_chg_date", datetime.now())]
+
         kospi_ratio = ""
         cash_rate = 0
         cash_rate_amt = 0
-        if trail_signal_result1 == '03': # 저항가 돌파
-            kospi_ratio = "H"  # 시장 상승
-            cash_rate = 30 # 전체금액의 30% 미만 현금 비중 설정
-            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)  # 총평가금액 기준 현금 비중 금액
-        elif trail_signal_result1 == '04': # 지지가 이탈
-            kospi_ratio = "D"  # 시장 하락
-            cash_rate = 70 # 전체금액의 70% 이상 현금 비중 설정
-            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)  # 총평가금액 기준 현금 비중 금액
-        elif trail_signal_result1 == '05': # 추세상단가 돌파
-            kospi_ratio = "H"  # 시장 상승
-            cash_rate = 10 # 전체금액의 10% 미만 현금 비중 설정
-            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)  # 총평가금액 기준 현금 비중 금액
-        elif trail_signal_result1 == '06': # 추세하단가 이탈
-            kospi_ratio = "D"  # 시장 하락
-            cash_rate = 90 # 전체금액의 90% 이상 현금 비중 설정
-            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)  # 총평가금액 기준 현금 비중 금액
-        elif trail_signal_result1 == '01': # 돌파가 돌파
-            kospi_ratio = "H"  # 시장 상승
-            remain_cash_rate = 30 # 남은 현금기준 비중 30% 미만 현금 비중 설정
-            cash_rate_amt = round(prvs_rcdl_excc_amt * remain_cash_rate * 0.01, 0)  # 가수도정산금액 기준 현금 비중 금액
-            cash_rate = 100 - (tot_evlu_amt/(tot_evlu_amt + prvs_rcdl_excc_amt - cash_rate_amt)) * 100
-        elif trail_signal_result1 == '02': # 이탈가 이탈
-            kospi_ratio = "D"  # 시장 하락
-            remain_cash_rate = 70 # 남은 현금기준 비중 70% 이상 현금 비중 설정
-            cash_rate_amt = round(prvs_rcdl_excc_amt * remain_cash_rate * 0.01, 0)  # 가수도정산금액 기준 현금 비중 금액
+
+        if trail_signal_result1 == '03':       # 저항가 돌파
+            kospi_ratio = "MH"
+            set_pairs.append(("kospi_mid", trail_signal_result1))
+            cash_rate = 30
+            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)
+        elif trail_signal_result1 == '04':     # 지지가 이탈
+            kospi_ratio = "MD"
+            set_pairs.append(("kospi_mid", trail_signal_result1))
+            cash_rate = 70
+            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)
+        elif trail_signal_result1 == '05':     # 추세상단가 돌파
+            kospi_ratio = "LH"
+            set_pairs.append(("kospi_long", trail_signal_result1))
+            cash_rate = 10
+            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)
+        elif trail_signal_result1 == '06':     # 추세하단가 이탈
+            kospi_ratio = "LD"
+            set_pairs.append(("kospi_long", trail_signal_result1))
+            cash_rate = 90
+            cash_rate_amt = round(tot_evlu_amt * cash_rate * 0.01, 0)
+        elif trail_signal_result1 == '01':     # 돌파가 돌파
+            kospi_ratio = "SH"
+            set_pairs.append(("kospi_short", trail_signal_result1))
+            remain_cash_rate = 30
+            cash_rate_amt = round(prvs_rcdl_excc_amt * remain_cash_rate * 0.01, 0)
+            cash_rate = 100 - (tot_evlu_amt / (tot_evlu_amt + prvs_rcdl_excc_amt - cash_rate_amt)) * 100
+        elif trail_signal_result1 == '02':     # 이탈가 이탈
+            kospi_ratio = "SD"
+            set_pairs.append(("kospi_short", trail_signal_result1))
+            remain_cash_rate = 70
+            cash_rate_amt = round(prvs_rcdl_excc_amt * remain_cash_rate * 0.01, 0)
             cash_rate = 100 - (tot_evlu_amt / (tot_evlu_amt + prvs_rcdl_excc_amt - cash_rate_amt)) * 100
 
-        # print("현금비중 : " + format(int(cash_rate), ',d'))
-        # print("현금비중금액 : " + format(int(cash_rate_amt), ',d'))
-        sell_plan_amt = cash_rate_amt - prvs_rcdl_excc_amt  # 매도예정자금(총평가금액 기준 현금비중금액 - 가수도 정산금액)
-        if sell_plan_amt < 0:
-            sell_plan_amt = 0
+        sell_plan_amt = max(0, cash_rate_amt - prvs_rcdl_excc_amt)
+        buy_plan_amt  = max(0, prvs_rcdl_excc_amt - cash_rate_amt)
 
-        buy_plan_amt = prvs_rcdl_excc_amt - cash_rate_amt  # 매수예정자금(가수도 정산금액 - 총평가금액 기준 현금비중금액)
-        if buy_plan_amt < 0:
-            buy_plan_amt = 0
+        # ★ 재할당(=) 아닌 extend로 추가 (기존 kospi_* 컬럼 보존)
+        set_pairs.extend([
+            ("cash_rate",     cash_rate),
+            ("cash_rate_amt", cash_rate_amt),
+            ("sell_plan_amt", sell_plan_amt),
+            ("buy_plan_amt",  buy_plan_amt),
+        ])
 
-        # print("매도예정자금 : " + format(int(sell_plan_amt), ',d'))
-        # print("매수예정자금 : " + format(int(buy_plan_amt), ',d'))
+        # ★ market_ratio 계산 (KOSPI 변경분 반영)
+        state = fetch_market_state(conn, asset_num, acct_no)
+        for col, val in set_pairs:
+            if col in state:
+                state[col] = val
+        market_ratio = compute_market_ratio(
+            state['kospi_short'],  state['kospi_mid'],  state['kospi_long'],
+            state['kosdak_short'], state['kosdak_mid'], state['kosdak_long'],
+        )
+        set_pairs.append(("market_ratio", market_ratio))
 
         # 자산정보 변경
         cur400 = conn.cursor()
-        update_query100 = "update \"stockFundMng_stock_fund_mng\" set cash_rate = %s, cash_rate_amt = %s, sell_plan_amt = %s, buy_plan_amt = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
-        # update 인자값 설정
-        record_to_update100 = ([cash_rate, cash_rate_amt, sell_plan_amt, buy_plan_amt, datetime.now(), asset_num, acct_no])
-        # DB 연결된 커서의 쿼리 수행
-        cur400.execute(update_query100, record_to_update100)
+        set_clause = ", ".join(f'"{col}" = %s' for col, _ in set_pairs)
+        update_query100 = (
+            f'update "stockFundMng_stock_fund_mng" set {set_clause} '
+            f'where asset_num = %s and acct_no = %s'
+        )
+        params = [v for _, v in set_pairs] + [asset_num, acct_no]
+        cur400.execute(update_query100, params)
         conn.commit()
         cur400.close()
 
-    # 추적신호 조회(코스닥) : 추적신호코드별 시장 흐름 설정, 코스피, 코스닥 조합 시장승률 설정
+    # 추적신호 조회(코스닥) : 시장 흐름 + 시장 승률 갱신
     cur500 = conn.cursor()
     cur500.execute("""
         SELECT trail_signal_code, asset_num
         FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
-                     A.trail_signal_code, B.asset_num
-              FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
-              WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '1001' AND A.acct_no = %s) T
+                    A.trail_signal_code, B.asset_num
+            FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
+            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '1001' AND A.acct_no = %s) T
         WHERE num = 1
     """, (str(acct_no),))
     result_one200 = cur500.fetchall()
     cur500.close()
 
     for i in result_one200:
-
         trail_signal_result2 = i[0]
-        asset_num = i[1]
-        # print("코스닥 추적 신호 : " + str(trail_signal_result2))   
-        # print("자산번호 : " + str(asset_num))
-        kosdak_ratio = ""    
-        if trail_signal_result2 == '03':  # 저항가 돌파
-            kosdak_ratio = "H"  # 시장 상승
-        elif trail_signal_result2 == '04':  # 지지가 이탈
-            kosdak_ratio = "D"  # 시장 하락
-        elif trail_signal_result2 == '05':  # 추세상단가 돌파
-            kosdak_ratio = "H"  # 시장 상승
-        elif trail_signal_result2 == '06':  # 추세하단가 이탈
-            kosdak_ratio = "D"  # 시장 하락
-        elif trail_signal_result2 == '01':  # 돌파가 돌파
-            kosdak_ratio = "H"  # 시장 상승
-        elif trail_signal_result2 == '02':  # 이탈가 이탈
-            kosdak_ratio = "D"  # 시장 하락
+        asset_num            = i[1]
 
-        # 시장 승률정보 저장처리
-        market_ratio = 0
-        if kospi_ratio == "H" and kosdak_ratio == "H":    # 코스피 강세 & 코스닥 강세
-            market_ratio = 90
-        elif kospi_ratio == "H" and kosdak_ratio == "D":  # 코스피 강세 & 코스닥 약세
-            market_ratio = 70
-        elif kospi_ratio == "D" and kosdak_ratio == "H":  # 코스피 약세 & 코스닥 강세
-            market_ratio = 50
-        elif kospi_ratio == "D" and kosdak_ratio == "D":  # 코스피 약세 & 코스닥 약세
-            market_ratio = 30
+        # ★ 루프마다 set_pairs 초기화
+        set_pairs = [("last_chg_date", datetime.now())]
 
-        # print("시장 승률 : " + str(market_ratio))
+        kosdak_ratio = ""
+
+        if trail_signal_result2 == '03':
+            kosdak_ratio = "MH"
+            set_pairs.append(("kosdak_mid", trail_signal_result2))
+        elif trail_signal_result2 == '04':
+            kosdak_ratio = "MD"
+            set_pairs.append(("kosdak_mid", trail_signal_result2))
+        elif trail_signal_result2 == '05':
+            kosdak_ratio = "LH"
+            set_pairs.append(("kosdak_long", trail_signal_result2))
+        elif trail_signal_result2 == '06':
+            kosdak_ratio = "LD"
+            set_pairs.append(("kosdak_long", trail_signal_result2))
+        elif trail_signal_result2 == '01':
+            kosdak_ratio = "SH"
+            set_pairs.append(("kosdak_short", trail_signal_result2))
+        elif trail_signal_result2 == '02':
+            kosdak_ratio = "SD"
+            set_pairs.append(("kosdak_short", trail_signal_result2))
+
+        # ★ market_ratio 계산 (KOSDAQ 변경분 반영; KOSPI는 위에서 이미 갱신됨)
+        state = fetch_market_state(conn, asset_num, acct_no)
+        for col, val in set_pairs:
+            if col in state:
+                state[col] = val
+        market_ratio = compute_market_ratio(
+            state['kospi_short'],  state['kospi_mid'],  state['kospi_long'],
+            state['kosdak_short'], state['kosdak_mid'], state['kosdak_long'],
+        )
+        set_pairs.append(("market_ratio", market_ratio))
 
         # 자산정보 변경
         cur600 = conn.cursor()
-        update_query200 = "update \"stockFundMng_stock_fund_mng\" set market_ratio = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
-        # update 인자값 설정
-        record_to_update200 = ([market_ratio, datetime.now(), asset_num, acct_no])
-        # DB 연결된 커서의 쿼리 수행
-        cur600.execute(update_query200, record_to_update200)
+        set_clause = ", ".join(f'"{col}" = %s' for col, _ in set_pairs)
+        update_query200 = (
+            f'update "stockFundMng_stock_fund_mng" set {set_clause} '
+            f'where asset_num = %s and acct_no = %s'
+        )
+        params = [v for _, v in set_pairs] + [asset_num, acct_no]
+        cur600.execute(update_query200, params)
         conn.commit()
         cur600.close()
         
@@ -551,9 +611,9 @@ def fundTrail_proc(acct_no, conn):
 
             if int(new_asset_num) != asset_num:
 
-                # 자산정보 생성
+                # 자산정보 이력 생성
                 cur601 = conn.cursor()
-                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert001 = ([acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
@@ -561,9 +621,9 @@ def fundTrail_proc(acct_no, conn):
                 conn.commit()
                 cur601.close()
 
-                # 자산정보 이력 생성
+                # 자산정보 생성
                 cur602 = conn.cursor()
-                insert_query002 = "insert into \"stockFundMng_stock_fund_mng\"(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select %s, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query002 = "insert into \"stockFundMng_stock_fund_mng\"(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long) select %s, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert002 = ([int(new_asset_num), acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
@@ -614,7 +674,7 @@ def process_account(nick):
                   FROM "stockFundMng_stock_fund_mng" WHERE acct_no = %s) B,
                  (SELECT acct_no, risk_rate, item_number FROM "stockMarketMng_stock_market_mng"
                   WHERE acct_no = %s AND aply_end_dt = '99991231') C
-            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1 AND A.interest_day = TO_CHAR(now(), 'YYYYMMDD')
+            WHERE A.acct_no = B.acct_no AND A.acct_no = C.acct_no AND A.acct_no = %s AND B.rownum = 1 AND A.interest_day = TO_CHAR(now(), 'YYYYMMDD') AND A.proc_yn = 'Y'
         """, (str(acct_no), str(acct_no), str(acct_no)))
         result_three = cur03.fetchall()
         cur03.close()
