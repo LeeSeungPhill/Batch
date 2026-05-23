@@ -918,7 +918,7 @@ def get_previous_business_day(day):
 
     return result_one00[0][0]
 
-def show_account_selection_keyboard(query, menu_num):
+def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=None, bot=None):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
     current_acc = arguments[1] if len(arguments) > 1 else ""
     extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
@@ -938,7 +938,10 @@ def show_account_selection_keyboard(query, menu_num):
     if row:
         buttons.append(row)
     buttons.append([InlineKeyboardButton("✔ 확인", callback_data=f"acc_{menu_num}_confirm")])
-    query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
+    if send_new and bot and chat_id:
+        bot.send_message(chat_id=chat_id, text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
 
 def _do_interest_register(chat_id, context, pending):
     try:
@@ -1107,7 +1110,7 @@ def callback_get(update, context) :
             g_holding_sell_name = h_name
             g_holding_sell_price = h_price
             g_selected_accounts.clear()
-            show_account_selection_keyboard(query, "01")
+            show_account_selection_keyboard(query, "01", send_new=True, chat_id=query.message.chat_id, bot=context.bot)
         except Exception as e:
             query.edit_message_text(text=f"[보유종목 매도] 조회 오류: {str(e)}")
 
@@ -1136,11 +1139,28 @@ def callback_get(update, context) :
             context.bot.edit_message_text(text="[보유종목 조회]",
                                             chat_id=query.message.chat_id,
                                             message_id=query.message.message_id)
-            
+
             result_msgs = []
             # 계좌잔고 조회
             b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
+            # market_ratio 조회
+            market_ratio = None
+            try:
+                with get_conn().cursor() as cur_mr:
+                    cur_mr.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(acct_no),)
+                    )
+                    row_mr = cur_mr.fetchone()
+                    if row_mr:
+                        market_ratio = float(row_mr[0])
+            except Exception as mr_e:
+                print(f"market_ratio 조회 오류: {mr_e}")
+
+            u_tot_evlu_amt = 0
+            u_scts_evlu_amt = 0
+            u_prvs_rcdl_excc_amt = 0
             for i, name in enumerate(b.index):
                 u_tot_evlu_amt = int(b['tot_evlu_amt'][i])                  # 총평가금액
                 u_dnca_tot_amt = int(b['dnca_tot_amt'][i])                  # 예수금총금액
@@ -1149,8 +1169,20 @@ def callback_get(update, context) :
                 u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
                 u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
 
-                msg = f"* 총 평가금액:{format(u_tot_evlu_amt, ',d')}원, 잔고금액:{format(u_scts_evlu_amt, ',d')}원, 가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원, 전일증감:{format(u_asst_icdc_amt, ',d')}원"
+                current_ratio = (u_prvs_rcdl_excc_amt / u_tot_evlu_amt * 100) if u_tot_evlu_amt > 0 else 0.0
+                mr_str = ""
+                if market_ratio is not None:
+                    mr_str = f", market_ratio:{market_ratio:.0f}%, 현재비율:{current_ratio:.1f}%"
+                msg = f"* 총 평가금액:{format(u_tot_evlu_amt, ',d')}원, 잔고금액:{format(u_scts_evlu_amt, ',d')}원, 가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원, 전일증감:{format(u_asst_icdc_amt, ',d')}원{mr_str}"
                 result_msgs.append(msg)
+
+            # 매도 필요 비율 계산 (market_ratio > current_ratio 일 때)
+            current_ratio = (u_prvs_rcdl_excc_amt / u_tot_evlu_amt * 100) if u_tot_evlu_amt > 0 else 0.0
+            need_sell = False
+            sell_pct = 0.0
+            if market_ratio is not None and market_ratio > current_ratio and u_scts_evlu_amt > 0:
+                sell_pct = (market_ratio / 100 - current_ratio / 100) * u_tot_evlu_amt / u_scts_evlu_amt * 100
+                need_sell = True
                 
             # 계좌잔고 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
@@ -1227,11 +1259,13 @@ def callback_get(update, context) :
                         h_name = c['prdt_name'][i]
                         h_qty = int(c['hldg_qty'][i])
                         if h_qty > 0:
+                            sb = sb_map.get(h_code, (None, None, None, None, None))
+                            is_invest = sb[4] in ('i', 'h')
+                            btn_label = f"{h_name}({h_code})"
+                            if need_sell and not is_invest:
+                                btn_label += f" [매도:{sell_pct:.0f}%]"
                             hold_buttons.append(
-                                InlineKeyboardButton(
-                                    f"{h_name}({h_code})",
-                                    callback_data=f"menu,holding_{h_code}"
-                                )
+                                InlineKeyboardButton(btn_label, callback_data=f"menu,holding_{h_code}")
                             )
                     if hold_buttons:
                         hold_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
