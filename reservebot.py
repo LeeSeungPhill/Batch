@@ -1141,7 +1141,7 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)
 
             result_msgs = []
-            # 계좌잔고 조회
+            # 계좌잔고 조회 (전체 요약)
             b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
 
             # market_ratio 조회
@@ -1158,36 +1158,17 @@ def callback_get(update, context) :
             except Exception as mr_e:
                 print(f"market_ratio 조회 오류: {mr_e}")
 
-            u_tot_evlu_amt = 0
-            u_scts_evlu_amt = 0
+            # b에서 계좌 수준 값 추출 (가수도 정산금액, 전일증감은 계좌 전체 기준 유지)
             u_prvs_rcdl_excc_amt = 0
-            for i, name in enumerate(b.index):
-                u_tot_evlu_amt = int(b['tot_evlu_amt'][i])                  # 총평가금액
-                u_dnca_tot_amt = int(b['dnca_tot_amt'][i])                  # 예수금총금액
-                u_nass_amt = int(b['nass_amt'][i])                          # 순자산금액(세금비용 제외)
-                u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])      # 가수도 정산 금액
-                u_scts_evlu_amt = int(b['scts_evlu_amt'][i])                # 유저 평가 금액
-                u_asst_icdc_amt = int(b['asst_icdc_amt'][i])                # 자산 증감액
+            u_asst_icdc_amt = 0
+            for i, _ in enumerate(b.index):
+                u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])
+                u_asst_icdc_amt = int(b['asst_icdc_amt'][i])
 
-                current_ratio = (u_prvs_rcdl_excc_amt / u_tot_evlu_amt * 100) if u_tot_evlu_amt > 0 else 0.0
-                mr_str = ""
-                if market_ratio is not None:
-                    mr_str = f", market_ratio:{market_ratio:.0f}%, 현재비율:{current_ratio:.1f}%"
-                msg = f"* 총 평가금액:{format(u_tot_evlu_amt, ',d')}원, 잔고금액:{format(u_scts_evlu_amt, ',d')}원, 가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원, 전일증감:{format(u_asst_icdc_amt, ',d')}원{mr_str}"
-                result_msgs.append(msg)
-
-            # 매도 필요 비율 계산 (market_ratio > current_ratio 일 때)
-            current_ratio = (u_prvs_rcdl_excc_amt / u_tot_evlu_amt * 100) if u_tot_evlu_amt > 0 else 0.0
-            need_sell = False
-            sell_pct = 0.0
-            if market_ratio is not None and market_ratio > current_ratio and u_scts_evlu_amt > 0:
-                sell_pct = (market_ratio / 100 - current_ratio / 100) * u_tot_evlu_amt / u_scts_evlu_amt * 100
-                need_sell = True
-                
-            # 계좌잔고 조회
+            # 개별 종목 조회
             c = stock_balance(access_token, app_key, app_secret, acct_no, "")
 
-            # stockBalance_stock_balance 신호가 조회 (code → 목표가/이탈가/최종목표가/최종이탈가)
+            # stockBalance_stock_balance 신호가 조회 (code → 목표가/이탈가/최종목표가/최종이탈가/trading_plan)
             sb_map = {}
             try:
                 with get_conn().cursor() as cur_sb:
@@ -1202,8 +1183,33 @@ def callback_get(update, context) :
             except Exception as sb_e:
                 print(f"신호가 조회 오류: {sb_e}")
 
-            ord_psbl_qty = 0
-            for i, name in enumerate(c.index):
+            # i/h 제외한 종목 평가금액 합산 (총평가금액, 잔고금액 기준)
+            filtered_scts_evlu = sum(
+                int(c['evlu_amt'][i])
+                for i, _ in enumerate(c.index)
+                if int(c['hldg_qty'][i]) > 0 and sb_map.get(c['pdno'][i], (None,)*5)[4] not in ('i', 'h')
+            )
+            filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
+
+            # 시장비율 / 현재비율 계산
+            current_ratio = (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100) if filtered_tot_evlu > 0 else 0.0
+            need_sell = False
+            sell_pct = 0.0
+            if market_ratio is not None and market_ratio > current_ratio and filtered_scts_evlu > 0:
+                sell_pct = (market_ratio / 100 - current_ratio / 100) * filtered_tot_evlu / filtered_scts_evlu * 100
+                need_sell = True
+
+            # 요약 메시지 (i/h 제외 기준)
+            mr_str = ""
+            if market_ratio is not None:
+                mr_str = f", 시장비율:{market_ratio:.0f}%, 현재비율:{current_ratio:.1f}%"
+            result_msgs.append(
+                f"* 총 평가금액:{format(filtered_tot_evlu, ',d')}원, 잔고금액:{format(filtered_scts_evlu, ',d')}원, "
+                f"가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원, 전일증감:{format(u_asst_icdc_amt, ',d')}원{mr_str}"
+            )
+
+            # 개별 종목 메시지
+            for i, _ in enumerate(c.index):
                 code = c['pdno'][i]
                 name = c['prdt_name'][i]
                 purchase_price = c['pchs_avg_pric'][i]
@@ -1223,8 +1229,18 @@ def callback_get(update, context) :
                 if sb[3]: signal_str += f", 최종이탈가:{format(int(sb[3]), ',d')}원"
                 if sb[4] == 'i':
                     name = f"(투자) {name}"
+                elif sb[4] == 'h':
+                    name = f"(홀딩) {name}"
 
-                msg = f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, 보유량:{format(purchase_amount, ',d')}주, 보유금액:{format(purchase_sum, ',d')}원, 현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, 수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원{signal_str}"
+                sell_qty_str = ""
+                if need_sell and sb_map.get(code, (None,)*5)[4] not in ('i', 'h'):
+                    sell_qty = min(round(purchase_amount * sell_pct / 100), ord_psbl_qty)
+                    if sell_qty > 0:
+                        sell_qty_str = f"(매도:{format(sell_qty, ',d')}주)"
+                msg = (f"* {name}[<code>{code}</code>] 단가:{format(float(purchase_price), ',.2f')}원, "
+                       f"보유량:{format(purchase_amount, ',d')}주{sell_qty_str}, 보유금액:{format(purchase_sum, ',d')}원, "
+                       f"현재가:{format(current_price, ',d')}원, 평가금액:{format(eval_sum, ',d')}원, "
+                       f"수익률:{str(earnings_rate)}%, 손수익금액:{format(valuation_sum, ',d')}원{signal_str}")
                 result_msgs.append(msg)
 
             if result_msgs:
@@ -1261,9 +1277,9 @@ def callback_get(update, context) :
                         if h_qty > 0:
                             sb = sb_map.get(h_code, (None, None, None, None, None))
                             is_invest = sb[4] in ('i', 'h')
-                            btn_label = f"{h_name}({h_code})"
+                            btn_label = f"{h_name}"
                             if need_sell and not is_invest:
-                                btn_label += f" [매도:{sell_pct:.0f}%]"
+                                btn_label += f" [{sell_pct:.0f}%]"
                             hold_buttons.append(
                                 InlineKeyboardButton(btn_label, callback_data=f"menu,holding_{h_code}")
                             )
