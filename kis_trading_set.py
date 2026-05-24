@@ -496,6 +496,66 @@ for nick in nickname_list:
             )
             if replace_candidates:
                 message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
+
+            # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산
+            try:
+                b_all = stock_balance(access_token, app_key, app_secret, acct_no, "all")
+                u_prvs_rcdl_excc_amt = 0
+                for _bi, _ in enumerate(b_all.index):
+                    u_prvs_rcdl_excc_amt = int(b_all['prvs_rcdl_excc_amt'][_bi])
+
+                with conn.cursor() as cur_sbm:
+                    cur_sbm.execute(
+                        """SELECT code, trading_plan FROM public."stockBalance_stock_balance"
+                           WHERE acct_no = %s AND proc_yn = 'Y'""",
+                        (str(acct_no),)
+                    )
+                    sb_tp_map = {row[0]: row[1] for row in cur_sbm.fetchall()}
+
+                market_ratio_v = None
+                with conn.cursor() as cur_mrv:
+                    cur_mrv.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(acct_no),)
+                    )
+                    row_mrv = cur_mrv.fetchone()
+                    if row_mrv:
+                        market_ratio_v = float(row_mrv[0])
+
+                filtered_scts_evlu = sum(
+                    int(c['evlu_amt'][i])
+                    for i, _ in enumerate(c.index)
+                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i', 'h')
+                )
+                filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
+
+                mr_str = ""
+                if market_ratio_v is not None and filtered_tot_evlu > 0:
+                    current_ratio_v = u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100
+                    mr_str = f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%"
+                message += (
+                    f"\n\n* 총평가금액:{format(filtered_tot_evlu, ',d')}원, 잔고금액:{format(filtered_scts_evlu, ',d')}원, "
+                    f"가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원{mr_str}"
+                )
+
+                if replace_candidates and filtered_tot_evlu > 0:
+                    c_qty_map = {c['pdno'][i]: int(c['hldg_qty'][i]) for i, _ in enumerate(c.index)}
+                    replace_sell_amt = sum(
+                        int(rc['current_price']) * c_qty_map.get(rc['code'], 0)
+                        for rc in replace_candidates
+                    )
+                    cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
+                    market_amt_v = int(filtered_tot_evlu * market_ratio_v / 100) if market_ratio_v is not None else 0
+                    diff_amt = cash_after_sell - market_amt_v
+                    message += (
+                        f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
+                        f"매도후현금:{format(cash_after_sell, ',d')}원, "
+                        f"시장비율금액:{format(market_amt_v, ',d')}원, "
+                        f"차이금액:{format(diff_amt, ',d')}원"
+                    )
+            except Exception as e_summary:
+                print(f"[{nick}] 요약 계산 오류: {e_summary}")
+
             print(message)
             bot.send_message(
                 chat_id=chat_id,
