@@ -566,9 +566,9 @@ for nick in nickname_list:
                     diff_amt = cash_after_sell - market_amt_v
                     message += (
                         f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
-                        f"매도후현금:{format(cash_after_sell, ',d')}원, "
-                        f"시장비율금액:{format(market_amt_v, ',d')}원, "
-                        f"차이금액:{format(diff_amt, ',d')}원"
+                        f"합산현금:{format(cash_after_sell, ',d')}원, "
+                        f"시장비율:{format(market_amt_v, ',d')}원, "
+                        f"현금차액:{format(diff_amt, ',d')}원"
                     )
             except Exception as e_summary:
                 print(f"[{nick}] 요약 계산 오류: {e_summary}")
