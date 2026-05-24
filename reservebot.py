@@ -3328,7 +3328,6 @@ def echo(update, context):
             return
         new_val04 = int(user_text.strip())
         try:
-            acct04 = str(account()['acct_no'])
             c04 = get_conn()
             # 현재 DB 값 조회 (연쇄 비교용)
             with c04.cursor() as cur_r:
@@ -3594,20 +3593,24 @@ def echo(update, context):
             return
         val = str(int(val_text))
         try:
+            ac_tp = account()
+            ap = inquire_price(ac_tp['access_token'], ac_tp['app_key'], ac_tp['app_secret'], item['code'])
+            stck_prpr = int(ap['stck_prpr'])
             c_tp = get_conn()
             with c_tp.cursor() as cur_tp:
                 cur_tp.execute("""
                     UPDATE trading_trail
-                    SET trail_plan = %s, mod_dt = now()
+                    SET stop_price = %s, trail_plan = %s, mod_dt = now()
                     WHERE acct_no = %s AND code = %s
                       AND trail_day = %s AND trail_dtm = %s AND trail_tp = %s
-                """, (val, item['acct_no'], item['code'],
+                """, (stck_prpr, val, item['acct_no'], item['code'],
                       item['trail_day'], item['trail_dtm'], item['trail_tp']))
                 updated = cur_tp.rowcount
             c_tp.commit()
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{item['name']}] 매도비율 : {val}% 저장({updated}건)"
+                text=f"[{item['name']}(<code>{item['code']}</code>)] 이탈가:{format(stck_prpr, ',d')}원, 매도비율:{val}% 저장({updated}건)",
+                parse_mode='HTML'
             )
         except Exception as e_tp:
             try:
