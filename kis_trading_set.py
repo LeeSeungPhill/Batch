@@ -397,6 +397,12 @@ for nick in nickname_list:
                 conn.commit()
                 cur201.close()
 
+                # 영업일 계산용 휴장일 목록 사전 조회
+                cur_hd = conn.cursor()
+                cur_hd.execute("SELECT holiday FROM stock_holiday")
+                holidays_set = {row[0] for row in cur_hd.fetchall()}
+                cur_hd.close()
+
                 # 종목 교체 고려 대상 분석
                 for info in inserted_rows_info:
                     i_code      = info['code']
@@ -436,7 +442,12 @@ for nick in nickname_list:
                         if oc_row:
                             try:
                                 order_date = datetime.strptime(str(oc_row[0])[:8], '%Y%m%d')
-                                days_since_buy = (datetime.now() - order_date).days
+                                _today_d = datetime.now().date()
+                                days_since_buy = sum(
+                                    1 for _k in range(1, (_today_d - order_date.date()).days + 1)
+                                    if (order_date.date() + timedelta(days=_k)).weekday() < 5
+                                    and (order_date.date() + timedelta(days=_k)).strftime('%Y%m%d') not in holidays_set
+                                )
                                 if i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                     drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
                                     reason = f"매수가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
@@ -455,6 +466,7 @@ for nick in nickname_list:
                                 'chat_id': chat_id,
                                 'name': i_name,
                                 'code': i_code,
+                                'current_price': i_cur,
                                 'trail_day': info['trail_day'],
                                 'trail_dtm': info['trail_dtm'],
                                 'trail_tp': i_trail_tp,
@@ -479,6 +491,7 @@ for nick in nickname_list:
                                 'chat_id': chat_id,
                                 'name': i_name,
                                 'code': i_code,
+                                'current_price': i_cur,
                                 'trail_day': info['trail_day'],
                                 'trail_dtm': info['trail_dtm'],
                                 'trail_tp': i_trail_tp,
@@ -532,7 +545,11 @@ for nick in nickname_list:
                 mr_str = ""
                 if market_ratio_v is not None and filtered_tot_evlu > 0:
                     current_ratio_v = u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100
-                    mr_str = f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%"
+                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - u_prvs_rcdl_excc_amt
+                    mr_str = (
+                        f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
+                        f"전환현금:{format(convert_cash, ',d')}원"
+                    )
                 message += (
                     f"\n\n* 총평가금액:{format(filtered_tot_evlu, ',d')}원, 잔고금액:{format(filtered_scts_evlu, ',d')}원, "
                     f"가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원{mr_str}"
