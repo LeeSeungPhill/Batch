@@ -147,8 +147,7 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
         print(f"[get_prev_day_price_info] {code} 오류: {e}")
     return 0, 0
 
-# nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
-nickname_list = ['phills2', 'yh480825', 'phills13', 'phills15', 'mamalong', 'worry106']
+nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
 
 for nick in nickname_list:
     try:
