@@ -3609,7 +3609,8 @@ def echo(update, context):
             c_tp.commit()
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{item['name']}] 매도비율 : {val}% 저장({updated}건)"
+                text=f"[{item['name']}(<code>{item['code']}</code>)] 이탈가:{format(stck_prpr, ',d')}원, 매도비율:{val}% 저장({updated}건)",
+                parse_mode='HTML'
             )
         except Exception as e_tp:
             try:
