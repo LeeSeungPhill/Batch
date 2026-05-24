@@ -367,6 +367,16 @@ for nick in nickname_list:
                     ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
                 """
                 
+                # stockBalance_stock_balance 신호가(목표가/이탈가) 사전 조회
+                cur_sig = conn.cursor()
+                cur_sig.execute("""
+                    SELECT code, sign_resist_price, sign_support_price
+                    FROM public."stockBalance_stock_balance"
+                    WHERE acct_no = %s AND proc_yn = 'Y'
+                """, (str(acct_no),))
+                sb_sig_map = {row[0]: (row[1], row[2]) for row in cur_sig.fetchall()}
+                cur_sig.close()
+
                 cur201 = conn.cursor()
                 inserted_rows_info = []
                 for row in trading_trail_create_list:
@@ -377,6 +387,18 @@ for nick in nickname_list:
                         if current_price > 0 and stop_price > current_price and prev_day_low > 0:
                             print(f"[{nick}] {code} stop_price({stop_price}) > 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
                             stop_price = prev_day_low
+
+                        # stockBalance 신호가로 목표가/이탈가 대체
+                        sig = sb_sig_map.get(code, (None, None))
+                        sig_resist = float(sig[0]) if sig[0] else 0
+                        sig_support = float(sig[1]) if sig[1] else 0
+                        if sig_resist > 0 and sig_resist > float(target_price or 0):
+                            print(f"[{nick}] {code} target_price({target_price}) → 신호가({sig_resist})로 대체")
+                            target_price = sig_resist
+                        if sig_support > 0 and (float(stop_price or 0) == 0 or sig_support < float(stop_price or 0)):
+                            print(f"[{nick}] {code} stop_price({stop_price}) → 신호이탈가({sig_support})로 대체")
+                            stop_price = sig_support
+
                         cur201.execute(insert_query1, (
                             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
                         ))
@@ -396,6 +418,12 @@ for nick in nickname_list:
 
                 conn.commit()
                 cur201.close()
+
+                # 영업일 계산용 휴장일 목록 사전 조회
+                cur_hd = conn.cursor()
+                cur_hd.execute("SELECT holiday FROM stock_holiday")
+                holidays_set = {row[0] for row in cur_hd.fetchall()}
+                cur_hd.close()
 
                 # 종목 교체 고려 대상 분석
                 for info in inserted_rows_info:
@@ -436,7 +464,12 @@ for nick in nickname_list:
                         if oc_row:
                             try:
                                 order_date = datetime.strptime(str(oc_row[0])[:8], '%Y%m%d')
-                                days_since_buy = (datetime.now() - order_date).days
+                                _today_d = datetime.now().date()
+                                days_since_buy = sum(
+                                    1 for _k in range(1, (_today_d - order_date.date()).days + 1)
+                                    if (order_date.date() + timedelta(days=_k)).weekday() < 5
+                                    and (order_date.date() + timedelta(days=_k)).strftime('%Y%m%d') not in holidays_set
+                                )
                                 if i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                     drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
                                     reason = f"매수가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
@@ -455,6 +488,7 @@ for nick in nickname_list:
                                 'chat_id': chat_id,
                                 'name': i_name,
                                 'code': i_code,
+                                'current_price': i_cur,
                                 'trail_day': info['trail_day'],
                                 'trail_dtm': info['trail_dtm'],
                                 'trail_tp': i_trail_tp,
@@ -479,6 +513,7 @@ for nick in nickname_list:
                                 'chat_id': chat_id,
                                 'name': i_name,
                                 'code': i_code,
+                                'current_price': i_cur,
                                 'trail_day': info['trail_day'],
                                 'trail_dtm': info['trail_dtm'],
                                 'trail_tp': i_trail_tp,
@@ -496,6 +531,70 @@ for nick in nickname_list:
             )
             if replace_candidates:
                 message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
+
+            # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산
+            try:
+                b_all = stock_balance(access_token, app_key, app_secret, acct_no, "all")
+                u_prvs_rcdl_excc_amt = 0
+                for _bi, _ in enumerate(b_all.index):
+                    u_prvs_rcdl_excc_amt = int(b_all['prvs_rcdl_excc_amt'][_bi])
+
+                with conn.cursor() as cur_sbm:
+                    cur_sbm.execute(
+                        """SELECT code, trading_plan FROM public."stockBalance_stock_balance"
+                           WHERE acct_no = %s AND proc_yn = 'Y'""",
+                        (str(acct_no),)
+                    )
+                    sb_tp_map = {row[0]: row[1] for row in cur_sbm.fetchall()}
+
+                market_ratio_v = None
+                with conn.cursor() as cur_mrv:
+                    cur_mrv.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(acct_no),)
+                    )
+                    row_mrv = cur_mrv.fetchone()
+                    if row_mrv:
+                        market_ratio_v = float(row_mrv[0])
+
+                filtered_scts_evlu = sum(
+                    int(c['evlu_amt'][i])
+                    for i, _ in enumerate(c.index)
+                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i', 'h')
+                )
+                filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
+
+                mr_str = ""
+                if market_ratio_v is not None and filtered_tot_evlu > 0:
+                    current_ratio_v = u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100
+                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - u_prvs_rcdl_excc_amt
+                    mr_str = (
+                        f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
+                        f"전환현금:{format(convert_cash, ',d')}원"
+                    )
+                message += (
+                    f"\n\n* 총평가금액:{format(filtered_tot_evlu, ',d')}원, 잔고금액:{format(filtered_scts_evlu, ',d')}원, "
+                    f"가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원{mr_str}"
+                )
+
+                if replace_candidates and filtered_tot_evlu > 0:
+                    c_qty_map = {c['pdno'][i]: int(c['hldg_qty'][i]) for i, _ in enumerate(c.index)}
+                    replace_sell_amt = sum(
+                        int(rc['current_price']) * c_qty_map.get(rc['code'], 0)
+                        for rc in replace_candidates
+                    )
+                    cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
+                    market_amt_v = int(filtered_tot_evlu * market_ratio_v / 100) if market_ratio_v is not None else 0
+                    diff_amt = cash_after_sell - market_amt_v
+                    message += (
+                        f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
+                        f"합산현금:{format(cash_after_sell, ',d')}원, "
+                        f"시장비율:{format(market_amt_v, ',d')}원, "
+                        f"현금차액:{format(diff_amt, ',d')}원"
+                    )
+            except Exception as e_summary:
+                print(f"[{nick}] 요약 계산 오류: {e_summary}")
+
             print(message)
             bot.send_message(
                 chat_id=chat_id,
