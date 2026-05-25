@@ -565,8 +565,8 @@ for nick in nickname_list:
 
                 mr_str = ""
                 if market_ratio_v is not None and filtered_tot_evlu > 0:
-                    current_ratio_v = u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100
-                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - u_prvs_rcdl_excc_amt
+                    current_ratio_v = 100 - (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100)
+                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - int(filtered_tot_evlu * current_ratio_v / 100)
                     mr_str = (
                         f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
                         f"전환현금:{format(convert_cash, ',d')}원"
@@ -583,13 +583,9 @@ for nick in nickname_list:
                         for rc in replace_candidates
                     )
                     cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
-                    market_amt_v = int(filtered_tot_evlu * market_ratio_v / 100) if market_ratio_v is not None else 0
-                    diff_amt = cash_after_sell - market_amt_v
                     message += (
                         f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
-                        f"합산현금:{format(cash_after_sell, ',d')}원, "
-                        f"시장비율:{format(market_amt_v, ',d')}원, "
-                        f"현금차액:{format(diff_amt, ',d')}원"
+                        f"합산현금:{format(cash_after_sell, ',d')}원"
                     )
             except Exception as e_summary:
                 print(f"[{nick}] 요약 계산 오류: {e_summary}")

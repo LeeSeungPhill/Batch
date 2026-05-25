@@ -223,11 +223,22 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
 
     # 매수 가능(현금) 조회
     result2 = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-    
-    insert_query1 = "with upsert as (update dly_acct_balance set dnca_tot_amt = %s, prvs_excc_amt = %s, td_buy_amt = %s, td_sell_amt = %s, td_tex_amt = %s, user_evlu_amt = %s, tot_evlu_amt = %s, nass_amt = %s, pchs_amt = %s, evlu_amt = %s, evlu_pfls_amt = %s, ytdt_tot_evlu_amt = %s, asst_icdc_amt = %s, total_profit_loss_amt = %s, buy_psbl_amt = %s, last_chg_date = %s where dt = %s and acct = %s returning * ) insert into dly_acct_balance(acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, total_profit_loss_amt, buy_psbl_amt, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
+
+    # 펀드관리 비율 조회
+    cur_fund = conn.cursor()
+    cur_fund.execute("""
+        SELECT cash_rate, market_ratio, kospi_short, kosdak_short, kospi_mid, kosdak_mid, kospi_long, kosdak_long
+        FROM "stockFundMng_stock_fund_mng"
+        WHERE acct_no = %s
+    """, (int(acct_no),))
+    fund_row = cur_fund.fetchone()
+    cur_fund.close()
+    fund_data = fund_row if fund_row else (0, 0, '', '', '', '', '', '')
+
+    insert_query1 = "with upsert as (update dly_acct_balance set dnca_tot_amt = %s, prvs_excc_amt = %s, td_buy_amt = %s, td_sell_amt = %s, td_tex_amt = %s, user_evlu_amt = %s, tot_evlu_amt = %s, nass_amt = %s, pchs_amt = %s, evlu_amt = %s, evlu_pfls_amt = %s, ytdt_tot_evlu_amt = %s, asst_icdc_amt = %s, total_profit_loss_amt = %s, buy_psbl_amt = %s, cash_rate = %s, market_ratio = %s, kospi_short = %s, kosdak_short = %s, kospi_mid = %s, kosdak_mid = %s, kospi_long = %s, kosdak_long = %s, last_chg_date = %s where dt = %s and acct = %s returning * ) insert into dly_acct_balance(acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt, td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt, evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, total_profit_loss_amt, buy_psbl_amt, cash_rate, market_ratio, kospi_short, kosdak_short, kospi_mid, kosdak_mid, kospi_long, kosdak_long, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert);"
     # insert 인자값 설정
-    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1) if result1 and result1 != [] else 0, int(result2) if result2 and result2 != [] else 0, datetime.now(), today, str(acct_no),
-        str(acct_no), today, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1), int(result2), datetime.now()])
+    record_to_insert1 = ([u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1) if result1 and result1 != [] else 0, int(result2) if result2 and result2 != [] else 0, fund_data[0], fund_data[1], fund_data[2], fund_data[3], fund_data[4], fund_data[5], fund_data[6], fund_data[7], datetime.now(), today, str(acct_no),
+        str(acct_no), today, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_thdt_buy_amt, u_thdt_sll_amt, u_thdt_tlex_amt, u_scts_evlu_amt, u_tot_evlu_amt, u_nass_amt, u_pchs_amt_smtl_amt, u_evlu_amt_smtl_amt, u_evlu_pfls_smtl_amt, u_bfdy_tot_asst_evlu_amt, u_asst_icdc_amt, int(result1) if result1 and result1 != [] else 0, int(result2) if result2 and result2 != [] else 0, fund_data[0], fund_data[1], fund_data[2], fund_data[3], fund_data[4], fund_data[5], fund_data[6], fund_data[7], datetime.now()])
     # DB 연결된 커서의 쿼리 수행
     cur1.execute(insert_query1, record_to_insert1)
     conn.commit()
