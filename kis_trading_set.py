@@ -583,8 +583,7 @@ for nick in nickname_list:
                         for rc in replace_candidates
                     )
                     cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
-                    market_current_amt_v = int(filtered_tot_evlu * market_ratio_v / 100) - int(filtered_tot_evlu * current_ratio_v / 100) if market_ratio_v is not None else 0
-                    diff_amt = cash_after_sell - market_current_amt_v
+                    diff_amt = convert_cash - replace_sell_amt
                     message += (
                         f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
                         f"합산현금:{format(cash_after_sell, ',d')}원, "
