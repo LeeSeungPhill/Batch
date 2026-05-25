@@ -1192,7 +1192,7 @@ def callback_get(update, context) :
             filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
 
             # 시장비율 / 현재비율 계산
-            current_ratio = (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100) if filtered_tot_evlu > 0 else 0.0
+            current_ratio = 100 - (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100) if filtered_tot_evlu > 0 else 0.0
             need_sell = False
             sell_pct = 0.0
             if market_ratio is not None and market_ratio > current_ratio and filtered_scts_evlu > 0:
