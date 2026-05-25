@@ -583,11 +583,9 @@ for nick in nickname_list:
                         for rc in replace_candidates
                     )
                     cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
-                    diff_amt = convert_cash - replace_sell_amt
                     message += (
                         f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
-                        f"합산현금:{format(cash_after_sell, ',d')}원, "
-                        f"현금차액:{format(diff_amt, ',d')}원"
+                        f"합산현금:{format(cash_after_sell, ',d')}원"
                     )
             except Exception as e_summary:
                 print(f"[{nick}] 요약 계산 오류: {e_summary}")
