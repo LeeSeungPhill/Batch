@@ -1195,8 +1195,8 @@ def callback_get(update, context) :
             current_ratio = 100 - (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100) if filtered_tot_evlu > 0 else 0.0
             need_sell = False
             sell_pct = 0.0
-            if market_ratio is not None and market_ratio > current_ratio and filtered_scts_evlu > 0:
-                sell_pct = (market_ratio / 100 - current_ratio / 100) * filtered_tot_evlu / filtered_scts_evlu * 100
+            if market_ratio is not None and current_ratio > market_ratio and filtered_scts_evlu > 0:
+                sell_pct = (current_ratio / 100 - market_ratio / 100) * filtered_tot_evlu / filtered_scts_evlu * 100
                 need_sell = True
 
             # 요약 메시지 (i/h 제외 기준)
