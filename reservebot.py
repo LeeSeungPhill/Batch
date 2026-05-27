@@ -2489,13 +2489,17 @@ def callback_get(update, context) :
 
     elif command == "재개" and "추적상태" in data_selected:
         try:
+            ac = account()
+            acct_no = ac['acct_no']
+
             with get_conn().cursor() as cur_rs:
                 cur_rs.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('P', 'C', 'U')
+                    AND acct_no = %s 
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     ORDER BY name
-                """)
+                """, (acct_no,))
                 resume_rows = cur_rs.fetchall()
             if resume_rows:
                 rs_buttons = [
@@ -2513,13 +2517,17 @@ def callback_get(update, context) :
 
     elif command == "멈춤" and "추적상태" in data_selected:
         try:
+            ac = account()
+            acct_no = ac['acct_no']
+
             with get_conn().cursor() as cur_st:
                 cur_st.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('1', '2', 'L')
+                    AND acct_no = %s 
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     ORDER BY name
-                """)
+                """, (acct_no,))
                 stop_rows = cur_st.fetchall()
             if stop_rows:
                 st_buttons = [
@@ -2954,19 +2962,19 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_kk:
                 cur_kk.execute(
-                    'SELECT through_price, leave_price, support_price, resist_price, trend_high_price, trend_low_price '
+                    'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" WHERE code = %s',
                     (g_kk_code,)
                 )
                 kk_row = cur_kk.fetchone()
             def _fmt(v):
                 return format(int(v), ',d') if v is not None else '-'
-            through_v, leave_v, support_v, resist_v, trend_high_v, trend_low_v = kk_row if kk_row else (None,)*6
+            through_v, leave_v, resist_v, support_v, trend_high_v, trend_low_v = kk_row if kk_row else (None,)*6
             kk_field_btns = [
                 InlineKeyboardButton(f"돌파가({_fmt(through_v)})",       callback_data="menu,kk_field_돌파가"),
                 InlineKeyboardButton(f"이탈가({_fmt(leave_v)})",         callback_data="menu,kk_field_이탈가"),
-                InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
                 InlineKeyboardButton(f"저항가({_fmt(resist_v)})",        callback_data="menu,kk_field_저항가"),
+                InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
                 InlineKeyboardButton(f"추세상한가({_fmt(trend_high_v)})", callback_data="menu,kk_field_추세상한가"),
                 InlineKeyboardButton(f"추세이탈가({_fmt(trend_low_v)})", callback_data="menu,kk_field_추세이탈가"),
                 InlineKeyboardButton("취소",                              callback_data="menu,취소"),

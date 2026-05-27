@@ -449,10 +449,10 @@ def fundTrail_proc(acct_no, conn):
     cur300 = conn.cursor()
     cur300.execute("""
         SELECT trail_signal_code, tot_evlu_amt, prvs_rcdl_excc_amt, asset_num
-        FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
+        FROM (SELECT row_number() OVER(PARTITION BY A.trail_signal_code ORDER BY A.trail_time DESC) AS num,
                     A.trail_signal_code, B.tot_evlu_amt, B.prvs_rcdl_excc_amt, B.asset_num
             FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
-            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '0001' AND A.acct_no = %s) T
+            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '0001' AND A.trail_day = prev_business_day_char(CURRENT_DATE) AND A.acct_no = %s) T
         WHERE num = 1
     """, (str(acct_no),))
     result_one100 = cur300.fetchall()
@@ -542,10 +542,10 @@ def fundTrail_proc(acct_no, conn):
     cur500 = conn.cursor()
     cur500.execute("""
         SELECT trail_signal_code, asset_num
-        FROM (SELECT row_number() OVER(ORDER BY trail_day DESC, trail_time DESC) AS num,
+        FROM (SELECT row_number() OVER(PARTITION BY A.trail_signal_code ORDER BY A.trail_time DESC) AS num,
                     A.trail_signal_code, B.asset_num
             FROM trail_signal_recent A, "stockFundMng_stock_fund_mng" B
-            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '1001' AND A.acct_no = %s) T
+            WHERE cast(A.acct_no AS INTEGER) = B.acct_no AND code = '1001' AND A.trail_day = prev_business_day_char(CURRENT_DATE) AND A.acct_no = %s) T
         WHERE num = 1
     """, (str(acct_no),))
     result_one200 = cur500.fetchall()
@@ -816,7 +816,15 @@ def process_account(nick):
                         cur2.close()
 
             elif len(i[0]) == 4:
-                
+
+                oldest_time = datetime.now().strftime("%H%M%S")
+                if today.endswith("0102") or today.endswith("1119"):
+                    if oldest_time <= "100000":
+                        continue
+                else:
+                    if oldest_time <= "090000":
+                        continue
+
                 b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
                 # print("현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f'))  # 현재포인트
                 # print("최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f'))  # 최고포인트
