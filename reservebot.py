@@ -4498,6 +4498,39 @@ def echo(update, context):
                     g_trail71_year_day = datetime.now().strftime("%Y%m%d")
                     g_trail71_hour_minute = datetime.now().strftime('%H%M%S')
 
+                    # 시장비율 초과 체크
+                    mr_warn71 = ""
+                    try:
+                        with get_conn().cursor() as cur_mr71:
+                            cur_mr71.execute("""
+                                SELECT sfm.market_ratio, sfm.prvs_rcdl_excc_amt,
+                                       COALESCE((SELECT SUM(sb.eval_sum)
+                                                 FROM public."stockBalance_stock_balance" sb
+                                                 WHERE sb.acct_no = sfm.acct_no
+                                                   AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
+                                                   AND sb.proc_yn = 'Y'), 0)
+                                FROM public."stockFundMng_stock_fund_mng" sfm
+                                WHERE sfm.acct_no = %s
+                            """, (str(acct_no),))
+                            row_mr71 = cur_mr71.fetchone()
+                        if row_mr71:
+                            mr71_ratio = float(row_mr71[0])
+                            mr71_cash = int(row_mr71[1])
+                            mr71_scts = int(row_mr71[2])
+                            mr71_tot = mr71_cash + mr71_scts
+                            if mr71_tot > 0:
+                                ratio_loss71 = (mr71_scts + loss_buy_amt_71) / mr71_tot * 100
+                                ratio_amt71  = (mr71_scts + amt_buy_amt_71)  / mr71_tot * 100
+                                warns71 = []
+                                if mr71_ratio < ratio_loss71:
+                                    warns71.append(f"손절기준({format(loss_buy_amt_71, ',d')}원)→{ratio_loss71:.1f}%")
+                                if mr71_ratio < ratio_amt71:
+                                    warns71.append(f"매수금액기준({format(amt_buy_amt_71, ',d')}원)→{ratio_amt71:.1f}%")
+                                if warns71:
+                                    mr_warn71 = f"\n⚠ 시장비율({mr71_ratio:.0f}%) 초과: {', '.join(warns71)}"
+                    except Exception as e_mr71:
+                        print(f"[menuNum=71] market_ratio 체크 오류: {e_mr71}")
+
                     selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "현재계좌"
                     preview_text = (
                         "[선택계좌: " + selected_str + "]\n"
@@ -4509,6 +4542,7 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
+                        + mr_warn71
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
