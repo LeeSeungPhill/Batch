@@ -279,8 +279,8 @@ try:
         cur_dly.execute("""
             SELECT code, balance_price, balance_qty, balance_amt, value_amt
             FROM public.dly_trading_balance_simul
-            WHERE acct_no = '74346047' AND balance_day = %s AND use_yn = 'Y'
-        """, (prev_date,))
+            WHERE acct_no = %s AND balance_day = %s AND use_yn = 'Y'
+        """, (SIMUL_DLY_ACCT, prev_date,))
         balance_rows = cur_dly.fetchall()
 
         if not balance_rows:
@@ -288,13 +288,21 @@ try:
         else:
             # 보유 포지션(잔여수량 > 0) 집계
             active_rows   = [r for r in balance_rows if int(r[2] or 0) > 0]
-            pchs_amt      = sum(int(r[3] or 0) for r in active_rows)   # 보유금액 합계
-            user_evlu_amt = pchs_amt                                    # 평가금액 = 보유금액 기준
+            pchs_amt      = sum(int(r[3] or 0) for r in active_rows)                # 보유금액 합계
+            evlu_pfls_amt = sum(int(r[4] or 0) for r in active_rows)                # 수익금액 합계
+            user_evlu_amt = pchs_amt + evlu_pfls_amt                                # 평가금액 합계 = 보유금액 합계 + 수익금액 합계
 
-            # 당일 실현손익 합계
-            total_profit_loss_amt = sum(int(r[4] or 0) for r in balance_rows)
+            # 전일 실현손익 합계
+            cur_dly.execute("""
+                SELECT COALESCE(SUM((trail_price - basic_price)*trail_qty), 0)
+                FROM trading_trail_simul
+                WHERE acct_no = 'SIMUL' AND trail_day = %s
+                AND trail_tp IN ('3','4')
+                AND trail_price > 0 AND trail_qty > 0
+            """, (prev_date,))
+            total_profit_loss_amt = int(cur_dly.fetchone()[0])
 
-            # 전전일까지 누적 실현손익
+            # 전전일까지 누적 실현손익 + 전일 합산
             cur_dly.execute("""
                 SELECT COALESCE(SUM(total_profit_loss_amt), 0)
                 FROM dly_acct_balance_simul
@@ -302,7 +310,7 @@ try:
             """, (SIMUL_DLY_ACCT, prev_date))
             cum_profit = int(cur_dly.fetchone()[0]) + total_profit_loss_amt
 
-            # 직전 tot_evlu_amt (자산증감 계산용)
+            # 전일까지 자산총액
             cur_dly.execute("""
                 SELECT tot_evlu_amt FROM dly_acct_balance_simul
                 WHERE acct = %s AND dt < %s ORDER BY dt DESC LIMIT 1
@@ -312,7 +320,6 @@ try:
 
             prvs_excc_amt = INITIAL_CAPITAL - pchs_amt + cum_profit
             tot_evlu_amt  = prvs_excc_amt + user_evlu_amt
-            evlu_pfls_amt = user_evlu_amt - pchs_amt
             asst_icdc_amt = (tot_evlu_amt - prev_tot) if prev_tot is not None else 0
 
             cur_dly.execute("""
@@ -338,7 +345,6 @@ try:
                     evlu_pfls_amt         = EXCLUDED.evlu_pfls_amt,
                     asst_icdc_amt         = EXCLUDED.asst_icdc_amt,
                     total_profit_loss_amt = EXCLUDED.total_profit_loss_amt,
-                    buy_psbl_amt          = EXCLUDED.buy_psbl_amt,
                     last_chg_date         = EXCLUDED.last_chg_date
             """, (
                 SIMUL_DLY_ACCT, prev_date,
@@ -350,8 +356,9 @@ try:
             conn.commit()
             print(
                 f"[SIMUL] dly_acct_balance_simul 업데이트 ({prev_date}) "
-                f"보유:{len(active_rows)}종목 pchs:{pchs_amt:,} cash:{prvs_excc_amt:,} "
-                f"tot:{tot_evlu_amt:,} 당일손익:{total_profit_loss_amt:,} 누적손익:{cum_profit:,}"
+                f"보유:{len(active_rows)}종목 매수총액:{pchs_amt:,} 평가총액:{user_evlu_amt:,} "
+                f"현금:{prvs_excc_amt:,} 자산총액:{tot_evlu_amt:,} "
+                f"수익총액:{evlu_pfls_amt:,} 당일실현:{total_profit_loss_amt:,} 누적수익:{cum_profit:,}"
             )
         cur_dly.close()
     except Exception as e_dly:
