@@ -279,7 +279,7 @@ try:
         cur_dly.execute("""
             SELECT code, balance_price, balance_qty, balance_amt, value_amt
             FROM public.dly_trading_balance_simul
-            WHERE acct_no = 'SIMUL' AND balance_day = %s AND use_yn = 'Y'
+            WHERE acct_no = '74346047' AND balance_day = %s AND use_yn = 'Y'
         """, (prev_date,))
         balance_rows = cur_dly.fetchall()
 

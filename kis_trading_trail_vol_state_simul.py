@@ -1238,7 +1238,7 @@ def _update_dly_trading_balance_simul(trade_date: str, conn):
                     value_rate, value_amt,
                     buy_qty, sell_qty, use_yn,
                     crt_dt, mod_dt
-                ) VALUES ('SIMUL', %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, 'Y', %s, %s)
+                ) VALUES ('74346047', %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, 'Y', %s, %s)
                 ON CONFLICT (acct_no, code, balance_day)
                 DO UPDATE SET
                     name          = EXCLUDED.name,
