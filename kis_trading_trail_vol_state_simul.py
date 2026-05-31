@@ -1198,39 +1198,66 @@ def get_kis_1min_from_datetime_simul(
 # ─────────────────────────────────────────
 # 일별 잔고 집계 저장
 # ─────────────────────────────────────────
-def _update_dly_trading_balance_simul(trade_date: str, conn):
-    """process_account_simul 완료 후 dly_trading_balance_simul 일별 잔고 업서트."""
+def _update_dly_trading_balance_simul(trade_date: str, conn,
+                                       access_token: str, app_key: str, app_secret: str):
+    """process_account_simul 완료 후 dly_trading_balance_simul 일별 잔고 업서트.
+    value_rate·value_amt 는 당일 종가(KIS API) 기준으로 계산.
+    """
     try:
         cur = conn.cursor()
-        # 종목별 최신 레코드 기준 집계
+        # 종목별 최신 레코드: 보유단가·수량·매도수량만 조회 (value 계산은 종가 기반)
         cur.execute(f"""
             WITH ranked AS (
                 SELECT code, name,
                        basic_price,
                        basic_qty,
-                       COALESCE(trail_rate,  0) AS value_rate,
-                       COALESCE(trail_qty,   0) AS sell_qty,
-                       COALESCE(trail_price, 0) AS sell_price,
+                       COALESCE(trail_qty, 0) AS sell_qty,
                        ROW_NUMBER() OVER (PARTITION BY code ORDER BY mod_dt DESC) AS rn
                 FROM {SIMUL_TABLE}
                 WHERE acct_no = 'SIMUL' AND trail_day = %s
             )
-            SELECT code, name,
-                   basic_price,
-                   basic_qty,
-                   CAST(basic_price AS BIGINT) * basic_qty        AS balance_amt,
-                   value_rate,
-                   (sell_price - basic_price) * sell_qty          AS value_amt,
-                   sell_qty
+            SELECT code, name, basic_price, basic_qty, sell_qty
             FROM ranked
             WHERE rn = 1
         """, (trade_date,))
         rows = cur.fetchall()
         now = datetime.now()
         cnt = 0
+
         for r in rows:
-            (code, name, balance_price, balance_qty,
-             balance_amt, value_rate, value_amt, sell_qty) = r
+            code, name, balance_price, balance_qty, sell_qty = r
+            balance_price = int(balance_price or 0)
+            balance_qty   = int(balance_qty   or 0)
+            sell_qty      = int(sell_qty      or 0)
+            balance_amt   = balance_price * balance_qty
+
+            # 종가 조회 — 캐시 우선, 미스 시 KIS API 직접 호출
+            close_price = 0
+            try:
+                with _daily_cache_lock:
+                    cached = _daily_chart_full_cache.get(code)
+                if cached:
+                    entry = next((d for d in cached if d['date'] == trade_date), None)
+                    if entry:
+                        close_price = entry['close_price']
+                if close_price == 0:
+                    day_info = get_kis_daily_chart(
+                        code, trade_date, access_token, app_key, app_secret, verbose=False
+                    )
+                    if day_info:
+                        close_price = day_info['close_price']
+                    time.sleep(0.1)
+            except Exception as e_p:
+                print(f"[SIMUL] {code} 종가 조회 오류: {e_p}")
+
+            # 종가 기준 수익율·수익금액 계산
+            if close_price > 0 and balance_price > 0:
+                value_rate = round((close_price - balance_price) / balance_price * 100, 2)
+                value_amt  = (close_price - balance_price) * balance_qty
+            else:
+                value_rate = 0.0
+                value_amt  = 0
+
             cur.execute("""
                 INSERT INTO public.dly_trading_balance_simul (
                     acct_no, code, name, balance_day,
@@ -1252,15 +1279,16 @@ def _update_dly_trading_balance_simul(trade_date: str, conn):
                     mod_dt        = EXCLUDED.mod_dt
             """, (
                 code, name, trade_date,
-                int(balance_price or 0),
-                int(balance_qty   or 0),
-                int(balance_amt   or 0),
-                float(value_rate  or 0),
-                int(value_amt     or 0),
-                int(sell_qty      or 0),
+                balance_price,
+                balance_qty,
+                balance_amt,
+                float(value_rate),
+                int(value_amt),
+                sell_qty,
                 now, now,
             ))
             cnt += 1
+
         conn.commit()
         cur.close()
         print(f"[SIMUL] dly_trading_balance_simul 업데이트 완료: {cnt}건")
@@ -1362,8 +1390,11 @@ def process_account_simul():
                 finally:
                     conn_stock.close()
 
-        # 전체 종목 처리 완료 후 일별 잔고 집계 저장
-        _update_dly_trading_balance_simul(today, conn_acct)
+        # 전체 종목 처리 완료 후 일별 잔고 집계 저장 (종가 기준 수익율 계산)
+        _update_dly_trading_balance_simul(
+            today, conn_acct,
+            ac['access_token'], ac['app_key'], ac['app_secret']
+        )
 
     except Exception as e:
         print(f"[SIMUL] 계좌 처리 오류: {e}")
