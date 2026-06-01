@@ -654,6 +654,17 @@ def get_kis_1min_from_datetime_simul(
         breakdown_notify_last_key  = _alert_keys.get("L")
         _market_sell_checked       = False
 
+        # 시장 흐름 사전 조회 (_get_dly_mkt_trend → 루프 내 중복 호출 방지)
+        _stk_mkt_pre    = _get_stock_market_type(stock_code, access_token, app_key, app_secret)
+        _mkt_trend_pre  = _get_dly_mkt_trend(trade_date, conn)
+        _short_market_down = False
+        if _mkt_trend_pre:
+            _short_key         = 'kospi_short' if _stk_mkt_pre == 'KOSPI' else 'kosdak_short'
+            _short_val         = _mkt_trend_pre.get(_short_key, '')
+            _short_market_down = (_short_val == '02')
+            if verbose and _short_market_down:
+                print(f"[시뮬] {stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
+
         for _, row in df.iterrows():
             if int(proc_min) < int(row['시간'].replace(':', '') + '00'):
                 sell_trigger = False; sell_reason = ""; sell_signal_type = ""
@@ -753,9 +764,9 @@ def get_kis_1min_from_datetime_simul(
                             _safety_m = int(basic_price * 1.10)
                             _p2s      = peak_high_tenmin - _safety_m
                             _cond_b_capable = peak_high_tenmin > _safety_m and _p2s >= int(_safety_m * 0.05)
-                            if not _cond_b_capable:
+                            if not _cond_b_capable or _short_market_down:
                                 fixed_stop = int(stop_price) if stop_price else 0
-                                if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
+                                if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
                                     breakdown_wait.update({"active": True, "tenmin_key": current_10min_key,
                                                            "tenmin_low": None, "tenmin_vol_ok": None,
                                                            "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성]",
@@ -767,7 +778,7 @@ def get_kis_1min_from_datetime_simul(
                                         print(f"[시뮬]-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}] 이탈가({fixed_stop:,}) 이탈 → 10분봉 저가 대기")
                     else:
                         fixed_stop = int(stop_price) if stop_price else 0
-                        if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
+                        if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
                             breakdown_wait.update({"active": True, "tenmin_key": current_10min_key,
                                                    "tenmin_low": None, "tenmin_vol_ok": None,
                                                    "reason": f"이탈가({fixed_stop:,})원 이탈",
@@ -778,25 +789,45 @@ def get_kis_1min_from_datetime_simul(
                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                 print(f"[시뮬]-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}] 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 대기")
 
-                # 전일저가 이탈 사전 경고
+                # 전일저가 이탈 사전 경고 + 시장 흐름 분석
                 _prevlow_start   = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
                 _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
                 if current_time >= _prevlow_start and current_time < _prevlow_warn_end and prev_low is not None:
                     if close_price < prev_low and int(prev_volume / 2) < acml_vol:
-                        if current_10min_key.strftime("%Y%m%d%H%M") != prevlow_warn_last_key:
-                            prevlow_warn_last_key = current_10min_key.strftime("%Y%m%d%H%M")
+                        _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
+                        if prevlow_warn_last_key is None or _cur_key_str > prevlow_warn_last_key:
+                            prevlow_warn_last_key = _cur_key_str
                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
-                            gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
-                            print(f"[시뮬]-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}]"
-                                  f" [사전경고] 전일저가 이탈 | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
-                                  f" | 수익률:{gain_pct_warn:+.1f}%")
+                            # 시장 흐름 기반 분석 (루프 전 조회한 _mkt_trend_pre 재사용)
+                            _w_mkt_data = _mkt_trend_pre
+                            if _w_mkt_data:
+                                _w_stk_mkt       = _stk_mkt_pre
+                                _w_allow_ratio   = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
+                                _w_total_invested = _get_total_invested(trade_date, conn)
+                                _w_allowed_invest = int(TOTAL_INVEST_BASE * _w_allow_ratio / 100)
+                                _w_excess_invest  = _w_total_invested - _w_allowed_invest
+                                _w_invest_pct     = round(_w_total_invested / TOTAL_INVEST_BASE * 100, 1)
+                                _w_mid_key   = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
+                                _w_long_key  = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
+                                _w_mid_str   = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
+                                _w_long_str  = '상승' if _w_mkt_data.get(_w_long_key) == '05' else '하락'
+                                if _w_excess_invest > 0 and close_price > 0:
+                                    _w_qty       = min(int(basic_qty), max(1, (_w_excess_invest + close_price - 1) // close_price))
+                                    _w_plan      = round(_w_qty / basic_qty * 100) if basic_qty > 0 else 100
+                                    _w_reason    = (f"시장흐름매도[{_w_stk_mkt}] 중기:{_w_mid_str}/장기:{_w_long_str}"
+                                                    f" 허용:{_w_allow_ratio}%({_w_allowed_invest:,}원)"
+                                                    f" 현투자:{_w_invest_pct}%({_w_total_invested:,}원)"
+                                                    f" 초과:{_w_excess_invest:,}원→{_w_plan}%매도")
+                                    print(f"[시뮬]-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}]"
+                                          f" ⚠ [시장매도] {_w_reason}")
 
                 # 15:10 이후 시장 흐름 기반 매도 체크
-                # 조건: trail_tp='L', 전일저가 이탈 종목, 1회만 수행
+                # 조건: trail_tp='L', 전일저가 이탈 + 거래량 조건, 1회만 수행
                 _prevlow_cutoff = "161000" if trade_date.endswith("1119") else "151000"
                 if (not breakdown_wait["active"] and not sell_trigger
                         and current_time >= _prevlow_cutoff and not _market_sell_checked
-                        and prev_low is not None and close_price < prev_low):
+                        and prev_low is not None and close_price < prev_low
+                        and int(prev_volume / 2) < acml_vol):
                     _market_sell_checked = True
                     _mkt_data = _get_dly_mkt_trend(trade_date, conn)
                     if _mkt_data:
@@ -845,15 +876,6 @@ def get_kis_1min_from_datetime_simul(
                                 "매도수량":      int(_mkt_qty), "매도가격": close_price,
                             })
                             return signals
-                        else:
-                            print(f"[시뮬]-{nick}-[{row['일자']}-{row['시간']}]"
-                                  f"{stock_name}[{stock_code}]"
-                                  f" [시장흐름] {_stk_mkt} 허용:{_allow_ratio}%({_allowed_invest:,}원)"
-                                  f" 현투자:{_invest_pct}%({_total_invested:,}원) → 비중정상(매도불필요)")
-                    else:
-                        if verbose:
-                            print(f"[시뮬] {stock_code} dly_acct_balance({trade_date}) 없음"
-                                  f" → 시장흐름 매도 체크 생략")
 
                 # 매도 실행
                 if sell_trigger:
