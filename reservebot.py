@@ -2493,13 +2493,21 @@ def callback_get(update, context) :
             acct_no = ac['acct_no']
 
             with get_conn().cursor() as cur_rs:
+                # cur_rs.execute("""
+                #     SELECT DISTINCT code, name FROM trading_trail
+                #     WHERE trail_tp IN ('P', 'C', 'U')
+                #     AND acct_no = %s 
+                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                #     AND basic_qty > 0
+                #     ORDER BY name
+                # """, (acct_no,))
                 cur_rs.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('P', 'C', 'U')
-                    AND acct_no = %s 
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND basic_qty > 0
                     ORDER BY name
-                """, (acct_no,))
+                """)
                 resume_rows = cur_rs.fetchall()
             if resume_rows:
                 rs_buttons = [
@@ -2521,13 +2529,21 @@ def callback_get(update, context) :
             acct_no = ac['acct_no']
 
             with get_conn().cursor() as cur_st:
+                # cur_st.execute("""
+                #     SELECT DISTINCT code, name FROM trading_trail
+                #     WHERE trail_tp IN ('1', '2', 'L')
+                #     AND acct_no = %s 
+                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                #     AND basic_qty > 0
+                #     ORDER BY name
+                # """, (acct_no,))
                 cur_st.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('1', '2', 'L')
-                    AND acct_no = %s 
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND basic_qty > 0
                     ORDER BY name
-                """, (acct_no,))
+                """)
                 stop_rows = cur_st.fetchall()
             if stop_rows:
                 st_buttons = [
@@ -2886,7 +2902,7 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_rn:
                 cur_rn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
                     (ts_code,)
                 )
                 rn_row = cur_rn.fetchone()
@@ -2929,7 +2945,7 @@ def callback_get(update, context) :
             c_sp = get_conn()
             with c_sp.cursor() as cur_sn:
                 cur_sn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
                     (ts_code,)
                 )
                 sn_row = cur_sn.fetchone()
@@ -2940,6 +2956,7 @@ def callback_get(update, context) :
                     WHERE code = %s
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND trail_tp IN ('1', '2', 'L')
+                    AND basic_qty > 0
                 """, (ts_code,))
                 updated_sp = cur_sp.rowcount
             c_sp.commit()
@@ -3489,6 +3506,7 @@ def echo(update, context):
                     WHERE code = %s
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND trail_tp IN ('C', 'U', 'P')
+                    AND basic_qty > 0
                     RETURNING 1
                 """, (
                     datetime.now().strftime('%H%M%S'), trail_tp_41b,
