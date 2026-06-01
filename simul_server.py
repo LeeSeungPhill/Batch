@@ -471,7 +471,8 @@ def _kis_headers(ac, tr_id):
 @app.route('/api/stock-info')
 def stock_info():
     """KIS API로 종목 기본정보(시장구분·업종·시가총액·매수금액 제안) 조회."""
-    code = request.args.get('code', '').strip().zfill(6)
+    code     = request.args.get('code', '').strip().zfill(6)
+    buy_date = request.args.get('buy_date', '').strip().replace('-', '')  # YYYYMMDD
     if not code or not code.isdigit():
         return jsonify({'error': '유효한 종목코드가 필요합니다.'}), 400
     ac = _get_api_account()
@@ -506,11 +507,55 @@ def stock_info():
         else:
             amt_min, amt_max, amt_desc = 500000, 2000000, '변동성 높음, 소액 분산 권장'
 
+        # 손절금액 제안: market_ratio 기준 선형보간 (10만~40만원)
+        suggest_loss_amt          = 100_000
+        suggest_loss_market_ratio = 0
+        suggest_loss_base_dt      = ''
+        try:
+            conn_mr = get_conn()
+            cur_mr  = conn_mr.cursor()
+
+            if len(buy_date) == 8:
+                # buy_date 전영업일 기준 market_ratio 조회
+                business_day = f"{buy_date[:4]}-{buy_date[4:6]}-{buy_date[6:]}"
+                prev_biz = get_previous_business_day(
+                    (datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+                )
+                cur_mr.execute("""
+                    SELECT market_ratio, dt FROM dly_acct_balance_simul
+                    WHERE acct = '74346047' AND dt = %s
+                """, (prev_biz,))
+            else:
+                # buy_date 미입력 시 최신 레코드
+                cur_mr.execute("""
+                    SELECT market_ratio, dt FROM dly_acct_balance_simul
+                    WHERE acct = '74346047' AND market_ratio > 0
+                    ORDER BY dt DESC LIMIT 1
+                """)
+
+            mr_row = cur_mr.fetchone()
+            cur_mr.close()
+            conn_mr.close()
+            if mr_row and mr_row[0]:
+                suggest_loss_market_ratio = float(mr_row[0])
+                suggest_loss_base_dt      = mr_row[1]
+                suggest_loss_amt = int(
+                    max(100_000, min(400_000,
+                        100_000 + (suggest_loss_market_ratio / 100) * 300_000
+                    ))
+                )
+        except Exception:
+            pass
+
         return jsonify({
             'code': code, 'market': market, 'size': size,
             'industry': industry, 'mktcap': mktcap,
             'mktcap_str': f"{mktcap:,}억원" if mktcap else '',
             'amt_min': amt_min, 'amt_max': amt_max, 'amt_desc': amt_desc,
+            'suggest_loss_amt': suggest_loss_amt,
+            'suggest_loss_amt_str': f"{suggest_loss_amt:,}원",
+            'suggest_loss_market_ratio': suggest_loss_market_ratio,
+            'suggest_loss_base_dt': suggest_loss_base_dt,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

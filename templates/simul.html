@@ -387,6 +387,10 @@
           💡 권장 매수금액: <b>{{ fmt(stockInfo.amt_min) }}원 ~ {{ fmt(stockInfo.amt_max) }}원</b>
           <span style="color:#888;font-size:.78rem;margin-left:6px">({{ stockInfo.amt_desc }})</span>
         </div>
+        <div class="amt-suggest" v-if="stockInfo.suggest_loss_amt">
+          ✂️ 제안 손절금액: <b>{{ stockInfo.suggest_loss_amt_str }}</b>
+          <span style="color:#888;font-size:.78rem;margin-left:6px">(시장비율 {{ stockInfo.suggest_loss_market_ratio }}%<span v-if="stockInfo.suggest_loss_base_dt">, 기준일 {{ stockInfo.suggest_loss_base_dt }}</span>)</span>
+        </div>
       </div>
 
       <div class="field">
@@ -744,12 +748,13 @@ createApp({
       setTimeout(() => { alert.value.msg = ''; }, ms);
     }
 
-    async function fetchStockInfo(code) {
+    async function fetchStockInfo(code, buyDate) {
       stockInfo.value = null;
       if (!code || code.length !== 6) return;
       nameLookingUp.value = true;
       try {
-        const res  = await fetch(`/api/stock-info?code=${code}`);
+        const dateParam = buyDate ? `&buy_date=${buyDate.replace(/-/g, '')}` : '';
+        const res  = await fetch(`/api/stock-info?code=${code}${dateParam}`);
         const data = await res.json();
         if (!data.error) stockInfo.value = data;
       } catch { /* 무시 */ } finally {
@@ -774,14 +779,14 @@ createApp({
           const res  = await fetch(`/api/stock-name?code=${code}`);
           const data = await res.json();
           if (data.name) form.value.name = data.name;
-          await fetchStockInfo(code);
+          await fetchStockInfo(code, form.value.buy_date);
         } else {
           const res  = await fetch(`/api/stock-code?name=${encodeURIComponent(val)}`);
           const data = await res.json();
           if (data.code) {
             form.value.name = val;
             form.value.code = data.code;
-            await fetchStockInfo(data.code);
+            await fetchStockInfo(data.code, form.value.buy_date);
           }
         }
       } catch { /* 무시 */ } finally {
@@ -794,7 +799,7 @@ createApp({
       if (!name) return;
       // 코드가 이미 있으면 종목정보만 조회
       if (form.value.code && /^\d{6}$/.test(form.value.code)) {
-        await fetchStockInfo(form.value.code);
+        await fetchStockInfo(form.value.code, form.value.buy_date);
         return;
       }
       nameLookingUp.value = true;
@@ -803,7 +808,7 @@ createApp({
         const data = await res.json();
         if (data.code) {
           form.value.code = data.code;
-          await fetchStockInfo(data.code);
+          await fetchStockInfo(data.code, form.value.buy_date);
         }
       } catch { /* 무시 */ } finally {
         nameLookingUp.value = false;
