@@ -3713,6 +3713,40 @@ def echo(update, context):
         bps = a['bps']
         g_low_price = stck_lwpr
 
+        # 종목 기본정보 (시장구분·업종·규모·매수금액 제안·손절금액 제안)
+        stock_info_str = ""
+        try:
+            _mrkt_name = a.get('rprs_mrkt_kor_name', '')
+            _industry  = a.get('bstp_kor_isnm', '')
+            try:
+                _mktcap = int(str(hts_avls).replace(',', ''))
+            except Exception:
+                _mktcap = 0
+            if   _mktcap >= 10000: _size, _amt_min, _amt_max, _amt_desc = '대형주', 2_000_000, 10_000_000, '유동성 높음/안정적'
+            elif _mktcap >= 3000:  _size, _amt_min, _amt_max, _amt_desc = '중형주', 1_000_000,  5_000_000, '유동성 보통/중간 변동성'
+            else:                  _size, _amt_min, _amt_max, _amt_desc = '소형주',   500_000,  2_000_000, '변동성 높음/소액 분산 권장'
+            _suggest_loss = 100_000
+            try:
+                with get_conn().cursor() as _cur_si:
+                    _cur_si.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(acct_no),)
+                    )
+                    _si_row = _cur_si.fetchone()
+                    if _si_row and _si_row[0]:
+                        _mr_si = float(_si_row[0])
+                        _suggest_loss = int(max(100_000, min(400_000, 100_000 + (_mr_si / 100) * 300_000)))
+            except Exception:
+                pass
+            stock_info_str = (
+                "\n─────────────────\n"
+                f"  [{_mrkt_name}] {_size} | 업종: {_industry} | 시총: {format(_mktcap, ',d')}억원\n"
+                f"  매수금액 범위: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
+                f"  손절금액 제안: {format(_suggest_loss, ',d')}원"
+            )
+        except Exception as _e_si:
+            print(f"[stock_info] 조회 오류: {_e_si}")
+
         print("menuNum : ", menuNum)
 
         if menuNum == '21':
@@ -3768,6 +3802,7 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_item_loss_21, ',d') + "원"
+                        + stock_info_str
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
@@ -4560,6 +4595,7 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
+                        + stock_info_str
                         + mr_warn71
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
@@ -4836,9 +4872,10 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
+                        + stock_info_str
                     )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')        
-                    
+                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
+
                     # 매수 가능(현금) 조회
                     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                     print("매수 가능(현금) : " + format(int(b), ',d'))
