@@ -2489,11 +2489,23 @@ def callback_get(update, context) :
 
     elif command == "재개" and "추적상태" in data_selected:
         try:
+            ac = account()
+            acct_no = ac['acct_no']
+
             with get_conn().cursor() as cur_rs:
+                # cur_rs.execute("""
+                #     SELECT DISTINCT code, name FROM trading_trail
+                #     WHERE trail_tp IN ('P', 'C', 'U')
+                #     AND acct_no = %s 
+                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                #     AND basic_qty > 0
+                #     ORDER BY name
+                # """, (acct_no,))
                 cur_rs.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('P', 'C', 'U')
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND basic_qty > 0
                     ORDER BY name
                 """)
                 resume_rows = cur_rs.fetchall()
@@ -2513,11 +2525,23 @@ def callback_get(update, context) :
 
     elif command == "멈춤" and "추적상태" in data_selected:
         try:
+            ac = account()
+            acct_no = ac['acct_no']
+
             with get_conn().cursor() as cur_st:
+                # cur_st.execute("""
+                #     SELECT DISTINCT code, name FROM trading_trail
+                #     WHERE trail_tp IN ('1', '2', 'L')
+                #     AND acct_no = %s 
+                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                #     AND basic_qty > 0
+                #     ORDER BY name
+                # """, (acct_no,))
                 cur_st.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('1', '2', 'L')
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
+                    AND basic_qty > 0
                     ORDER BY name
                 """)
                 stop_rows = cur_st.fetchall()
@@ -2878,7 +2902,7 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_rn:
                 cur_rn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
                     (ts_code,)
                 )
                 rn_row = cur_rn.fetchone()
@@ -2921,7 +2945,7 @@ def callback_get(update, context) :
             c_sp = get_conn()
             with c_sp.cursor() as cur_sn:
                 cur_sn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE)",
+                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
                     (ts_code,)
                 )
                 sn_row = cur_sn.fetchone()
@@ -2932,6 +2956,7 @@ def callback_get(update, context) :
                     WHERE code = %s
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND trail_tp IN ('1', '2', 'L')
+                    AND basic_qty > 0
                 """, (ts_code,))
                 updated_sp = cur_sp.rowcount
             c_sp.commit()
@@ -2954,19 +2979,19 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_kk:
                 cur_kk.execute(
-                    'SELECT through_price, leave_price, support_price, resist_price, trend_high_price, trend_low_price '
+                    'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" WHERE code = %s',
                     (g_kk_code,)
                 )
                 kk_row = cur_kk.fetchone()
             def _fmt(v):
                 return format(int(v), ',d') if v is not None else '-'
-            through_v, leave_v, support_v, resist_v, trend_high_v, trend_low_v = kk_row if kk_row else (None,)*6
+            through_v, leave_v, resist_v, support_v, trend_high_v, trend_low_v = kk_row if kk_row else (None,)*6
             kk_field_btns = [
                 InlineKeyboardButton(f"돌파가({_fmt(through_v)})",       callback_data="menu,kk_field_돌파가"),
                 InlineKeyboardButton(f"이탈가({_fmt(leave_v)})",         callback_data="menu,kk_field_이탈가"),
-                InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
                 InlineKeyboardButton(f"저항가({_fmt(resist_v)})",        callback_data="menu,kk_field_저항가"),
+                InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
                 InlineKeyboardButton(f"추세상한가({_fmt(trend_high_v)})", callback_data="menu,kk_field_추세상한가"),
                 InlineKeyboardButton(f"추세이탈가({_fmt(trend_low_v)})", callback_data="menu,kk_field_추세이탈가"),
                 InlineKeyboardButton("취소",                              callback_data="menu,취소"),
@@ -3481,6 +3506,7 @@ def echo(update, context):
                     WHERE code = %s
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND trail_tp IN ('C', 'U', 'P')
+                    AND basic_qty > 0
                     RETURNING 1
                 """, (
                     datetime.now().strftime('%H%M%S'), trail_tp_41b,
@@ -3687,6 +3713,40 @@ def echo(update, context):
         bps = a['bps']
         g_low_price = stck_lwpr
 
+        # 종목 기본정보 (시장구분·업종·규모·매수금액 제안·손절금액 제안)
+        stock_info_str = ""
+        try:
+            _mrkt_name = a.get('rprs_mrkt_kor_name', '')
+            _industry  = a.get('bstp_kor_isnm', '')
+            try:
+                _mktcap = int(str(hts_avls).replace(',', ''))
+            except Exception:
+                _mktcap = 0
+            if   _mktcap >= 10000: _size, _amt_min, _amt_max, _amt_desc = '대형주', 2_000_000, 10_000_000, '유동성 높음/안정적'
+            elif _mktcap >= 3000:  _size, _amt_min, _amt_max, _amt_desc = '중형주', 1_000_000,  5_000_000, '유동성 보통/중간 변동성'
+            else:                  _size, _amt_min, _amt_max, _amt_desc = '소형주',   500_000,  2_000_000, '변동성 높음/소액 분산 권장'
+            _suggest_loss = 100_000
+            try:
+                with get_conn().cursor() as _cur_si:
+                    _cur_si.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(acct_no),)
+                    )
+                    _si_row = _cur_si.fetchone()
+                    if _si_row and _si_row[0]:
+                        _mr_si = float(_si_row[0])
+                        _suggest_loss = int(max(100_000, min(400_000, 100_000 + (_mr_si / 100) * 300_000)))
+            except Exception:
+                pass
+            stock_info_str = (
+                "\n─────────────────\n"
+                f"  [{_mrkt_name}] {_size} | 업종: {_industry} | 시총: {format(_mktcap, ',d')}억원\n"
+                f"  매수금액 범위: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
+                f"  손절금액 제안: {format(_suggest_loss, ',d')}원"
+            )
+        except Exception as _e_si:
+            print(f"[stock_info] 조회 오류: {_e_si}")
+
         print("menuNum : ", menuNum)
 
         if menuNum == '21':
@@ -3742,6 +3802,7 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_item_loss_21, ',d') + "원"
+                        + stock_info_str
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
@@ -4490,6 +4551,39 @@ def echo(update, context):
                     g_trail71_year_day = datetime.now().strftime("%Y%m%d")
                     g_trail71_hour_minute = datetime.now().strftime('%H%M%S')
 
+                    # 시장비율 초과 체크
+                    mr_warn71 = ""
+                    try:
+                        with get_conn().cursor() as cur_mr71:
+                            cur_mr71.execute("""
+                                SELECT sfm.market_ratio, sfm.prvs_rcdl_excc_amt,
+                                       COALESCE((SELECT SUM(sb.eval_sum)
+                                                 FROM public."stockBalance_stock_balance" sb
+                                                 WHERE sb.acct_no = sfm.acct_no
+                                                   AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
+                                                   AND sb.proc_yn = 'Y'), 0)
+                                FROM public."stockFundMng_stock_fund_mng" sfm
+                                WHERE sfm.acct_no = %s
+                            """, (str(acct_no),))
+                            row_mr71 = cur_mr71.fetchone()
+                        if row_mr71:
+                            mr71_ratio = float(row_mr71[0])
+                            mr71_cash = int(row_mr71[1])
+                            mr71_scts = int(row_mr71[2])
+                            mr71_tot = mr71_cash + mr71_scts
+                            if mr71_tot > 0:
+                                ratio_loss71 = (mr71_scts + loss_buy_amt_71) / mr71_tot * 100
+                                ratio_amt71  = (mr71_scts + amt_buy_amt_71)  / mr71_tot * 100
+                                warns71 = []
+                                if mr71_ratio < ratio_loss71:
+                                    warns71.append(f"손절기준({format(loss_buy_amt_71, ',d')}원)→{ratio_loss71:.1f}%")
+                                if mr71_ratio < ratio_amt71:
+                                    warns71.append(f"매수금액기준({format(amt_buy_amt_71, ',d')}원)→{ratio_amt71:.1f}%")
+                                if warns71:
+                                    mr_warn71 = f"\n⚠ 시장비율({mr71_ratio:.0f}%) 초과: {', '.join(warns71)}"
+                    except Exception as e_mr71:
+                        print(f"[menuNum=71] market_ratio 체크 오류: {e_mr71}")
+
                     selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "현재계좌"
                     preview_text = (
                         "[선택계좌: " + selected_str + "]\n"
@@ -4501,6 +4595,8 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
+                        + stock_info_str
+                        + mr_warn71
                     )
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
@@ -4776,9 +4872,10 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
+                        + stock_info_str
                     )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')        
-                    
+                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
+
                     # 매수 가능(현금) 조회
                     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                     print("매수 가능(현금) : " + format(int(b), ',d'))

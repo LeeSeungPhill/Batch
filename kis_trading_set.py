@@ -520,6 +520,31 @@ for nick in nickname_list:
                                 'display_plain': f"[장기]-{plain}",
                             })
 
+                    elif i_trail_tp == 'P':
+                        reason = None
+                        if i_cur > 0:
+                            if i_exit > 0 and i_cur < i_exit:
+                                reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                plain = f"{int(i_exit):,}원 최종이탈가 하회"
+                            elif i_basic > 0 and i_cur < i_basic:
+                                reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                plain = f"{int(i_basic):,}원 매수가 하회"
+                        if reason:
+                            replace_candidates.append({
+                                'nick': nick,
+                                'acct_no': acct_no,
+                                'token': token,
+                                'chat_id': chat_id,
+                                'name': i_name,
+                                'code': i_code,
+                                'current_price': i_cur,
+                                'trail_day': info['trail_day'],
+                                'trail_dtm': info['trail_dtm'],
+                                'trail_tp': i_trail_tp,
+                                'display': f"  - {i_name}(<code>{i_code}</code>)[멈춤]: {reason}",
+                                'display_plain': f"[멈춤]-{plain}",
+                            })        
+
             skipped_count = len(trading_trail_create_list) - inserted_count
 
             message = (
