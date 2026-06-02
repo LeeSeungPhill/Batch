@@ -3498,22 +3498,34 @@ def echo(update, context):
             c41b = get_conn()
             with c41b.cursor() as cur_41b:
                 cur_41b.execute("""
+                    WITH target AS (
+                        SELECT acct_no, code, trail_day, trail_dtm, trail_tp
+                        FROM trading_trail
+                        WHERE code = %s
+                        AND trail_day = prev_business_day_char(CURRENT_DATE)
+                        AND trail_tp IN ('C', 'U', 'P')
+                        AND basic_qty > 0
+                        ORDER BY trail_dtm DESC
+                        LIMIT 1
+                    )
                     UPDATE trading_trail SET
                         trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s,
                         proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
                         trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
                         trail_qty = NULL, trail_amt = NULL, volumn = NULL
-                    WHERE code = %s
-                    AND trail_day = prev_business_day_char(CURRENT_DATE)
-                    AND trail_tp IN ('C', 'U', 'P')
-                    AND basic_qty > 0
+                    FROM target
+                    WHERE trading_trail.acct_no = target.acct_no
+                      AND trading_trail.code = target.code
+                      AND trading_trail.trail_day = target.trail_day
+                      AND trading_trail.trail_dtm = target.trail_dtm
+                      AND trading_trail.trail_tp = target.trail_tp
                     RETURNING 1
                 """, (
+                    ts_code,
                     datetime.now().strftime('%H%M%S'), trail_tp_41b,
                     stop_price_41b, target_price_41b,
                     datetime.now().strftime('%H%M%S'), datetime.now(),
                     int(hold_price_41b), hldg_qty_41b, hold_amt_41b,
-                    ts_code
                 ))
                 was_updated_41b = cur_41b.fetchone() is not None
             c41b.commit()
