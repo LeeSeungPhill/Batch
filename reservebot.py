@@ -880,18 +880,26 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    ar = resp.APIResp(res)
-   
-    if rtFlag == "all" and ar.isOK():
-        output = ar.getBody().output2
-    else:    
-        output = ar.getBody().output1
 
-    if isinstance(output, list):
-        return pd.DataFrame(output)
-    else:
-        return pd.DataFrame([])
+    # rate-limit / 일시오류 대응: isOK 체크 + 짧은 backoff 재시도 (최대 3회)
+    # (rt_cd만 있고 output1/output2가 없는 응답에서 AttributeError 발생 방지)
+    ar = None
+    for attempt in range(3):
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if ar.isOK():
+            body = ar.getBody()
+            if rtFlag == "all":
+                output = getattr(body, 'output2', [])
+            else:
+                output = getattr(body, 'output1', [])
+            if isinstance(output, list):
+                return pd.DataFrame(output)
+            return pd.DataFrame([])
+        time.sleep(0.3 * (attempt + 1))
+
+    print(f"⚠️ stock_balance 응답 오류 (acct_no={acct_no}): {ar.getErrorCode()} {ar.getErrorMessage()}")
+    return pd.DataFrame([])    
 
 def is_positive_int(val: str) -> bool:
     """양수 정수만 허용 (1~100 범위)"""
@@ -2299,7 +2307,7 @@ def callback_get(update, context) :
                 sim AS (
                     SELECT *
                     FROM (
-                        SELECT
+                        SELECT DISTINCT ON (code)
                             acct_no,
                             name,
                             code,
@@ -2318,6 +2326,7 @@ def callback_get(update, context) :
                         WHERE acct_no = %s
                         AND trail_day = %s
                         AND trail_tp IN ('1','2','3','L','P','C','U')
+                        ORDER BY code, trail_dtm DESC                        
                     ) t
                 )
                 """

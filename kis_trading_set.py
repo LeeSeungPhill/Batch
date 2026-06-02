@@ -86,18 +86,26 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    ar = resp.APIResp(res)
-   
-    if rtFlag == "all" and ar.isOK():
-        output = ar.getBody().output2
-    else:    
-        output = ar.getBody().output1
 
-    if isinstance(output, list):
-        return pd.DataFrame(output)
-    else:
-        return pd.DataFrame([])
+    # rate-limit / 일시오류 대응: isOK 체크 + 짧은 backoff 재시도 (최대 3회)
+    # (rt_cd만 있고 output1/output2가 없는 응답에서 AttributeError 발생 방지)
+    ar = None
+    for attempt in range(3):
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if ar.isOK():
+            body = ar.getBody()
+            if rtFlag == "all":
+                output = getattr(body, 'output2', [])
+            else:
+                output = getattr(body, 'output1', [])
+            if isinstance(output, list):
+                return pd.DataFrame(output)
+            return pd.DataFrame([])
+        time.sleep(0.3 * (attempt + 1))
+
+    print(f"⚠️ stock_balance 응답 오류 (acct_no={acct_no}): {ar.getErrorCode()} {ar.getErrorMessage()}")
+    return pd.DataFrame([])
     
 def post_business_day_char(business_day:str):
     cur100 = conn.cursor()
@@ -269,7 +277,7 @@ for nick in nickname_list:
             sim AS (
                 SELECT *
                 FROM (
-                    SELECT
+                    SELECT DISTINCT ON (code)
                         acct_no,
                         name,
                         code,
@@ -287,6 +295,7 @@ for nick in nickname_list:
                     WHERE acct_no = {acct_no}                            
                     AND trail_day = '{prev_date}'
                     AND trail_tp IN ('1','2','3','L','P','C','U')
+                    ORDER BY code, trail_dtm DESC
                 ) t
             )
             SELECT
