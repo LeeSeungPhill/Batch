@@ -265,18 +265,26 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{BASE_URL}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    ar = resp.APIResp(res)
 
-    if rtFlag == "all" and ar.isOK():
-        output = ar.getBody().output2
-    else:
-        output = ar.getBody().output1
+    # rate-limit / 일시오류 대응: isOK 체크 + 짧은 backoff 재시도 (최대 3회)
+    # (rt_cd만 있고 output1/output2가 없는 응답에서 AttributeError 발생 방지)
+    ar = None
+    for attempt in range(3):
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if ar.isOK():
+            body = ar.getBody()
+            if rtFlag == "all":
+                output = getattr(body, 'output2', [])
+            else:
+                output = getattr(body, 'output1', [])
+            if isinstance(output, list):
+                return pd.DataFrame(output)
+            return pd.DataFrame([])
+        time.sleep(0.3 * (attempt + 1))
 
-    if isinstance(output, list):
-        return pd.DataFrame(output)
-    else:
-        return pd.DataFrame([])
+    print(f"⚠️ stock_balance 응답 오류 (acct_no={acct_no}): {ar.getErrorCode()} {ar.getErrorMessage()}")
+    return pd.DataFrame([])
 
 def get_kis_daily_chart(
         stock_code: str,
@@ -558,6 +566,96 @@ def calculate_atr(daily_data, period=14):
         tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
         trs.append(tr)
     return int(sum(trs[-period:]) / period)
+
+# ─────────────────────────────────────────
+# 시장 흐름 매도 헬퍼
+# ─────────────────────────────────────────
+_stock_market_cache_lock = threading.Lock()
+_stock_market_cache: dict = {}
+
+def _get_mkt_trend_real(acct_no, conn) -> dict | None:
+    """stockFundMng_stock_fund_mng 에서 시장 흐름 지표 및 총평가금액 조회."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT market_ratio, kospi_short, kosdak_short, kospi_mid, kosdak_mid,
+                   kospi_long, kosdak_long, tot_evlu_amt
+            FROM public."stockFundMng_stock_fund_mng"
+            WHERE acct_no = %s
+        """, (str(acct_no),))
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            return {
+                'market_ratio': row[0],
+                'kospi_short':  row[1], 'kosdak_short': row[2],
+                'kospi_mid':    row[3], 'kosdak_mid':   row[4],
+                'kospi_long':   row[5], 'kosdak_long':  row[6],
+                'tot_evlu_amt': int(row[7]) if row[7] else 0,
+            }
+    except Exception as e:
+        print(f"stockFundMng 시장흐름 조회 오류: {e}")
+    return None
+
+def _calc_invest_ratio(mkt_data: dict, market_type: str) -> int:
+    """시장 중기·장기 흐름 조합으로 투자가능비율(%) 반환."""
+    if not mkt_data:
+        return 100
+    if market_type == 'KOSPI':
+        mid, long_ = mkt_data.get('kospi_mid', ''), mkt_data.get('kospi_long', '')
+    else:
+        mid, long_ = mkt_data.get('kosdak_mid', ''), mkt_data.get('kosdak_long', '')
+    if   mid == '03' and long_ == '05': return 100
+    elif mid == '03' and long_ == '06': return  50
+    elif mid == '04' and long_ == '05': return  70
+    elif mid == '04' and long_ == '06': return  30
+    return 100
+
+def _get_total_invested_real(acct_no, conn) -> int:
+    """stockBalance_stock_balance 에서 trading_plan NOT IN ('i','h') 기준 총매입금액 조회."""
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT COALESCE(SUM(purchase_sum), 0)
+            FROM public."stockBalance_stock_balance"
+            WHERE acct_no = %s AND proc_yn = 'Y'
+              AND (trading_plan NOT IN ('i', 'h') OR trading_plan IS NULL)
+        """, (str(acct_no),))
+        row = cur.fetchone()
+        cur.close()
+        return int(row[0]) if row else 0
+    except Exception as e:
+        print(f"총투자금액 조회 오류: {e}")
+        return 0
+
+def _get_stock_market_type(stock_code: str, access_token: str,
+                           app_key: str, app_secret: str) -> str:
+    """종목코드의 시장구분 반환 (KOSPI/KOSDAQ). 모듈 캐시 우선."""
+    with _stock_market_cache_lock:
+        if stock_code in _stock_market_cache:
+            return _stock_market_cache[stock_code]
+    try:
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
+            headers={
+                "Content-Type": "application/json",
+                "authorization": f"Bearer {access_token}",
+                "appkey": app_key, "appsecret": app_secret,
+                "tr_id": "FHKST01010100", "custtype": "P",
+            },
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output'):
+            mkt_name = d['output'].get('rprs_mrkt_kor_name', '')
+            mkt = 'KOSPI' if '코스피' in mkt_name else 'KOSDAQ'
+            with _stock_market_cache_lock:
+                _stock_market_cache[stock_code] = mkt
+            return mkt
+    except Exception:
+        pass
+    return 'KOSPI'
 
 def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result, conn, bot, chat_id):
 
@@ -1088,6 +1186,18 @@ def get_kis_1min_from_datetime(
         }
         prevlow_warn_last_key = _alert_keys.get("prevlow_warn")
         breakdown_notify_last_key = _alert_keys.get("L")
+        _market_sell_checked = False
+
+        # 시장 흐름 사전 조회 (_get_dly_mkt_trend → 루프 내 중복 호출 방지)
+        _stk_mkt_pre    = _get_stock_market_type(stock_code, access_token, app_key, app_secret)
+        _mkt_trend_pre  = _get_mkt_trend_real(acct_no, conn)
+        _short_market_down = False
+        if _mkt_trend_pre:
+            _short_key         = 'kospi_short' if _stk_mkt_pre == 'KOSPI' else 'kosdak_short'
+            _short_val         = _mkt_trend_pre.get(_short_key, '')
+            _short_market_down = (_short_val == '02')
+            if verbose and _short_market_down:
+                print(f"[시뮬] {stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
 
         for _, row in df.iterrows():
 
@@ -1245,9 +1355,9 @@ def get_kis_1min_from_datetime(
                             _safety_m = int(basic_price * 1.10)
                             _p2s = peak_high_tenmin - _safety_m
                             _cond_b_capable = peak_high_tenmin > _safety_m and _p2s >= int(_safety_m * 0.05)
-                            if not _cond_b_capable:
+                            if not _cond_b_capable or _short_market_down:
                                 fixed_stop = int(stop_price) if stop_price else 0
-                                if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
+                                if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
                                     breakdown_wait.update({
                                         "active": True,
                                         "tenmin_key": current_10min_key,
@@ -1273,29 +1383,13 @@ def get_kis_1min_from_datetime(
                                         except Exception as te:
                                             print(f"텔레그램 발송 실패: {te}")
 
-                                        # try:
-                                        #     cur_p = conn.cursor()
-                                        #     cur_p.execute("""
-                                        #         UPDATE public.trading_trail
-                                        #         SET trail_tp = 'P', mod_dt = %s
-                                        #         WHERE acct_no = %s
-                                        #             AND code = %s
-                                        #             AND trail_day = %s
-                                        #             AND trail_tp NOT IN ('3', '4')
-                                        #     """, (datetime.now(), acct_no, stock_code, trade_date))
-                                        #     conn.commit()
-                                        #     cur_p.close()
-                                        #     print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                        # except Exception as de:
-                                        #     print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
-
                     else:
                         # ===============================
                         # 당일 15%+ 미달성: 이탈가(stop_price) 이탈 → 10분봉 저가·거래량 대기
                         # ===============================
                         fixed_stop = int(stop_price) if stop_price else 0
 
-                        if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
+                        if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
                             breakdown_wait.update({
                                 "active": True,
                                 "tenmin_key": current_10min_key,
@@ -1321,24 +1415,8 @@ def get_kis_1min_from_datetime(
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
 
-                                # try:
-                                #     cur_p = conn.cursor()
-                                #     cur_p.execute("""
-                                #         UPDATE public.trading_trail
-                                #         SET trail_tp = 'P', mod_dt = %s
-                                #         WHERE acct_no = %s
-                                #             AND code = %s
-                                #             AND trail_day = %s
-                                #             AND trail_tp NOT IN ('3', '4')
-                                #     """, (datetime.now(), acct_no, stock_code, trade_date))
-                                #     conn.commit()
-                                #     cur_p.close()
-                                #     print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                # except Exception as de:
-                                #     print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
-
                 # ===============================
-                # 전일저가 이탈 사전 경고 알림 (gain_pct 무관)
+                # 전일저가 이탈 사전 경고  + 시장 흐름 분석
                 # ===============================
                 _prevlow_start  = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
                 _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
@@ -1349,54 +1427,115 @@ def get_kis_1min_from_datetime(
                         if prevlow_warn_last_key is None or _cur_key_str > prevlow_warn_last_key:
                             prevlow_warn_last_key = _cur_key_str
                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
-                            gain_pct_warn = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
-                            try:
-                                msg_warn = (
-                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                    f" [사전경고] 전일저가 이탈 감시"
-                                    f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
-                                    f" | 수익률:{gain_pct_warn:+.1f}%"
-                                )
-                                _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
-                                sell_btn = InlineKeyboardButton(
-                                    text=f"전량매도 {prev_low:,}원",
-                                    callback_data=_cb_data
-                                )
-                                markup = InlineKeyboardMarkup([[sell_btn]])
-                                print(msg_warn)
-                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
-                                # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
-                            except Exception as te:
-                                print(f"텔레그램 발송 실패: {te}")
-                            # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
-                            # (이미 매도 트리거된 경우 'L' 상태 유지 필요 — 매도 실행 DB 업데이트 조건 보호)
-                            # if not sell_trigger:
-                            #     try:
-                            #         cur_p = conn.cursor()
-                            #         cur_p.execute("""
-                            #             UPDATE public.trading_trail
-                            #             SET trail_tp = 'P', mod_dt = %s
-                            #             WHERE acct_no = %s
-                            #                 AND code = %s
-                            #                 AND trail_day = %s
-                            #                 AND trail_tp NOT IN ('3', '4')
-                            #         """, (datetime.now(), acct_no, stock_code, trade_date))
-                            #         conn.commit()
-                            #         cur_p.close()
-                            #         print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                            #     except Exception as de:
-                            #         print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
+                            # 시장 흐름 기반 분석
+                            _w_mkt_data = _mkt_trend_pre
+                            if _w_mkt_data:
+                                _w_stk_mkt       = _stk_mkt_pre
+                                _w_allow_ratio   = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
+                                _w_total_invested = _get_total_invested_real(acct_no, conn)
+                                _invest_base    = _w_mkt_data['tot_evlu_amt']
+                                _w_allowed_invest = int(_invest_base * _allow_ratio / 100) if _invest_base > 0 else 0
+                                _w_excess_invest  = _w_total_invested - _w_allowed_invest
+                                _w_invest_pct     = round(_w_total_invested / _invest_base * 100, 1) if _invest_base > 0 else 0
+                                _w_mid_key   = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
+                                _w_long_key  = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
+                                _w_mid_str   = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
+                                _w_long_str  = '상승' if _w_mkt_data.get(_w_long_key) == '05' else '하락'
+                                if _w_excess_invest > 0 and close_price > 0:
+                                    _w_qty       = min(int(basic_qty), max(1, (_w_excess_invest + close_price - 1) // close_price))
+                                    _w_plan      = round(_w_qty / basic_qty * 100) if basic_qty > 0 else 100
+                            
+                                    try:
+                                        msg_warn = (
+                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                            f" [사전경고] 전일저가 이탈 감시"
+                                            f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
+                                            f"시장흐름매도[{_w_stk_mkt}] 중기:{_w_mid_str}/장기:{_w_long_str}"
+                                            f" 허용:{_w_allow_ratio}%({_w_allowed_invest:,}원)"
+                                            f" 현투자:{_w_invest_pct}%({_w_total_invested:,}원)"
+                                            f" 초과:{_w_excess_invest:,}원→{_w_plan}%매도"
+                                        )
+                                        _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
+                                        sell_btn = InlineKeyboardButton(
+                                            text=f"전량매도 {prev_low:,}원",
+                                            callback_data=_cb_data
+                                        )
+                                        markup = InlineKeyboardMarkup([[sell_btn]])
+                                        print(msg_warn)
+                                        bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
+                                        # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
+                                    except Exception as te:
+                                        print(f"텔레그램 발송 실패: {te}")
 
                 # ===============================
-                # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
+                # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 + 시장 흐름 기반 매도
                 # ===============================
                 _prevlow_cutoff = "161000" if trade_date.endswith("1119") else "151000"
-                if not breakdown_wait["active"] and not sell_trigger and current_time >= _prevlow_cutoff and prev_low is not None:
-                    if close_price < prev_low and int(prev_volume/2) < acml_vol:
-                        sell_trigger = True
-                        sell_reason = '금일종가 전일저가 이탈'
-                        sell_signal_type = "DAILY_BREAKDOWN_AFTER_1510"
-                        order_price = close_price
+                if (not breakdown_wait["active"] and not sell_trigger
+                        and current_time >= _prevlow_cutoff
+                        and prev_low is not None
+                        and close_price < prev_low
+                        and int(prev_volume / 2) < acml_vol
+                        and not _market_sell_checked):
+                    _market_sell_checked = True
+                    _mkt_data = _get_mkt_trend_real(acct_no, conn)
+                    if _mkt_data:
+                        _stk_mkt        = _get_stock_market_type(stock_code, access_token, app_key, app_secret)
+                        _allow_ratio    = _calc_invest_ratio(_mkt_data, _stk_mkt)
+                        _total_invested = _get_total_invested_real(acct_no, conn)
+                        _invest_base    = _mkt_data['tot_evlu_amt']
+                        _allowed_invest = int(_invest_base * _allow_ratio / 100) if _invest_base > 0 else 0
+                        _excess_invest  = _total_invested - _allowed_invest
+                        _invest_pct     = round(_total_invested / _invest_base * 100, 1) if _invest_base > 0 else 0
+                        _mid_key  = 'kospi_mid'  if _stk_mkt == 'KOSPI' else 'kosdak_mid'
+                        _long_key = 'kospi_long' if _stk_mkt == 'KOSPI' else 'kosdak_long'
+                        _mid_str  = '상승' if _mkt_data.get(_mid_key)  == '03' else '하락'
+                        _long_str = '상승' if _mkt_data.get(_long_key) == '05' else '하락'
+
+                        if _excess_invest > 0 and close_price > 0:
+                            _mkt_qty    = min(int(basic_qty),
+                                             max(1, (_excess_invest + close_price - 1) // close_price))
+                            _trail_plan = round(_mkt_qty / basic_qty * 100) if basic_qty > 0 else 100
+                            _mkt_amt    = close_price * _mkt_qty
+                            _mkt_rate   = round((close_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0
+                            _u_qty      = basic_qty - _mkt_qty
+                            _u_amt      = basic_price * _u_qty
+                            _new_tp     = "4" if _mkt_qty >= basic_qty else "L"
+                            _mkt_reason = (f"시장흐름매도[{_stk_mkt}] 중기:{_mid_str}/장기:{_long_str}"
+                                          f" 허용:{_allow_ratio}%({_allowed_invest:,}원)"
+                                          f" 현투자:{_invest_pct}%({_total_invested:,}원)"
+                                          f" 초과:{_excess_invest:,}원→{_trail_plan}%매도")
+                            print(f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}]"
+                                  f" ⚠ [시장매도] {_mkt_reason}")
+                            try:
+                                update_trading_daily_close(
+                                    nick, close_price, _mkt_qty, _mkt_amt, _mkt_rate,
+                                    str(_trail_plan), _u_qty, _u_amt, acct_no,
+                                    access_token, app_key, app_secret,
+                                    stock_code, stock_name, start_date, start_time, _new_tp,
+                                    row['시간'].replace(':', '') + '00', _mkt_reason, conn, bot, chat_id
+                                )
+                                try:
+                                    _msg_mkt = (
+                                        f"-{nick}-[{row['일자']}-{row['시간']}]"
+                                        f"{stock_name}[<code>{stock_code}</code>]"
+                                        f" ⚠ [시장흐름매도] {_mkt_reason}"
+                                    )
+                                    print(_msg_mkt)
+                                    bot.send_message(chat_id=chat_id, text=_msg_mkt, parse_mode='HTML')
+                                except Exception as te:
+                                    print(f"텔레그램 발송 실패: {te}")
+                            except Exception as e:
+                                print(f"시장흐름 매도 함수 호출 오류(무시됨): {e}")
+                            signals.append({
+                                "signal_type":  "MARKET_TREND_SELL",
+                                "종목코드":      stock_code, "발생일자": row["일자"],
+                                "발생시간":      row["시간"], "시장": _stk_mkt,
+                                "허용비율":      _allow_ratio,
+                                "현재투자비율":  _invest_pct,
+                                "매도수량":      int(_mkt_qty), "매도가격": close_price,
+                            })
+                            return signals
 
                 # ===============================
                 # 매도 실행 (공통)

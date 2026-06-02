@@ -880,18 +880,26 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     }
     PATH = "uapi/domestic-stock/v1/trading/inquire-balance"
     URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    ar = resp.APIResp(res)
-   
-    if rtFlag == "all" and ar.isOK():
-        output = ar.getBody().output2
-    else:    
-        output = ar.getBody().output1
 
-    if isinstance(output, list):
-        return pd.DataFrame(output)
-    else:
-        return pd.DataFrame([])
+    # rate-limit / 일시오류 대응: isOK 체크 + 짧은 backoff 재시도 (최대 3회)
+    # (rt_cd만 있고 output1/output2가 없는 응답에서 AttributeError 발생 방지)
+    ar = None
+    for attempt in range(3):
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if ar.isOK():
+            body = ar.getBody()
+            if rtFlag == "all":
+                output = getattr(body, 'output2', [])
+            else:
+                output = getattr(body, 'output1', [])
+            if isinstance(output, list):
+                return pd.DataFrame(output)
+            return pd.DataFrame([])
+        time.sleep(0.3 * (attempt + 1))
+
+    print(f"⚠️ stock_balance 응답 오류 (acct_no={acct_no}): {ar.getErrorCode()} {ar.getErrorMessage()}")
+    return pd.DataFrame([])    
 
 def is_positive_int(val: str) -> bool:
     """양수 정수만 허용 (1~100 범위)"""
@@ -2299,7 +2307,7 @@ def callback_get(update, context) :
                 sim AS (
                     SELECT *
                     FROM (
-                        SELECT
+                        SELECT DISTINCT ON (code)
                             acct_no,
                             name,
                             code,
@@ -2318,6 +2326,7 @@ def callback_get(update, context) :
                         WHERE acct_no = %s
                         AND trail_day = %s
                         AND trail_tp IN ('1','2','3','L','P','C','U')
+                        ORDER BY code, trail_dtm DESC                        
                     ) t
                 )
                 """
@@ -3498,22 +3507,33 @@ def echo(update, context):
             c41b = get_conn()
             with c41b.cursor() as cur_41b:
                 cur_41b.execute("""
+                    WITH target AS (
+                        SELECT code, trail_day, trail_dtm, trail_tp
+                        FROM trading_trail
+                        WHERE code = %s
+                        AND trail_day = prev_business_day_char(CURRENT_DATE)
+                        AND trail_tp IN ('C', 'U', 'P')
+                        AND basic_qty > 0
+                        ORDER BY trail_dtm DESC
+                        LIMIT 1
+                    )
                     UPDATE trading_trail SET
                         trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s,
                         proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
                         trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
                         trail_qty = NULL, trail_amt = NULL, volumn = NULL
-                    WHERE code = %s
-                    AND trail_day = prev_business_day_char(CURRENT_DATE)
-                    AND trail_tp IN ('C', 'U', 'P')
-                    AND basic_qty > 0
+                    FROM target
+                    WHERE trading_trail.code = target.code
+                      AND trading_trail.trail_day = target.trail_day
+                      AND trading_trail.trail_dtm = target.trail_dtm
+                      AND trading_trail.trail_tp = target.trail_tp
                     RETURNING 1
                 """, (
+                    ts_code,
                     datetime.now().strftime('%H%M%S'), trail_tp_41b,
                     stop_price_41b, target_price_41b,
                     datetime.now().strftime('%H%M%S'), datetime.now(),
                     int(hold_price_41b), hldg_qty_41b, hold_amt_41b,
-                    ts_code
                 ))
                 was_updated_41b = cur_41b.fetchone() is not None
             c41b.commit()
