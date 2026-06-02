@@ -3499,7 +3499,7 @@ def echo(update, context):
             with c41b.cursor() as cur_41b:
                 cur_41b.execute("""
                     WITH target AS (
-                        SELECT acct_no, code, trail_day, trail_dtm, trail_tp
+                        SELECT code, trail_day, trail_dtm, trail_tp
                         FROM trading_trail
                         WHERE code = %s
                         AND trail_day = prev_business_day_char(CURRENT_DATE)
@@ -3514,8 +3514,7 @@ def echo(update, context):
                         trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
                         trail_qty = NULL, trail_amt = NULL, volumn = NULL
                     FROM target
-                    WHERE trading_trail.acct_no = target.acct_no
-                      AND trading_trail.code = target.code
+                    WHERE trading_trail.code = target.code
                       AND trading_trail.trail_day = target.trail_day
                       AND trading_trail.trail_dtm = target.trail_dtm
                       AND trading_trail.trail_tp = target.trail_tp
