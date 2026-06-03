@@ -486,7 +486,7 @@
     <div class="section-title">매수 정보 입력</div>
     <div class="form-grid">
 
-      <div class="field">
+      <div class="field full">
         <label>종목코드 / 종목명 *</label>
         <input
           v-model.trim="form.code"
@@ -494,16 +494,9 @@
           placeholder="코드(005930) 또는 종목명"
           :class="{loading: nameLookingUp}"
         />
-      </div>
-
-      <div class="field">
-        <label>종목명</label>
-        <input
-          v-model.trim="form.name"
-          @blur="lookupCode"
-          placeholder="자동 조회 또는 직접 입력"
-          :class="{loading: nameLookingUp}"
-        />
+        <div v-if="form.name" style="font-size:.78rem;color:#4361ee;margin-top:4px;padding-left:2px">
+          {{ form.name }}
+        </div>
       </div>
 
       <!-- 종목 정보 표시 -->
@@ -559,6 +552,16 @@
         <input
           v-model="form.buy_date"
           type="date"
+        />
+      </div>
+
+      <div class="field">
+        <label>매수시간 (HHMMSS)</label>
+        <input
+          v-model.trim="form.buy_time"
+          maxlength="6"
+          placeholder="예) 091500"
+          style="font-family:monospace"
         />
       </div>
 
@@ -626,7 +629,7 @@
     <div class="section-title">매도 정보 입력</div>
     <div class="form-grid">
 
-      <div class="field">
+      <div class="field full">
         <label>종목코드 / 종목명 *</label>
         <input
           v-model.trim="sellForm.code"
@@ -634,16 +637,9 @@
           placeholder="코드(005930) 또는 종목명"
           :class="{loading: sellLookingUp}"
         />
-      </div>
-
-      <div class="field">
-        <label>종목명</label>
-        <input
-          v-model.trim="sellForm.name"
-          placeholder="자동 조회"
-          :class="{loading: sellLookingUp}"
-          readonly
-        />
+        <div v-if="sellForm.name" style="font-size:.78rem;color:#4361ee;margin-top:4px;padding-left:2px">
+          {{ sellForm.name }}
+        </div>
       </div>
 
       <div class="field">
@@ -656,9 +652,19 @@
         <input v-model.number="sellForm.sell_ratio" type="number" min="1" max="100" placeholder="100" />
       </div>
 
-      <div class="field full">
+      <div class="field">
         <label>매도일자 *</label>
         <input v-model="sellForm.sell_date" type="date" />
+      </div>
+
+      <div class="field">
+        <label>매도시간 (HHMMSS)</label>
+        <input
+          v-model.trim="sellForm.sell_time"
+          maxlength="6"
+          placeholder="예) 143000"
+          style="font-family:monospace"
+        />
       </div>
 
     </div>
@@ -927,7 +933,7 @@ createApp({
 
     const form = ref({
       code: '', name: '', buy_price: null, loss_price: null,
-      buy_amount: null, buy_date: today
+      buy_amount: null, buy_date: today, buy_time: ''
     });
 
     const preview       = ref(null);
@@ -946,7 +952,7 @@ createApp({
     };
 
     const sellForm = ref({
-      code: '', name: '', sell_price: null, sell_ratio: 100, sell_date: today
+      code: '', name: '', sell_price: null, sell_ratio: 100, sell_date: today, sell_time: ''
     });
     const sellPreview    = ref(null);
     const sellLookingUp  = ref(false);
@@ -1012,7 +1018,7 @@ createApp({
         const res  = await fetch('/api/sell', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sellPreview.value)
+          body: JSON.stringify({ ...sellPreview.value, sell_time: sellForm.value.sell_time })
         });
         const data = await res.json();
         if (data.error) { showAlert(data.error); return; }
@@ -1111,26 +1117,6 @@ createApp({
       }
     }
 
-    async function lookupCode() {
-      const name = form.value.name.trim();
-      if (!name) return;
-      // 코드가 이미 있으면 종목정보만 조회
-      if (form.value.code && /^\d{6}$/.test(form.value.code)) {
-        await fetchStockInfo(form.value.code, form.value.buy_date);
-        return;
-      }
-      nameLookingUp.value = true;
-      try {
-        const res  = await fetch(`/api/stock-code?name=${encodeURIComponent(name)}`);
-        const data = await res.json();
-        if (data.code) {
-          form.value.code = data.code;
-          await fetchStockInfo(data.code, form.value.buy_date);
-        }
-      } catch { /* 무시 */ } finally {
-        nameLookingUp.value = false;
-      }
-    }
 
     async function trailEditLookup() {
       const val = trailEdit.value.code.trim();
@@ -1191,6 +1177,7 @@ createApp({
             loss_price: preview.value.loss_price,
             buy_amount: form.value.buy_amount,
             buy_date:   preview.value.buy_date,
+            buy_time:   form.value.buy_time,
           })
         });
         const data = await res.json();
@@ -1338,7 +1325,7 @@ createApp({
     }
 
     function resetForm() {
-      form.value = { code: '', name: '', buy_price: null, loss_price: null, buy_amount: null, buy_date: today };
+      form.value = { code: '', name: '', buy_price: null, loss_price: null, buy_amount: null, buy_date: today, buy_time: '' };
       preview.value   = null;
       stockInfo.value = null;
       alert.value.msg = '';
@@ -1365,7 +1352,7 @@ createApp({
       stockInfo, dashboard,
       sellForm, sellPreview, sellLookingUp, canSellCalc,
       lookupSellName, calculateSell, executeSell,
-      canCalc, lookupName, lookupCode, trailEditLookup, trailTpLabel,
+      canCalc, lookupName, trailEditLookup, trailTpLabel,
       sizeClass, fetchStockInfo, loadDashboard,
       calculate, save, loadList, deleteRecord, resetForm,
       runSet, runTrail, updateTrail, fmt, fmtDay

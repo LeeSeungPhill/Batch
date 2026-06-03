@@ -91,32 +91,35 @@ def get_previous_business_day(day: str) -> str:
 # 전일 종가·저가 조회 (가격 유효성 검증용)
 # ─────────────────────────────────────────
 def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
+    d_from = (datetime.strptime(prev_date, "%Y%m%d") - timedelta(days=10)).strftime("%Y%m%d")
     headers = {
         "Content-Type": "application/json",
         "authorization": f"Bearer {access_token}",
         "appKey": app_key,
         "appSecret": app_secret,
-        "tr_id": "FHKST01010400"
+        "tr_id": "FHKST03010100"
     }
     params = {
         "FID_COND_MRKT_DIV_CODE": "J",
-        "FID_INPUT_ISCD": code,
-        "FID_PERIOD_DIV_CODE": "D",
-        "FID_ORG_ADJ_PRC": "0"
+        "FID_INPUT_ISCD":         code,
+        "FID_INPUT_DATE_1":       d_from,
+        "FID_INPUT_DATE_2":       prev_date,
+        "FID_PERIOD_DIV_CODE":    "D",
+        "FID_ORG_ADJ_PRC":        "0"
     }
     try:
         res = requests.get(
-            f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-daily-price",
+            f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
             headers=headers, params=params, verify=False, timeout=10
         )
         data = res.json()
-        if data.get('rt_cd') == '0' and data.get('output'):
-            for row in data['output']:
+        if data.get('rt_cd') == '0' and data.get('output2'):
+            for row in data['output2']:
                 if row.get('stck_bsop_date', '') == prev_date:
                     return (int(row.get('stck_clpr') or 0),
                             int(row.get('stck_lwpr') or 0),
                             int(row.get('stck_hgpr') or 0))
-            first = data['output'][0]
+            first = data['output2'][0]
             return (int(first.get('stck_clpr') or 0),
                     int(first.get('stck_lwpr') or 0),
                     int(first.get('stck_hgpr') or 0))

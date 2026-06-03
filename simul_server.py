@@ -5,6 +5,8 @@ import os
 import subprocess
 import requests
 import json
+import threading as _threading
+import pandas as pd
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -12,6 +14,35 @@ app = Flask(__name__)
 
 CONN_STRING = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ── KRX 종목 목록 (reservebot.py 동일 방식) ─────────────────────────
+_krx_df      = None
+_krx_df_lock = _threading.Lock()
+
+def _load_krx() -> pd.DataFrame | None:
+    """KRX에서 전체 종목 목록 로드 (최초 1회, 이후 캐시 반환)."""
+    global _krx_df
+    with _krx_df_lock:
+        if _krx_df is not None:
+            return _krx_df
+    try:
+        res = requests.get(
+            'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download',
+            timeout=15
+        )
+        res.encoding = 'EUC-KR'
+        df = pd.read_html(res.text, header=0)[0][['회사명', '종목코드']]
+        df = df.rename(columns={'회사명': 'company', '종목코드': 'code'})
+        df['code'] = df['code'].apply(
+            lambda c: str(c).strip().lstrip('A').zfill(6)[-6:]
+        )
+        df = df[df['code'].str.isdigit()].reset_index(drop=True)
+        with _krx_df_lock:
+            _krx_df = df
+        return df
+    except Exception as e:
+        print(f"[KRX] 종목목록 로드 오류: {e}")
+        return None
 
 
 def _run_script(script_name: str, args: list, timeout: int = 120):
@@ -41,44 +72,30 @@ def index():
 
 @app.route('/api/stock-name')
 def stock_name():
-    """종목코드로 종목명 조회 (trading_trail 테이블 우선, 없으면 빈 문자열)"""
+    """종목코드로 종목명 조회 (KRX DataFrame)."""
     code = request.args.get('code', '').strip().zfill(6)
-    if not code:
+    if not code or len(code) != 6:
         return jsonify({'name': ''})
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT name FROM trading_trail WHERE code = %s LIMIT 1",
-            (code,)
-        )
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        return jsonify({'name': row[0] if row else ''})
-    except Exception as e:
-        return jsonify({'name': '', 'error': str(e)})
+    df = _load_krx()
+    if df is None:
+        return jsonify({'name': '', 'error': 'KRX 종목목록 로드 실패'})
+    rows = df[df['code'] == code]
+    return jsonify({'name': rows.iloc[0]['company'].strip() if not rows.empty else ''})
 
 
 @app.route('/api/stock-code')
 def stock_code():
-    """종목명으로 종목코드 조회 (정확일치 → 앞부분 일치 순)"""
+    """종목명으로 종목코드 조회 (KRX DataFrame, 정확일치 → 앞부분 일치)."""
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'code': ''})
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT code FROM trading_trail WHERE name = %s LIMIT 1", (name,))
-        row = cur.fetchone()
-        if not row:
-            cur.execute("SELECT code FROM trading_trail WHERE name ILIKE %s LIMIT 1", (name + '%',))
-            row = cur.fetchone()
-        cur.close()
-        conn.close()
-        return jsonify({'code': row[0] if row else ''})
-    except Exception as e:
-        return jsonify({'code': '', 'error': str(e)})
+    df = _load_krx()
+    if df is None:
+        return jsonify({'code': '', 'error': 'KRX 종목목록 로드 실패'})
+    rows = df[df['company'] == name]
+    if rows.empty:
+        rows = df[df['company'].str.startswith(name, na=False)]
+    return jsonify({'code': rows.iloc[0]['code'].strip() if not rows.empty else ''})
 
 
 def calc_target_price(buy_price: int) -> int:
@@ -209,7 +226,8 @@ def save():
                     }), 400
 
         now       = datetime.now()
-        trail_dtm = now.strftime('%H%M%S')
+        buy_time  = str(data.get('buy_time') or '').strip()
+        trail_dtm = buy_time if (len(buy_time) == 6 and buy_time.isdigit()) else now.strftime('%H%M%S')
 
         conn = get_conn()
         cur  = conn.cursor()
@@ -324,7 +342,8 @@ def sell():
         sell_ratio    = float(data.get('sell_ratio', 100))
 
         now       = datetime.now()
-        proc_min  = now.strftime('%H%M%S')
+        sell_time = str(data.get('sell_time') or '').strip()
+        proc_min  = sell_time if (len(sell_time) == 6 and sell_time.isdigit()) else now.strftime('%H%M%S')
 
         conn = get_conn()
         cur  = conn.cursor()

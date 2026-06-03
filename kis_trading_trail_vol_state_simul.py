@@ -107,20 +107,31 @@ def get_excg_id():
     return "KRX" if '0900' <= t < '1530' else "NXT"
 
 
+_ITEM_CHART_URL = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+
+
+def _kis_itemchart_headers(access_token, app_key, app_secret):
+    return {"Content-Type": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "appkey": app_key, "appsecret": app_secret,
+            "tr_id": "FHKST03010100", "custtype": "P"}
+
+
 def get_kis_daily_chart(stock_code, trade_date, access_token, app_key, app_secret,
                         market_code="J", period="D", adjust_price="1", verbose=True):
-    url     = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
-    headers = {"Content-Type": "application/json",
-               "authorization": f"Bearer {access_token}",
-               "appkey": app_key, "appsecret": app_secret,
-               "tr_id": "FHKST01010400", "custtype": "P"}
-    params  = {"FID_COND_MRKT_DIV_CODE": market_code,
-               "FID_INPUT_ISCD": stock_code,
-               "FID_PERIOD_DIV_CODE": period,
-               "FID_ORG_ADJ_PRC": adjust_price}
+    """단일 날짜 일봉 조회 (inquire-daily-itemchartprice, output2 사용)."""
+    d_from = (datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=10)).strftime("%Y%m%d")
+    params = {"FID_COND_MRKT_DIV_CODE": market_code,
+              "FID_INPUT_ISCD":         stock_code,
+              "FID_INPUT_DATE_1":       d_from,
+              "FID_INPUT_DATE_2":       trade_date,
+              "FID_PERIOD_DIV_CODE":    period,
+              "FID_ORG_ADJ_PRC":        adjust_price}
     for attempt in range(3):
         try:
-            res  = requests.get(url, headers=headers, params=params, timeout=10)
+            res  = requests.get(_ITEM_CHART_URL,
+                                headers=_kis_itemchart_headers(access_token, app_key, app_secret),
+                                params=params, timeout=10)
             data = res.json()
             if data.get('rt_cd') == '1' and attempt < 2:
                 time.sleep(1); continue
@@ -130,9 +141,9 @@ def get_kis_daily_chart(stock_code, trade_date, access_token, app_key, app_secre
             else:
                 if verbose: print(f"⚠️ 일봉 조회 실패 ({stock_code}): {e}")
                 return None
-    if "output" not in data or not data["output"]:
+    if not data.get("output2"):
         return None
-    df     = pd.DataFrame(data["output"])
+    df     = pd.DataFrame(data["output2"])
     day_df = df[df["stck_bsop_date"] == trade_date]
     if day_df.empty:
         return None
@@ -145,20 +156,24 @@ def get_kis_daily_chart(stock_code, trade_date, access_token, app_key, app_secre
 
 
 def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
+    """전체 일봉 조회 (최근 ~140일, inquire-daily-itemchartprice output2 사용, 캐시 우선)."""
     with _daily_cache_lock:
         if stock_code in _daily_chart_full_cache:
             return _daily_chart_full_cache[stock_code]
-    url     = f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
-    headers = {"Content-Type": "application/json",
-               "authorization": f"Bearer {access_token}",
-               "appkey": app_key, "appsecret": app_secret,
-               "tr_id": "FHKST01010400", "custtype": "P"}
-    params  = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code,
-               "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "1"}
+    d_to   = datetime.now().strftime("%Y%m%d")
+    d_from = (datetime.now() - timedelta(days=140)).strftime("%Y%m%d")
+    params = {"FID_COND_MRKT_DIV_CODE": "J",
+              "FID_INPUT_ISCD":         stock_code,
+              "FID_INPUT_DATE_1":       d_from,
+              "FID_INPUT_DATE_2":       d_to,
+              "FID_PERIOD_DIV_CODE":    "D",
+              "FID_ORG_ADJ_PRC":        "1"}
     try:
         for attempt in range(3):
             try:
-                res  = requests.get(url, headers=headers, params=params, timeout=10)
+                res  = requests.get(_ITEM_CHART_URL,
+                                    headers=_kis_itemchart_headers(access_token, app_key, app_secret),
+                                    params=params, timeout=10)
                 data = res.json()
                 if data.get('rt_cd') == '1' and attempt < 2:
                     time.sleep(1); continue
@@ -166,15 +181,15 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
             except Exception:
                 if attempt < 2: time.sleep(0.5 * (attempt + 1))
                 else: raise
-        if "output" not in data or not data["output"]:
+        if not data.get("output2"):
             return []
         result = [
-            {"date": item["stck_bsop_date"],
-             "high_price": int(item["stck_hgpr"]),
-             "low_price":  int(item["stck_lwpr"]),
-             "close_price":int(item["stck_clpr"]),
-             "volume":     int(item["acml_vol"])}
-            for item in data["output"]
+            {"date":        item["stck_bsop_date"],
+             "high_price":  int(item["stck_hgpr"]),
+             "low_price":   int(item["stck_lwpr"]),
+             "close_price": int(item["stck_clpr"]),
+             "volume":      int(item["acml_vol"])}
+            for item in data["output2"]
             if item.get("stck_bsop_date") and int(item.get("acml_vol", 0)) > 0
         ]
         result = sorted(result, key=lambda x: x["date"])
