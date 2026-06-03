@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>매매추적 시뮬레이션 등록</title>
+  <title>매매추적 시뮬레이션</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -331,6 +331,64 @@
       margin-top: 4px;
     }
 
+    /* ── 대시보드 ── */
+    .dash-card {
+      max-width: 900px;
+      margin: 0 auto 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      padding: 18px 22px;
+    }
+    .dash-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .dash-title { font-size: .88rem; font-weight: 700; color: #1a1a2e; }
+    .dash-date-badge {
+      font-size: .76rem; color: #888;
+      background: #f0f2f5; padding: 3px 10px; border-radius: 12px;
+    }
+    .dash-summary {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .dash-metric {
+      background: #f7f8ff;
+      border-radius: 9px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+    .dash-metric-lbl { font-size: .69rem; color: #999; margin-bottom: 4px; }
+    .dash-metric-val { font-size: .88rem; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
+    .dash-metric-val.pos { color: #2dc653; }
+    .dash-metric-val.neg { color: #e63946; }
+    .dash-no-data { text-align: center; color: #ccc; padding: 20px; font-size: .85rem; }
+    .dash-stocks table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .dash-stocks th {
+      background: #f7f8ff; color: #666; font-weight: 600;
+      padding: 6px 9px; border-bottom: 1.5px solid #e8eaff;
+      text-align: right; white-space: nowrap;
+    }
+    .dash-stocks th:first-child, .dash-stocks th:nth-child(2) { text-align: left; }
+    .dash-stocks td {
+      padding: 6px 9px; border-bottom: 1px solid #f5f5f5;
+      text-align: right; color: #333; white-space: nowrap;
+    }
+    .dash-stocks td:first-child, .dash-stocks td:nth-child(2) { text-align: left; }
+    .dash-stocks tr:hover td { background: #f9f9ff; }
+    .dash-btn-refresh {
+      background: none; border: 1px solid #e0e0e0; color: #888;
+      font-size: .75rem; padding: 3px 10px; border-radius: 6px;
+      cursor: pointer; flex: none; font-weight: 500;
+    }
+    .dash-btn-refresh:hover { background: #f0f2f5; color: #555; }
+    @media (max-width: 600px) { .dash-summary { grid-template-columns: repeat(3, 1fr); } }
+
     @media (max-width: 500px) {
       .form-grid { grid-template-columns: 1fr; }
       .form-grid .full { grid-column: 1; }
@@ -346,6 +404,79 @@
   </div>
 
   <h1><span>📈</span> 매매추적 시뮬레이션</h1>
+
+  <!-- 대시보드 -->
+  <div class="dash-card">
+    <div class="dash-header">
+      <span class="dash-title">📊 시뮬레이션 현황</span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <span class="dash-date-badge">{{ fmtDay(simDate) }} 기준</span>
+        <button class="dash-btn-refresh" @click="loadDashboard">새로고침</button>
+      </span>
+    </div>
+
+    <div v-if="!dashboard" class="dash-no-data">{{ simDate ? '데이터 없음 (' + fmtDay(simDate) + ')' : '수행일자를 설정하세요' }}</div>
+
+    <template v-else>
+      <!-- 자산 현황 -->
+      <div class="dash-summary">
+        <div class="dash-metric">
+          <div class="dash-metric-lbl">총평가금액</div>
+          <div class="dash-metric-val">{{ fmt(dashboard.acct?.tot_evlu_amt) }}</div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-lbl">예수금</div>
+          <div class="dash-metric-val">{{ fmt(dashboard.acct?.prvs_excc_amt) }}</div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-lbl">매수금액</div>
+          <div class="dash-metric-val">{{ fmt(dashboard.acct?.pchs_amt) }}</div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-lbl">평가손익</div>
+          <div class="dash-metric-val" :class="(dashboard.acct?.evlu_pfls_amt ?? 0) >= 0 ? 'pos' : 'neg'">
+            {{ (dashboard.acct?.evlu_pfls_amt ?? 0) >= 0 ? '+' : '' }}{{ fmt(dashboard.acct?.evlu_pfls_amt) }}
+          </div>
+        </div>
+        <div class="dash-metric">
+          <div class="dash-metric-lbl">당일손익</div>
+          <div class="dash-metric-val" :class="(dashboard.acct?.total_profit_loss_amt ?? 0) >= 0 ? 'pos' : 'neg'">
+            {{ (dashboard.acct?.total_profit_loss_amt ?? 0) >= 0 ? '+' : '' }}{{ fmt(dashboard.acct?.total_profit_loss_amt) }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 종목별 현황 -->
+      <div class="dash-stocks" v-if="dashboard.stocks.length > 0">
+        <table>
+          <thead>
+            <tr>
+              <th>종목코드</th><th>종목명</th>
+              <th>보유단가</th><th>보유수량</th><th>보유금액</th>
+              <th>수익율</th><th>수익금액</th><th>매도수량</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in dashboard.stocks" :key="s.code">
+              <td>{{ s.code }}</td>
+              <td>{{ s.name }}</td>
+              <td>{{ fmt(s.balance_price) }}</td>
+              <td>{{ fmt(s.balance_qty) }}</td>
+              <td>{{ fmt(s.balance_amt) }}</td>
+              <td :style="{color: s.value_rate >= 0 ? '#2dc653' : '#e63946', fontWeight:600}">
+                {{ s.value_rate >= 0 ? '+' : '' }}{{ s.value_rate.toFixed(2) }}%
+              </td>
+              <td :style="{color: s.value_amt >= 0 ? '#2dc653' : '#e63946'}">
+                {{ s.value_amt >= 0 ? '+' : '' }}{{ fmt(s.value_amt) }}
+              </td>
+              <td>{{ s.sell_qty > 0 ? fmt(s.sell_qty) : '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="dash-no-data" style="padding:8px 0">보유 종목 없음</div>
+    </template>
+  </div>
 
   <!-- 알림 -->
   <div v-if="alert.msg" :class="['alert', alert.type]">{{ alert.msg }}</div>
@@ -490,12 +621,115 @@
     </div>
   </div>
 
+  <!-- 매도 정보 입력 -->
+  <div class="card" v-if="!sellPreview">
+    <div class="section-title">매도 정보 입력</div>
+    <div class="form-grid">
+
+      <div class="field">
+        <label>종목코드 / 종목명 *</label>
+        <input
+          v-model.trim="sellForm.code"
+          @blur="lookupSellName"
+          placeholder="코드(005930) 또는 종목명"
+          :class="{loading: sellLookingUp}"
+        />
+      </div>
+
+      <div class="field">
+        <label>종목명</label>
+        <input
+          v-model.trim="sellForm.name"
+          placeholder="자동 조회"
+          :class="{loading: sellLookingUp}"
+          readonly
+        />
+      </div>
+
+      <div class="field">
+        <label>매도가 (원) *</label>
+        <input v-model.number="sellForm.sell_price" type="number" min="1" placeholder="예) 82000" />
+      </div>
+
+      <div class="field">
+        <label>매도비율 (%) *</label>
+        <input v-model.number="sellForm.sell_ratio" type="number" min="1" max="100" placeholder="100" />
+      </div>
+
+      <div class="field full">
+        <label>매도일자 *</label>
+        <input v-model="sellForm.sell_date" type="date" />
+      </div>
+
+    </div>
+    <div class="btn-row">
+      <button class="btn-calc" @click="calculateSell" :disabled="!canSellCalc">계산 / 미리보기</button>
+    </div>
+  </div>
+
+  <!-- 매도 미리보기 -->
+  <div class="preview-card" v-if="sellPreview">
+    <h2>📋 매도 계산 결과</h2>
+    <div class="preview-row">
+      <span class="lbl">종목</span>
+      <span class="val">{{ sellPreview.name }} ({{ sellPreview.code }})</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">매도일자</span>
+      <span class="val">{{ fmtDay(sellPreview.sell_date) }}</span>
+    </div>
+    <hr class="divider" />
+    <div class="preview-row">
+      <span class="lbl">매수단가</span>
+      <span class="val">{{ fmt(sellPreview.basic_price) }} 원</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">보유수량</span>
+      <span class="val">{{ fmt(sellPreview.basic_qty) }} 주</span>
+    </div>
+    <hr class="divider" />
+    <div class="preview-row">
+      <span class="lbl">매도가</span>
+      <span class="val">{{ fmt(sellPreview.sell_price) }} 원</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">매도비율</span>
+      <span class="val">{{ sellPreview.sell_ratio }} %</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">매도수량</span>
+      <span class="val">{{ fmt(sellPreview.trail_qty) }} 주</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">매도금액</span>
+      <span class="val">{{ fmt(sellPreview.trail_amt) }} 원</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">수익률</span>
+      <span class="val" :class="sellPreview.trail_rate >= 0 ? 'rate' : 'rate neg'">
+        {{ sellPreview.trail_rate >= 0 ? '+' : '' }}{{ sellPreview.trail_rate }} %
+      </span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">매도 후 잔여수량</span>
+      <span class="val">{{ fmt(sellPreview.remaining_qty) }} 주</span>
+    </div>
+    <div class="preview-row">
+      <span class="lbl">처리유형</span>
+      <span class="val">trail_tp = <b>{{ sellPreview.new_trail_tp }}</b> ({{ sellPreview.new_trail_tp === '4' ? '전량매도' : '부분매도' }})</span>
+    </div>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn-cancel" @click="sellPreview=null">← 수정</button>
+      <button class="btn-save" @click="executeSell">매도 처리 저장</button>
+    </div>
+  </div>
+
   <!-- 시뮬레이션 실행 제어 -->
   <div class="card">
     <div class="section-title">시뮬레이션 실행</div>
     <div class="form-grid">
       <div class="field full">
-        <label>수행일자 (기본값: 매수일자)</label>
+        <label>수행일자</label>
         <input v-model="simDate" type="date" />
       </div>
     </div>
@@ -704,11 +938,94 @@ createApp({
     const alert         = ref({ msg: '', type: 'error' });
     const updateLog     = ref([]);
     const stockInfo     = ref(null);
+    const dashboard     = ref(null);
 
     const CHANGE_LABELS = {
       stop_price: '이탈가', target_price: '목표가', exit_price: '최종이탈가',
       basic_price: '매수단가', basic_qty: '매수량', trail_tp: '추적유형', proc_min: '처리시간',
     };
+
+    const sellForm = ref({
+      code: '', name: '', sell_price: null, sell_ratio: 100, sell_date: today
+    });
+    const sellPreview    = ref(null);
+    const sellLookingUp  = ref(false);
+
+    const canSellCalc = computed(() =>
+      sellForm.value.code.length >= 5 &&
+      sellForm.value.sell_price > 0 &&
+      sellForm.value.sell_ratio > 0 &&
+      sellForm.value.sell_date
+    );
+
+    async function lookupSellName() {
+      const val = sellForm.value.code.trim();
+      if (!val) return;
+      sellLookingUp.value = true;
+      try {
+        const code = /^\d+$/.test(val) ? val.padStart(6, '0') : null;
+        if (code) {
+          sellForm.value.code = code;
+          const res  = await fetch(`/api/stock-name?code=${code}`);
+          const data = await res.json();
+          if (data.name) sellForm.value.name = data.name;
+        } else {
+          const res  = await fetch(`/api/stock-code?name=${encodeURIComponent(val)}`);
+          const data = await res.json();
+          if (data.code) {
+            sellForm.value.code = data.code;
+            sellForm.value.name = val;
+          }
+        }
+      } catch { /* 무시 */ } finally {
+        sellLookingUp.value = false;
+      }
+    }
+
+    async function calculateSell() {
+      loading.value = true;
+      try {
+        const res  = await fetch('/api/sell-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code:       sellForm.value.code,
+            sell_date:  sellForm.value.sell_date,
+            sell_price: sellForm.value.sell_price,
+            sell_ratio: sellForm.value.sell_ratio,
+          })
+        });
+        const data = await res.json();
+        if (data.error) { showAlert(data.error); return; }
+        sellPreview.value = data;
+      } catch (e) {
+        showAlert('매도 미리보기 오류: ' + e);
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    async function executeSell() {
+      if (!sellPreview.value) return;
+      loading.value = true;
+      try {
+        const res  = await fetch('/api/sell', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sellPreview.value)
+        });
+        const data = await res.json();
+        if (data.error) { showAlert(data.error); return; }
+        showAlert(data.message, 'success');
+        sellPreview.value = null;
+        sellForm.value = { code: '', name: '', sell_price: null, sell_ratio: 100, sell_date: today };
+        loadList();
+      } catch (e) {
+        showAlert('매도 처리 오류: ' + e);
+      } finally {
+        loading.value = false;
+      }
+    }
 
     const simDate = ref(form.value.buy_date);
     const running = ref(false);
@@ -1009,6 +1326,17 @@ createApp({
       }
     }
 
+    async function loadDashboard() {
+      if (!simDate.value) return;
+      try {
+        const res  = await fetch(`/api/dashboard?date=${simDate.value}`);
+        const data = await res.json();
+        dashboard.value = (!res.ok || data.error || !data.acct) ? null : data;
+      } catch {
+        dashboard.value = null;
+      }
+    }
+
     function resetForm() {
       form.value = { code: '', name: '', buy_price: null, loss_price: null, buy_amount: null, buy_date: today };
       preview.value   = null;
@@ -1023,15 +1351,22 @@ createApp({
       return s.length === 8 ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6)}` : d;
     }
 
-    onMounted(loadList);
+    watch(simDate, (d) => { if (d) loadDashboard(); });
+
+    onMounted(async () => {
+      await loadList();
+      loadDashboard();
+    });
 
     return {
       form, preview, records, loading, nameLookingUp, listError, alert,
       simDate, running, runLog,
       trailEdit, trailEditBasicAmt, trailEditLossAmt, trailEditLookingUp, updateLog,
-      stockInfo,
+      stockInfo, dashboard,
+      sellForm, sellPreview, sellLookingUp, canSellCalc,
+      lookupSellName, calculateSell, executeSell,
       canCalc, lookupName, lookupCode, trailEditLookup, trailTpLabel,
-      sizeClass, fetchStockInfo,
+      sizeClass, fetchStockInfo, loadDashboard,
       calculate, save, loadList, deleteRecord, resetForm,
       runSet, runTrail, updateTrail, fmt, fmtDay
     };

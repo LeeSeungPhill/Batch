@@ -649,7 +649,10 @@ def _get_stock_market_type(stock_code: str, access_token: str,
         d = res.json()
         if d.get('rt_cd') == '0' and d.get('output'):
             mkt_name = d['output'].get('rprs_mrkt_kor_name', '')
-            mkt = 'KOSPI' if '코스피' in mkt_name else 'KOSDAQ'
+            mkt_upper = mkt_name.upper()
+            # 영문: KOSPI, KOSPI200 → KOSPI / KSQ150, KOSDAQ → KOSDAQ
+            # 한글: 코스피, 코스피200 → KOSPI / 코스닥, KSQ150 → KOSDAQ
+            mkt = 'KOSPI' if ('KOSPI' in mkt_upper or '코스피' in mkt_name) else 'KOSDAQ'
             with _stock_market_cache_lock:
                 _stock_market_cache[stock_code] = mkt
             return mkt
@@ -1253,7 +1256,7 @@ def get_kis_1min_from_datetime(
                             try:
                                 message = (
                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                    f" 추세이탈가({_ep:,})원 이탈 즉시 매도, 수익률:{gain_pct:.1f}%"
+                                    f" 수익률:{gain_pct:.1f}%, 추세이탈가({_ep:,})원 이탈 즉시 매도"
                                 )
                                 print(message)
                                 bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
@@ -1310,8 +1313,12 @@ def get_kis_1min_from_datetime(
                             sell_reason = breakdown_wait["reason"] + f" → 10분봉저가({breakdown_wait['tenmin_low']:,}) 이탈 확정 (이탈봉:{breakdown_wait['tenmin_vol']:,}주/직전20봉평균:{breakdown_wait['tenmin_avg_vol']:,}주)"
                             sell_signal_type = breakdown_wait["signal_type"]
                             effective_stop = breakdown_wait["effective_stop"]
-                            # 현재가가 이탈가 아래면 이탈가, 아니면 현재가
-                            order_price = effective_stop if close_price < effective_stop else close_price
+                            
+                            # 해당 종목의 시장이 단기 하락인 경우 : 매도주문가 = 현재가
+                            if _short_market_down:
+                                order_price = close_price
+                            else:   # 해당 종목의 시장이 단기 상승인 경우 : 매도주문가 = 현재가가 이탈가 아래면 이탈가 otherwise 현재가
+                                order_price = effective_stop if close_price < effective_stop else close_price
                         else:
                             # 저가 이탈 없으면 → 대기 유지
                             pass
@@ -1355,6 +1362,7 @@ def get_kis_1min_from_datetime(
                             _safety_m = int(basic_price * 1.10)
                             _p2s = peak_high_tenmin - _safety_m
                             _cond_b_capable = peak_high_tenmin > _safety_m and _p2s >= int(_safety_m * 0.05)
+                            # 매수가 대비 15% 이상 상승에서 이탈가 이탈하고 현재시간 기준 거래량 비율 초과 또는 해당 종목의 시장이 단기 하락인 경우
                             if not _cond_b_capable or _short_market_down:
                                 fixed_stop = int(stop_price) if stop_price else 0
                                 if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
@@ -1376,7 +1384,7 @@ def get_kis_1min_from_datetime(
                                         try:
                                             msg_wait = (
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                                f" 이탈가({fixed_stop:,}) 이탈 감지(발동불가 fallback) → 10분봉 저가 이탈 대기"
+                                                f" 15%달성·수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                             )
                                             print(msg_wait)
                                             bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
@@ -1389,6 +1397,7 @@ def get_kis_1min_from_datetime(
                         # ===============================
                         fixed_stop = int(stop_price) if stop_price else 0
 
+                        # 이탈가 이탈하고 현재시간 기준 거래량 비율 초과 또는 해당 종목의 시장이 단기 하락인 경우
                         if fixed_stop > 0 and close_price <= fixed_stop and (volume_rate_chk(current_time, vol_ratio, trade_date) or _short_market_down):
                             breakdown_wait.update({
                                 "active": True,
@@ -1408,7 +1417,7 @@ def get_kis_1min_from_datetime(
                                 try:
                                     msg_wait = (
                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                        f" 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
+                                        f" 수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                     )
                                     print(msg_wait)
                                     bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
@@ -1430,30 +1439,29 @@ def get_kis_1min_from_datetime(
                             # 시장 흐름 기반 분석
                             _w_mkt_data = _mkt_trend_pre
                             if _w_mkt_data:
-                                _w_stk_mkt       = _stk_mkt_pre
-                                _w_allow_ratio   = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
+                                _w_stk_mkt        = _stk_mkt_pre
+                                _w_allow_ratio    = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
                                 _w_total_invested = _get_total_invested_real(acct_no, conn)
-                                _invest_base    = _w_mkt_data['tot_evlu_amt']
+                                _invest_base      = _w_mkt_data['tot_evlu_amt']
                                 _w_allowed_invest = int(_invest_base * _allow_ratio / 100) if _invest_base > 0 else 0
                                 _w_excess_invest  = _w_total_invested - _w_allowed_invest
                                 _w_invest_pct     = round(_w_total_invested / _invest_base * 100, 1) if _invest_base > 0 else 0
-                                _w_mid_key   = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
-                                _w_long_key  = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
-                                _w_mid_str   = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
-                                _w_long_str  = '상승' if _w_mkt_data.get(_w_long_key) == '05' else '하락'
+                                _w_mid_key        = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
+                                _w_long_key       = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
+                                _w_mid_str        = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
+                                _w_long_str       = '상승' if _w_mkt_data.get(_w_long_key) == '05' else '하락'
                                 if _w_excess_invest > 0 and close_price > 0:
-                                    _w_qty       = min(int(basic_qty), max(1, (_w_excess_invest + close_price - 1) // close_price))
-                                    _w_plan      = round(_w_qty / basic_qty * 100) if basic_qty > 0 else 100
+                                    _w_qty        = min(int(basic_qty), max(1, (_w_excess_invest + close_price - 1) // close_price))
+                                    _w_plan       = round(_w_qty / basic_qty * 100) if basic_qty > 0 else 100
                             
                                     try:
                                         msg_warn = (
                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" [사전경고] 전일저가 이탈 감시"
-                                            f" | 전일저가:{prev_low:,}원 | 현재가:{close_price:,}원"
-                                            f"시장흐름매도[{_w_stk_mkt}] 중기:{_w_mid_str}/장기:{_w_long_str}"
-                                            f" 허용:{_w_allow_ratio}%({_w_allowed_invest:,}원)"
-                                            f" 현투자:{_w_invest_pct}%({_w_total_invested:,}원)"
-                                            f" 초과:{_w_excess_invest:,}원→{_w_plan}%매도"
+                                            f" [사전경고] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                            f" 시장흐름[{_w_stk_mkt}] 중기:{_w_mid_str}/장기:{_w_long_str}"
+                                            f" 시장허용:{_w_allow_ratio}%({_w_allowed_invest:,}원)"
+                                            f" 현재진행:{_w_invest_pct}%({_w_total_invested:,}원)"
+                                            f" 초과:{_w_excess_invest:,}원→{_w_plan}% 매도 필요"
                                         )
                                         _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
                                         sell_btn = InlineKeyboardButton(
@@ -1493,20 +1501,20 @@ def get_kis_1min_from_datetime(
                         _long_str = '상승' if _mkt_data.get(_long_key) == '05' else '하락'
 
                         if _excess_invest > 0 and close_price > 0:
-                            _mkt_qty    = min(int(basic_qty),
-                                             max(1, (_excess_invest + close_price - 1) // close_price))
+                            _mkt_qty    = min(int(basic_qty), max(1, (_excess_invest + close_price - 1) // close_price))
                             _trail_plan = round(_mkt_qty / basic_qty * 100) if basic_qty > 0 else 100
                             _mkt_amt    = close_price * _mkt_qty
                             _mkt_rate   = round((close_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0
                             _u_qty      = basic_qty - _mkt_qty
                             _u_amt      = basic_price * _u_qty
                             _new_tp     = "4" if _mkt_qty >= basic_qty else "L"
-                            _mkt_reason = (f"시장흐름매도[{_stk_mkt}] 중기:{_mid_str}/장기:{_long_str}"
-                                          f" 허용:{_allow_ratio}%({_allowed_invest:,}원)"
-                                          f" 현투자:{_invest_pct}%({_total_invested:,}원)"
-                                          f" 초과:{_excess_invest:,}원→{_trail_plan}%매도")
+                            _mkt_reason = (f"시장흐름[{_stk_mkt}] 중기:{_mid_str}/장기:{_long_str}"
+                                          f" 시장허용:{_allow_ratio}%({_allowed_invest:,}원)"
+                                          f" 현재진행:{_invest_pct}%({_total_invested:,}원)"
+                                          f" 초과:{_excess_invest:,}원→{_trail_plan}% 매도 진행")
                             print(f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}]"
-                                  f" ⚠ [시장매도] {_mkt_reason}")
+                                  f" [장종료전] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                  f" {_mkt_reason}")
                             try:
                                 update_trading_daily_close(
                                     nick, close_price, _mkt_qty, _mkt_amt, _mkt_rate,
@@ -1519,7 +1527,8 @@ def get_kis_1min_from_datetime(
                                     _msg_mkt = (
                                         f"-{nick}-[{row['일자']}-{row['시간']}]"
                                         f"{stock_name}[<code>{stock_code}</code>]"
-                                        f" ⚠ [시장흐름매도] {_mkt_reason}"
+                                        f" [장종료전 매도] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                        f" {_mkt_reason}"
                                     )
                                     print(_msg_mkt)
                                     bot.send_message(chat_id=chat_id, text=_msg_mkt, parse_mode='HTML')

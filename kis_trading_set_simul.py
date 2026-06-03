@@ -113,12 +113,16 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
         if data.get('rt_cd') == '0' and data.get('output'):
             for row in data['output']:
                 if row.get('stck_bsop_date', '') == prev_date:
-                    return int(row.get('stck_clpr') or 0), int(row.get('stck_lwpr') or 0)
+                    return (int(row.get('stck_clpr') or 0),
+                            int(row.get('stck_lwpr') or 0),
+                            int(row.get('stck_hgpr') or 0))
             first = data['output'][0]
-            return int(first.get('stck_clpr') or 0), int(first.get('stck_lwpr') or 0)
+            return (int(first.get('stck_clpr') or 0),
+                    int(first.get('stck_lwpr') or 0),
+                    int(first.get('stck_hgpr') or 0))
     except Exception as e:
         print(f"[get_prev_day_price_info] {code} 오류: {e}")
-    return 0, 0
+    return 0, 0, 0
 
 
 # ─────────────────────────────────────────
@@ -220,38 +224,49 @@ try:
                 else:
                     next_trail_tp = '1'
 
-            # 가격 유효성 검증: stop_price > 현재가이면 전일저가로 조정
-            stop_price_adj = p_stop_price
-            if ac and p_stop_price > 0:
+            # 가격 유효성 검증:
+            #   stop_price/exit_price > 전일저가 → 전일저가로 조정
+            #   전일고가 > target_price → 전일고가로 조정
+            stop_price_adj   = int(p_stop_price   or 0)
+            exit_price_adj   = int(p_exit_price   or 0)
+            target_price_adj = int(p_target_price or 0)
+            if ac:
                 try:
-                    cur_price, prev_low = get_prev_day_price_info(
+                    _, prev_low, prev_high = get_prev_day_price_info(
                         ac['access_token'], ac['app_key'], ac['app_secret'], p_code, prev_date
                     )
                     time.sleep(0.2)
-                    if cur_price > 0 and p_stop_price > cur_price and prev_low > 0:
-                        print(f"[SIMUL] {p_code} stop_price({p_stop_price:,}) > 현재가({cur_price:,}) → 전일저가({prev_low:,})로 조정")
-                        stop_price_adj = prev_low
+                    if prev_low > 0:
+                        if stop_price_adj > 0 and stop_price_adj > prev_low:
+                            print(f"[SIMUL] {p_code} stop_price({stop_price_adj:,}) > 전일저가({prev_low:,}) → 전일저가로 조정")
+                            stop_price_adj = prev_low
+                        if exit_price_adj > 0 and exit_price_adj > prev_low:
+                            print(f"[SIMUL] {p_code} exit_price({exit_price_adj:,}) > 전일저가({prev_low:,}) → 전일저가로 조정")
+                            exit_price_adj = prev_low
+                    if prev_high > 0 and target_price_adj > 0 and prev_high > target_price_adj:
+                        print(f"[SIMUL] {p_code} 전일고가({prev_high:,}) > target_price({target_price_adj:,}) → 전일고가로 조정")
+                        target_price_adj = prev_high
                 except Exception as e_p:
-                    print(f"[SIMUL] {p_code} 가격 조회 오류 (원본 이탈가 유지): {e_p}")
+                    print(f"[SIMUL] {p_code} 가격 조회 오류 (원본 가격 유지): {e_p}")
 
             p_basic_qty   = int(p_basic_qty or 0)
             p_basic_price = float(p_basic_price or 0)
-            loss_amt      = (p_basic_price - p_exit_price) * p_basic_qty if p_basic_qty > 0 else 0
+            loss_amt      = (p_basic_price - exit_price_adj) * p_basic_qty if p_basic_qty > 0 else 0
             now           = datetime.now()
 
             try:
                 cur_ins.execute(insert_q, (
                     SIMUL_ACCT, p_name, p_code, trail_day, '090000', next_trail_tp,
                     p_basic_price, p_basic_qty, p_basic_price * p_basic_qty,
-                    p_volumn, stop_price_adj, p_target_price,
-                    '090000', p_trade_tp, p_exit_price, loss_amt, now, now
+                    p_volumn, stop_price_adj, target_price_adj,
+                    '090000', p_trade_tp, exit_price_adj, loss_amt, now, now
                 ))
                 if cur_ins.rowcount > 0:
                     inserted_count += 1
                     inserted_info.append({
                         'code': p_code, 'name': p_name, 'trail_tp': next_trail_tp,
                         'basic_price': p_basic_price, 'stop_price': stop_price_adj,
-                        'target_price': p_target_price,
+                        'exit_price': exit_price_adj, 'target_price': target_price_adj,
                     })
             except Exception as e_ins:
                 print(f"[SIMUL] {p_code} 삽입 오류: {e_ins}")
@@ -267,7 +282,9 @@ try:
         for info in inserted_info:
             print(
                 f"  └ {info['name']}({info['code']}) trail_tp={info['trail_tp']}"
-                f" 매수가:{int(info['basic_price']):,} 이탈가:{int(info['stop_price']):,}"
+                f" 매수가:{int(info['basic_price']):,}"
+                f" 이탈가:{int(info['stop_price']):,}"
+                f" 추세이탈가:{int(info['exit_price']):,}"
                 f" 목표가:{int(info['target_price']):,}"
             )
 

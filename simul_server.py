@@ -245,6 +245,142 @@ def save():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/sell-preview', methods=['POST'])
+def sell_preview():
+    """매도 미리보기: 보유 포지션 조회 후 매도 수량·금액·수익률 계산."""
+    data = request.json or {}
+    try:
+        code       = data['code'].strip().zfill(6)
+        sell_date  = str(data['sell_date']).replace('-', '')
+        sell_price = int(data['sell_price'])
+        sell_ratio = float(data.get('sell_ratio', 100))
+
+        if sell_price <= 0:
+            return jsonify({'error': '매도가는 0보다 커야 합니다.'}), 400
+        if not (1 <= sell_ratio <= 100):
+            return jsonify({'error': '매도비율은 1~100% 사이여야 합니다.'}), 400
+
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT name, basic_price, basic_qty, trail_dtm, trail_tp
+            FROM trading_trail_simul
+            WHERE acct_no = 'SIMUL' AND trail_day = %s AND code = %s
+              AND trail_tp IN ('1','2','3','L','P')
+            ORDER BY trail_dtm DESC LIMIT 1
+        """, (sell_date, code))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return jsonify({'error': f"{sell_date} 기준 {code} 활성 포지션 없음"}), 404
+
+        name_db, basic_price, basic_qty, trail_dtm, trail_tp = row
+        basic_price   = int(basic_price)
+        basic_qty     = int(basic_qty)
+        trail_qty     = max(1, round(basic_qty * sell_ratio / 100))
+        trail_amt     = sell_price * trail_qty
+        trail_rate    = round((sell_price - basic_price) / basic_price * 100, 2)
+        remaining_qty = basic_qty - trail_qty
+        new_trail_tp  = '4' if remaining_qty <= 0 else '3'
+
+        return jsonify({
+            'code':          code,
+            'name':          name_db or code,
+            'sell_date':     sell_date,
+            'trail_dtm':     trail_dtm,
+            'trail_tp_cur':  trail_tp,
+            'basic_price':   basic_price,
+            'basic_qty':     basic_qty,
+            'sell_price':    sell_price,
+            'sell_ratio':    sell_ratio,
+            'trail_qty':     trail_qty,
+            'trail_amt':     trail_amt,
+            'trail_rate':    trail_rate,
+            'remaining_qty': remaining_qty,
+            'new_trail_tp':  new_trail_tp,
+        })
+    except KeyError as e:
+        return jsonify({'error': f'필수 입력값 누락: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sell', methods=['POST'])
+def sell():
+    """매도 처리: trading_trail_simul 매도 업데이트 (_do_simul_sell_update 동일 로직)."""
+    data = request.json or {}
+    try:
+        code          = data['code'].strip().zfill(6)
+        sell_date     = str(data['sell_date']).replace('-', '')
+        sell_price    = int(data['sell_price'])
+        trail_qty     = int(data['trail_qty'])
+        trail_amt     = int(data['trail_amt'])
+        trail_rate    = float(data['trail_rate'])
+        remaining_qty = int(data['remaining_qty'])
+        new_trail_tp  = str(data['new_trail_tp'])
+        trail_dtm     = str(data['trail_dtm'])
+        sell_ratio    = float(data.get('sell_ratio', 100))
+
+        now       = datetime.now()
+        proc_min  = now.strftime('%H%M%S')
+
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        cur.execute("""
+            SELECT basic_price FROM trading_trail_simul
+            WHERE acct_no = 'SIMUL' AND trail_day = %s AND code = %s AND trail_dtm = %s
+              AND trail_tp IN ('1','2','3','L','P')
+        """, (sell_date, code, trail_dtm))
+        bp_row      = cur.fetchone()
+        basic_price = int(bp_row[0]) if bp_row else 0
+        new_basic_amt = basic_price * remaining_qty
+
+        cur.execute("""
+            UPDATE trading_trail_simul SET
+                trail_price  = %s,
+                trail_qty    = %s,
+                trail_amt    = %s,
+                trail_rate   = %s,
+                trail_plan   = %s,
+                trail_tp     = %s,
+                proc_min     = %s,
+                basic_qty    = %s,
+                basic_amt    = %s,
+                trade_result = %s,
+                mod_dt       = %s
+            WHERE acct_no = 'SIMUL' AND code = %s
+              AND trail_day = %s AND trail_dtm = %s
+              AND trail_tp IN ('1','2','3','L','P')
+        """, (
+            sell_price, trail_qty, trail_amt, trail_rate,
+            int(sell_ratio), new_trail_tp, proc_min,
+            remaining_qty, new_basic_amt, '매도처리', now,
+            code, sell_date, trail_dtm,
+        ))
+        updated = cur.rowcount > 0
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if not updated:
+            return jsonify({'error': '업데이트된 레코드 없음 (이미 처리됐거나 조건 불일치)'}), 404
+
+        return jsonify({
+            'success': True,
+            'message': (
+                f"매도 처리 완료: {code} {sell_price:,}원 × {trail_qty:,}주"
+                f" 수익률:{trail_rate:+.2f}% (trail_tp={new_trail_tp})"
+            )
+        })
+    except KeyError as e:
+        return jsonify({'error': f'필수 입력값 누락: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/list')
 def list_records():
     """저장된 시뮬레이션 내역 최근 100건 조회"""
@@ -466,6 +602,60 @@ def _kis_headers(ac, tr_id):
         "tr_id":     tr_id,
         "custtype":  "P",
     }
+
+
+@app.route('/api/dashboard')
+def dashboard():
+    """대시보드: dly_acct_balance_simul(자산) + dly_trading_balance_simul(종목별) 조회."""
+    sim_date = request.args.get('date', '').replace('-', '')
+    if not sim_date or len(sim_date) != 8 or not sim_date.isdigit():
+        return jsonify({'error': '날짜 형식 오류'}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT dnca_tot_amt, prvs_excc_amt, pchs_amt,
+                   user_evlu_amt, tot_evlu_amt, evlu_pfls_amt,
+                   total_profit_loss_amt, asst_icdc_amt
+            FROM dly_acct_balance_simul
+            WHERE acct = '74346047' AND dt = %s
+        """, (sim_date,))
+        acct_row = cur.fetchone()
+        cur.execute("""
+            SELECT code, name, balance_price, balance_qty, balance_amt,
+                   value_rate, value_amt, sell_qty
+            FROM public.dly_trading_balance_simul
+            WHERE acct_no = '74346047' AND balance_day = %s AND use_yn = 'Y'
+            ORDER BY code
+        """, (sim_date,))
+        stock_rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        acct = None
+        if acct_row:
+            acct = {
+                'dnca_tot_amt':          int(acct_row[0] or 0),
+                'prvs_excc_amt':         int(acct_row[1] or 0),
+                'pchs_amt':              int(acct_row[2] or 0),
+                'user_evlu_amt':         int(acct_row[3] or 0),
+                'tot_evlu_amt':          int(acct_row[4] or 0),
+                'evlu_pfls_amt':         int(acct_row[5] or 0),
+                'total_profit_loss_amt': int(acct_row[6] or 0),
+                'asst_icdc_amt':         int(acct_row[7] or 0),
+            }
+        stocks = [{
+            'code':          r[0],
+            'name':          r[1],
+            'balance_price': int(r[2] or 0),
+            'balance_qty':   int(r[3] or 0),
+            'balance_amt':   int(r[4] or 0),
+            'value_rate':    float(r[5] or 0),
+            'value_amt':     int(r[6] or 0),
+            'sell_qty':      int(r[7] or 0),
+        } for r in stock_rows]
+        return jsonify({'acct': acct, 'stocks': stocks, 'date': sim_date})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/stock-info')
