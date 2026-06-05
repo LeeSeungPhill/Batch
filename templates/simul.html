@@ -624,53 +624,147 @@
     </div>
   </div>
 
-  <!-- 매도 정보 입력 -->
+  <!-- 매도 / 변경 통합 -->
   <div class="card" v-if="!sellPreview">
-    <div class="section-title">매도 정보 입력</div>
-    <div class="form-grid">
+    <div class="section-title">매도 / 매매추적 변경</div>
 
-      <div class="field full">
-        <label>종목코드 / 종목명 *</label>
-        <input
-          v-model.trim="sellForm.code"
-          @blur="lookupSellName"
-          placeholder="코드(005930) 또는 종목명"
-          :class="{loading: sellLookingUp}"
-        />
-        <div v-if="sellForm.name" style="font-size:.78rem;color:#4361ee;margin-top:4px;padding-left:2px">
-          {{ sellForm.name }}
+    <!-- 모드 선택 -->
+    <div style="display:flex;gap:24px;margin-bottom:18px;align-items:center">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:700;font-size:.9rem">
+        <input type="radio" v-model="trailMode" value="sell" style="accent-color:#e63946;width:15px;height:15px" />
+        <span :style="{color: trailMode==='sell' ? '#e63946' : '#555'}">매도</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:700;font-size:.9rem">
+        <input type="radio" v-model="trailMode" value="edit" style="accent-color:#7b2ff7;width:15px;height:15px" />
+        <span :style="{color: trailMode==='edit' ? '#7b2ff7' : '#555'}">변경</span>
+      </label>
+    </div>
+
+    <!-- 일자 선택 -->
+    <div class="field" style="margin-bottom:16px">
+      <label>{{ trailMode === 'sell' ? '매도' : '변경' }}일자 *</label>
+      <input v-model="trailActionDate" type="date" @change="loadActiveStocks" />
+    </div>
+
+    <!-- 종목 버튼 리스트 -->
+    <div v-if="activeStocksLoading" style="color:#aaa;font-size:.83rem;padding:6px 0 12px">종목 조회 중...</div>
+    <template v-else-if="trailActionDate">
+      <div v-if="activeStocks.length > 0" style="margin-bottom:16px">
+        <div style="font-size:.72rem;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">종목 선택</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button v-for="s in activeStocks" :key="s.code"
+            @click="selectActiveStock(s)"
+            :style="{
+              background: selectedStock && selectedStock.code === s.code
+                ? (trailMode==='sell' ? '#e63946' : '#7b2ff7') : '#f0f2f5',
+              color: selectedStock && selectedStock.code === s.code ? '#fff' : '#444',
+              borderRadius: '8px', padding: '7px 12px',
+              fontSize: '.78rem', fontWeight: '600', flex: 'none',
+              border: 'none', cursor: 'pointer', lineHeight: '1.5', textAlign: 'center',
+              minWidth: '72px'
+            }"
+          >
+            <div>{{ s.code }}</div>
+            <div style="font-size:.7rem;font-weight:400">{{ s.name }}</div>
+            <div style="font-size:.68rem;opacity:.75">{{ trailTpLabel(s.trail_tp) }}</div>
+          </button>
         </div>
       </div>
+      <div v-else style="color:#bbb;font-size:.83rem;padding:4px 0 12px">해당일 활성 종목 없음</div>
+    </template>
 
-      <div class="field">
-        <label>매도가 (원) *</label>
-        <input v-model.number="sellForm.sell_price" type="number" min="1" placeholder="예) 82000" />
-      </div>
-
-      <div class="field">
-        <label>매도비율 (%) *</label>
-        <input v-model.number="sellForm.sell_ratio" type="number" min="1" max="100" placeholder="100" />
-      </div>
-
-      <div class="field">
-        <label>매도일자 *</label>
-        <input v-model="sellForm.sell_date" type="date" />
-      </div>
-
-      <div class="field">
-        <label>매도시간 (HHMMSS)</label>
-        <input
-          v-model.trim="sellForm.sell_time"
-          maxlength="6"
-          placeholder="예) 143000"
-          style="font-family:monospace"
-        />
-      </div>
-
+    <!-- 선택된 종목 정보 -->
+    <div v-if="selectedStock" style="background:#f7f8ff;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#444;margin-bottom:16px;border:1px solid #e8eaff">
+      <b>{{ selectedStock.name }}</b> ({{ selectedStock.code }})
+      &nbsp;·&nbsp; 보유단가 <b>{{ fmt(selectedStock.basic_price) }}원</b>
+      &nbsp;·&nbsp; 보유수량 <b>{{ fmt(selectedStock.basic_qty) }}주</b>
     </div>
-    <div class="btn-row">
-      <button class="btn-calc" @click="calculateSell" :disabled="!canSellCalc">계산 / 미리보기</button>
-    </div>
+
+    <!-- 매도 입력 -->
+    <template v-if="trailMode === 'sell' && selectedStock">
+      <div class="form-grid">
+        <div class="field">
+          <label>매도가 (원) *</label>
+          <input v-model.number="sellForm.sell_price" type="number" min="1" placeholder="예) 82000" />
+        </div>
+        <div class="field">
+          <label>매도비율 (%) *</label>
+          <input v-model.number="sellForm.sell_ratio" type="number" min="1" max="100" placeholder="100" />
+        </div>
+        <div class="field">
+          <label>매도시간 (HHMMSS)</label>
+          <input v-model.trim="sellForm.sell_time" maxlength="6" placeholder="예) 143000" style="font-family:monospace" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-calc" @click="calculateSell"
+          :disabled="!sellForm.sell_price || sellForm.sell_price <= 0 || !sellForm.sell_ratio || !sellForm.sell_date">
+          계산 / 미리보기
+        </button>
+      </div>
+    </template>
+
+    <!-- 변경 입력 -->
+    <template v-if="trailMode === 'edit' && selectedStock">
+      <div class="form-grid">
+        <div class="field">
+          <label>추적유형</label>
+          <select v-model="trailEdit.trail_tp">
+            <option value="">-- 미변경 --</option>
+            <option value="1">1 (추적대기)</option>
+            <option value="2">2 (추적중)</option>
+            <option value="3">3 (안전마진)</option>
+            <option value="L">L (장기보유)</option>
+            <option value="P">P (추적멈춤)</option>
+            <option value="4">4 (완전매도)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>이탈가</label>
+          <input v-model.number="trailEdit.stop_price" type="number" min="0" placeholder="미입력시 유지" />
+        </div>
+        <div class="field">
+          <label>목표가</label>
+          <input v-model.number="trailEdit.target_price" type="number" min="0" placeholder="미입력시 유지" />
+        </div>
+        <div class="field">
+          <label>최종이탈가</label>
+          <input v-model.number="trailEdit.exit_price" type="number" min="0" placeholder="미입력시 유지" />
+        </div>
+        <div class="field">
+          <label>매수단가</label>
+          <input v-model.number="trailEdit.basic_price" type="number" min="0" placeholder="미입력시 유지" />
+        </div>
+        <div class="field">
+          <label>매수량</label>
+          <input v-model.number="trailEdit.basic_qty" type="number" min="0" placeholder="미입력시 유지" />
+        </div>
+        <div class="field full" v-if="trailEditBasicAmt !== null || trailEditLossAmt !== null">
+          <div class="derived-box">
+            <span v-if="trailEditBasicAmt !== null">매수금액: <b>{{ fmt(trailEditBasicAmt) }} 원</b></span>
+            <span v-if="trailEditLossAmt !== null">손실금액: <b style="color:#e63946">{{ fmt(trailEditLossAmt) }} 원</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-update" @click="updateTrail" :disabled="loading">매매추적 변경</button>
+      </div>
+
+      <div v-if="updateLog.length > 0" class="update-history">
+        <div class="update-history-title">변경 내역 (최근 {{ updateLog.length }}건)</div>
+        <div v-for="(log, i) in updateLog" :key="i" class="update-log-item">
+          <div class="log-header">
+            <span class="log-who">
+              {{ fmtDay(log.date) }} &nbsp;
+              {{ log.code }}{{ log.name ? ' (' + log.name + ')' : '' }}
+            </span>
+            <span class="log-time">{{ log.time }}</span>
+          </div>
+          <div v-if="log.fieldStr" class="log-fields">{{ log.fieldStr }}</div>
+          <div class="log-result" :class="log.success ? 'ok' : 'ng'">{{ log.message }}</div>
+        </div>
+      </div>
+    </template>
   </div>
 
   <!-- 매도 미리보기 -->
@@ -744,105 +838,6 @@
       <button class="btn-trail" @click="runTrail" :disabled="running || !simDate">추적실행</button>
     </div>
     <pre v-if="runLog" class="run-log">{{ runLog }}</pre>
-  </div>
-
-  <!-- 매매추적 변경 -->
-  <div class="card">
-    <div class="section-title">매매추적 변경</div>
-    <div class="form-grid">
-
-      <div class="field full">
-        <label>변경일자 (기본값: 수행일자)</label>
-        <input v-model="trailEdit.change_date" type="date" />
-      </div>
-
-      <div class="field">
-        <label>종목코드 / 종목명</label>
-        <input
-          v-model.trim="trailEdit.code"
-          @blur="trailEditLookup"
-          placeholder="코드(005930) 또는 종목명"
-          :class="{loading: trailEditLookingUp}"
-        />
-        <div v-if="trailEdit.name" style="font-size:.78rem;color:#888;margin-top:4px;padding-left:2px">{{ trailEdit.name }}</div>
-      </div>
-
-      <div class="field">
-        <label>처리시간 (미입력시 유지)</label>
-        <input v-model.trim="trailEdit.proc_min" placeholder="예) 090000" maxlength="6" />
-      </div>
-
-      <div class="field">
-        <label>추적유형</label>
-        <select v-model="trailEdit.trail_tp">
-          <option value="">-- 미변경 --</option>
-          <option value="1">1 (추적대기)</option>
-          <option value="2">2 (추적중)</option>
-          <option value="3">3 (안전마진)</option>
-          <option value="L">L (장기보유)</option>
-          <option value="P">P (추적멈춤)</option>
-          <option value="4">4 (완전매도)</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label>이탈가</label>
-        <input v-model.number="trailEdit.stop_price" type="number" min="0" placeholder="미입력시 유지" />
-      </div>
-
-      <div class="field">
-        <label>목표가</label>
-        <input v-model.number="trailEdit.target_price" type="number" min="0" placeholder="미입력시 유지" />
-      </div>
-
-      <div class="field">
-        <label>최종이탈가</label>
-        <input v-model.number="trailEdit.exit_price" type="number" min="0" placeholder="미입력시 유지" />
-      </div>
-
-      <div class="field">
-        <label>매수단가</label>
-        <input v-model.number="trailEdit.basic_price" type="number" min="0" placeholder="미입력시 유지" />
-      </div>
-
-      <div class="field">
-        <label>매수량</label>
-        <input v-model.number="trailEdit.basic_qty" type="number" min="0" placeholder="미입력시 유지" />
-      </div>
-
-      <div class="field full" v-if="trailEditBasicAmt !== null || trailEditLossAmt !== null">
-        <div class="derived-box">
-          <span v-if="trailEditBasicAmt !== null">
-            매수금액: <b>{{ fmt(trailEditBasicAmt) }} 원</b>
-          </span>
-          <span v-if="trailEditLossAmt !== null">
-            손실금액: <b style="color:#e63946">{{ fmt(trailEditLossAmt) }} 원</b>
-          </span>
-        </div>
-      </div>
-
-    </div>
-    <div class="btn-row">
-      <button class="btn-update" @click="updateTrail" :disabled="loading || !trailEdit.change_date || !trailEdit.code.trim()">
-        매매추적 변경
-      </button>
-    </div>
-
-    <div v-if="updateLog.length > 0" class="update-history">
-      <div class="update-history-title">변경 내역 (최근 {{ updateLog.length }}건)</div>
-      <div v-for="(log, i) in updateLog" :key="i" class="update-log-item">
-        <div class="log-header">
-          <span class="log-who">
-            {{ fmtDay(log.date) }} &nbsp;
-            {{ log.code }}{{ log.name ? ' (' + log.name + ')' : '' }}
-            <span v-if="log.proc_min" style="color:#888"> / {{ log.proc_min }}</span>
-          </span>
-          <span class="log-time">{{ log.time }}</span>
-        </div>
-        <div v-if="log.fieldStr" class="log-fields">{{ log.fieldStr }}</div>
-        <div class="log-result" :class="log.success ? 'ok' : 'ng'">{{ log.message }}</div>
-      </div>
-    </div>
   </div>
 
   <!-- 저장 내역 -->
@@ -957,6 +952,49 @@ createApp({
     const sellPreview    = ref(null);
     const sellLookingUp  = ref(false);
 
+    // 통합 매도/변경 상태
+    const trailMode            = ref('sell');
+    const trailActionDate      = ref(today);
+    const activeStocks         = ref([]);
+    const activeStocksLoading  = ref(false);
+    const selectedStock        = ref(null);
+
+    async function loadActiveStocks() {
+      if (!trailActionDate.value) { activeStocks.value = []; selectedStock.value = null; return; }
+      const dateStr = trailActionDate.value.replace(/-/g, '');
+      activeStocksLoading.value = true;
+      selectedStock.value = null;
+      try {
+        const res  = await fetch(`/api/active-stocks?date=${dateStr}`);
+        const data = await res.json();
+        activeStocks.value = Array.isArray(data) ? data : [];
+      } catch {
+        activeStocks.value = [];
+      } finally {
+        activeStocksLoading.value = false;
+      }
+    }
+
+    function selectActiveStock(s) {
+      selectedStock.value = s;
+      sellForm.value.code       = s.code;
+      sellForm.value.name       = s.name;
+      sellForm.value.sell_date  = trailActionDate.value;
+      sellForm.value.sell_price = null;
+      sellForm.value.sell_ratio = 100;
+      sellForm.value.sell_time  = '';
+      trailEdit.value.code         = s.code;
+      trailEdit.value.name         = s.name;
+      trailEdit.value.change_date  = trailActionDate.value;
+      trailEdit.value.trail_tp     = '';
+      trailEdit.value.stop_price   = null;
+      trailEdit.value.target_price = null;
+      trailEdit.value.exit_price   = null;
+      trailEdit.value.basic_price  = null;
+      trailEdit.value.basic_qty    = null;
+      trailEdit.value.proc_min     = '';
+    }
+
     const canSellCalc = computed(() =>
       sellForm.value.code.length >= 5 &&
       sellForm.value.sell_price > 0 &&
@@ -1040,12 +1078,11 @@ createApp({
     watch(() => form.value.buy_date, (d) => { if (d) simDate.value = d; });
 
     const trailEdit = ref({
-      change_date: simDate.value, code: '', name: '', proc_min: '',
+      change_date: today, code: '', name: '', proc_min: '',
       stop_price: null, target_price: null, exit_price: null,
       basic_price: null, basic_qty: null, trail_tp: '',
     });
     const trailEditLookingUp = ref(false);
-    watch(simDate, (d) => { trailEdit.value.change_date = d; });
 
     const trailEditBasicAmt = computed(() => {
       const p = trailEdit.value.basic_price, q = trailEdit.value.basic_qty;
@@ -1351,6 +1388,8 @@ createApp({
       trailEdit, trailEditBasicAmt, trailEditLossAmt, trailEditLookingUp, updateLog,
       stockInfo, dashboard,
       sellForm, sellPreview, sellLookingUp, canSellCalc,
+      trailMode, trailActionDate, activeStocks, activeStocksLoading, selectedStock,
+      loadActiveStocks, selectActiveStock,
       lookupSellName, calculateSell, executeSell,
       canCalc, lookupName, trailEditLookup, trailTpLabel,
       sizeClass, fetchStockInfo, loadDashboard,

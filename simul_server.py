@@ -787,5 +787,34 @@ def stock_info():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/active-stocks')
+def api_active_stocks():
+    """매도/변경 대상 활성 종목 조회 (trail_tp IN ('1','2','L'))."""
+    date = request.args.get('date', '').replace('-', '')
+    if not date or len(date) != 8 or not date.isdigit():
+        return jsonify({'error': '날짜 형식 오류'}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT code, name, trail_tp, basic_price, basic_qty
+            FROM trading_trail_simul
+            WHERE acct_no = 'SIMUL' AND trail_day = %s
+              AND trail_tp IN ('1','2','L')
+            ORDER BY code
+        """, (date,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify([
+            {'code': r[0], 'name': r[1], 'trail_tp': r[2],
+             'basic_price': int(r[3]) if r[3] else 0,
+             'basic_qty':   int(r[4]) if r[4] else 0}
+            for r in rows
+        ])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=True, use_reloader=False)
