@@ -398,7 +398,7 @@ def _get_dly_mkt_trend(trade_date: str, conn) -> dict | None:
         cur = conn.cursor()
         cur.execute("""
             SELECT kospi_short, kosdak_short, kospi_mid, kosdak_mid,
-                   kospi_long,  kosdak_long,  market_ratio
+                   kospi_long,  kosdak_long,  market_ratio, dnca_tot_amt
             FROM public.dly_acct_balance_simul
             WHERE dt = %s AND acct = '74346047'
         """, (trade_date,))
@@ -409,7 +409,7 @@ def _get_dly_mkt_trend(trade_date: str, conn) -> dict | None:
                 'kospi_short': row[0], 'kosdak_short': row[1],
                 'kospi_mid':   row[2], 'kosdak_mid':   row[3],
                 'kospi_long':  row[4], 'kosdak_long':  row[5],
-                'market_ratio': row[6],
+                'market_ratio': row[6], 'dnca_tot_amt': row[7],
             }
     except Exception as e:
         print(f"[시뮬] dly_acct_balance_simul 조회 오류: {e}")
@@ -822,9 +822,9 @@ def get_kis_1min_from_datetime_simul(
                                 _w_stk_mkt       = _stk_mkt_pre
                                 _w_allow_ratio   = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
                                 _w_total_invested = _get_total_invested(trade_date, conn)
-                                _w_allowed_invest = int(TOTAL_INVEST_BASE * _w_allow_ratio / 100)
+                                _w_allowed_invest = int(_w_mkt_data.get('dnca_tot_amt', '') * _w_allow_ratio / 100)
                                 _w_excess_invest  = _w_total_invested - _w_allowed_invest
-                                _w_invest_pct     = round(_w_total_invested / TOTAL_INVEST_BASE * 100, 1)
+                                _w_invest_pct     = round(_w_total_invested / _w_mkt_data.get('dnca_tot_amt', '') * 100, 1)
                                 _w_mid_key   = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
                                 _w_long_key  = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
                                 _w_mid_str   = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
@@ -852,9 +852,9 @@ def get_kis_1min_from_datetime_simul(
                         _stk_mkt        = _get_stock_market_type(stock_code, access_token, app_key, app_secret)
                         _allow_ratio    = _calc_invest_ratio(_mkt_data, _stk_mkt)
                         _total_invested = _get_total_invested(trade_date, conn)
-                        _allowed_invest = int(TOTAL_INVEST_BASE * _allow_ratio / 100)
+                        _allowed_invest = int(_mkt_data.get('dnca_tot_amt', '') * _allow_ratio / 100)
                         _excess_invest  = _total_invested - _allowed_invest
-                        _invest_pct     = round(_total_invested / TOTAL_INVEST_BASE * 100, 1)
+                        _invest_pct     = round(_total_invested / _mkt_data.get('dnca_tot_amt', '') * 100, 1)
                         _mid_key        = 'kospi_mid'  if _stk_mkt == 'KOSPI' else 'kosdak_mid'
                         _long_key       = 'kospi_long' if _stk_mkt == 'KOSPI' else 'kosdak_long'
                         _mid_str        = '상승' if _mkt_data.get(_mid_key)  == '03' else '하락'
@@ -1334,6 +1334,90 @@ def _update_dly_trading_balance_simul(trade_date: str, conn,
 
 
 # ─────────────────────────────────────────
+# 시장흐름 동기화
+# ─────────────────────────────────────────
+def _sync_market_trend_to_simul(trade_date: str, conn, prev_tot_evlu_amt=None):
+    """dly_acct_balance(trade_date) 시장흐름 값을
+    dly_acct_balance_simul 의 다음 영업일(dt) 에 upsert.
+    prev_tot_evlu_amt: trade_date +1일 dly_acct_balance_simul.tot_evlu_amt (dnca_tot_amt 설정)
+    """
+    try:
+        cur = conn.cursor()
+
+        # trade_date 다음 영업일 계산
+        d_fmt = (datetime.strptime(trade_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        cur.execute("SELECT post_business_day_char(%s::date)", (d_fmt,))
+        next_biz = cur.fetchone()[0]
+
+        # trade_date 다음 영업일기준 시장흐름 조회
+        cur.execute("""
+            SELECT market_ratio, kospi_short, kosdak_short,
+                   kospi_mid,   kosdak_mid,
+                   kospi_long,  kosdak_long
+            FROM public.dly_acct_balance
+            WHERE acct = '74346047' AND dt = %s
+        """, (next_biz,))
+        row = cur.fetchone()
+        if not row:
+            print(f"[SIMUL] dly_acct_balance({next_biz}) 시장흐름 없음 → 스킵")
+            cur.close()
+            return
+        market_ratio, kospi_short, kosdak_short, kospi_mid, kosdak_mid, kospi_long, kosdak_long = row
+        now = datetime.now()
+        dnca_tot = int(prev_tot_evlu_amt) if prev_tot_evlu_amt is not None else 0
+
+        cur.execute("""
+            INSERT INTO dly_acct_balance_simul (
+                acct, dt,
+                dnca_tot_amt, prvs_excc_amt,
+                td_buy_amt, td_sell_amt, td_tex_amt,
+                user_evlu_amt, tot_evlu_amt, nass_amt,
+                pchs_amt, evlu_amt, evlu_pfls_amt,
+                ytdt_tot_evlu_amt, asst_icdc_amt,
+                total_profit_loss_amt, buy_psbl_amt,
+                market_ratio, kospi_short, kosdak_short,
+                kospi_mid, kosdak_mid, kospi_long, kosdak_long,
+                last_chg_date
+            ) VALUES (
+                '74346047', %s,
+                %s, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0, 0,
+                0, 0,
+                0, 0,
+                %s, %s, %s,
+                %s, %s, %s, %s,
+                %s
+            )
+            ON CONFLICT (acct, dt) DO UPDATE SET
+                dnca_tot_amt  = EXCLUDED.dnca_tot_amt,
+                market_ratio  = EXCLUDED.market_ratio,
+                kospi_short   = EXCLUDED.kospi_short,
+                kosdak_short  = EXCLUDED.kosdak_short,
+                kospi_mid     = EXCLUDED.kospi_mid,
+                kosdak_mid    = EXCLUDED.kosdak_mid,
+                kospi_long    = EXCLUDED.kospi_long,
+                kosdak_long   = EXCLUDED.kosdak_long,
+                last_chg_date = EXCLUDED.last_chg_date
+        """, (
+            next_biz,
+            dnca_tot,
+            market_ratio, kospi_short, kosdak_short,
+            kospi_mid, kosdak_mid, kospi_long, kosdak_long,
+            now,
+        ))
+        conn.commit()
+        cur.close()
+        print(f"[SIMUL] dly_acct_balance_simul 시장흐름 반영"
+              f" ({trade_date} → 다음영업일: {next_biz})"
+              f" kospi={kospi_short}/{kospi_mid}/{kospi_long}"
+              f" kosdak={kosdak_short}/{kosdak_mid}/{kosdak_long}")
+    except Exception as e:
+        print(f"[SIMUL] 시장흐름 동기화 오류: {e}")
+
+
+# ─────────────────────────────────────────
 # 종목별 처리 (스레드)
 # ─────────────────────────────────────────
 def process_stock_simul(stock_info, ac, conn_stock):
@@ -1432,6 +1516,20 @@ def process_account_simul():
             today, conn_acct,
             ac['access_token'], ac['app_key'], ac['app_secret']
         )
+
+        # dly_acct_balance_simul 전일(trade_date -1일) tot_evlu_amt 조회
+        _prev_dt = (datetime.strptime(today, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+        _cur_tot = conn_acct.cursor()
+        _cur_tot.execute("""
+            SELECT tot_evlu_amt FROM dly_acct_balance_simul
+            WHERE acct = '74346047' AND dt = prev_business_day_char(%s::date)
+        """, (_prev_dt,))
+        _tot_row = _cur_tot.fetchone()
+        _cur_tot.close()
+        prev_tot_evlu_amt = int(_tot_row[0]) if _tot_row else None
+
+        # dly_acct_balance 시장흐름 값을 dly_acct_balance_simul 에 반영
+        _sync_market_trend_to_simul(today, conn_acct, prev_tot_evlu_amt)
 
     except Exception as e:
         print(f"[SIMUL] 계좌 처리 오류: {e}")

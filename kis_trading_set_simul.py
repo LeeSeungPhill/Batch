@@ -330,15 +330,20 @@ try:
             """, (SIMUL_DLY_ACCT, prev_date))
             cum_profit = int(cur_dly.fetchone()[0]) + total_profit_loss_amt
 
-            # 전일까지 자산총액
+            # 전전일 예수금, 매수총액
             cur_dly.execute("""
-                SELECT tot_evlu_amt FROM dly_acct_balance_simul
+                SELECT prvs_excc_amt, pchs_amt, tot_evlu_amt FROM dly_acct_balance_simul
                 WHERE acct = %s AND dt < %s ORDER BY dt DESC LIMIT 1
             """, (SIMUL_DLY_ACCT, prev_date))
             pt_row        = cur_dly.fetchone()
-            prev_tot      = int(pt_row[0]) if pt_row else None
+            prev_excc     = int(pt_row[0]) if pt_row else None
+            prev_pchs     = int(pt_row[1]) if pt_row else None
+            prev_tot      = int(pt_row[2]) if pt_row else None
 
-            prvs_excc_amt = INITIAL_CAPITAL - pchs_amt + cum_profit
+            # 자본기준: dly_acct_balance_simul 의 prev_excc(전전일 예수금) 사용 (없으면 INITIAL_CAPITAL 폴백)
+            base_capital  = prev_excc if prev_excc is not None else INITIAL_CAPITAL
+            # 전일 예수금 = 전전일 예수금 - 전일 매수총액 + 전전일 매수총액 + 전일 실현손익
+            prvs_excc_amt = base_capital - pchs_amt + prev_pchs + total_profit_loss_amt
             tot_evlu_amt  = prvs_excc_amt + user_evlu_amt
             asst_icdc_amt = (tot_evlu_amt - prev_tot) if prev_tot is not None else 0
 
@@ -368,7 +373,7 @@ try:
                     last_chg_date         = EXCLUDED.last_chg_date
             """, (
                 SIMUL_DLY_ACCT, prev_date,
-                INITIAL_CAPITAL, prvs_excc_amt,
+                base_capital, prvs_excc_amt,
                 user_evlu_amt, tot_evlu_amt, tot_evlu_amt,
                 pchs_amt, user_evlu_amt, evlu_pfls_amt,
                 asst_icdc_amt, total_profit_loss_amt, datetime.now()

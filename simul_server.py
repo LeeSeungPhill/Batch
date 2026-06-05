@@ -180,48 +180,65 @@ def save():
         amt_item_loss = (buy_price - loss_price) * amt_buy_qty
         target_price  = calc_target_price(buy_price)
 
-        # ── 시장비율·현금 초과 검증 (매수일 전영업일 기준) ───────────
+        # ── 시장비율·현금 초과 검증 ───────────────────────────────────
         conn_chk = get_conn()
         cur_chk  = conn_chk.cursor()
 
-        # 매수일 기준 전영업일 조회
-        business_day = f"{data['buy_date'][:4]}-{data['buy_date'][4:6]}-{data['buy_date'][6:]}"
-        prev_biz = get_previous_business_day((datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d"))
-
+        # 매수일 이전 가장 최근 잔고 (정확 날짜 대신 최근 레코드)
         cur_chk.execute("""
-            SELECT prvs_excc_amt, tot_evlu_amt, market_ratio
+            SELECT prvs_excc_amt, tot_evlu_amt, market_ratio, dt
             FROM dly_acct_balance_simul
-            WHERE acct = '74346047' AND dt = %s
-        """, (prev_biz,))
+            WHERE acct = '74346047' AND dt < %s
+            ORDER BY dt DESC LIMIT 1
+        """, (buy_date,))
         dly_row = cur_chk.fetchone()
+
+        # 매수일 신규 등록 매수 총금액 (이번 매수 제외, 전일 이월 레코드 제외)
+        # trail_dtm = '090000' 은 kis_trading_set_simul.py 이월 레코드 → db_prvs 에 이미 반영됨
+        cur_chk.execute("""
+            SELECT COALESCE(SUM(basic_price * basic_qty), 0)
+            FROM trading_trail_simul
+            WHERE acct_no = 'SIMUL' AND trail_day = %s
+              AND trail_tp IN ('1','2','3','L','P')
+              AND trail_dtm != '090000'
+        """, (buy_date,))
+        tot_buy_row       = cur_chk.fetchone()
+        total_buy_on_date = int(tot_buy_row[0]) if tot_buy_row else 0
+
         cur_chk.close()
         conn_chk.close()
 
         if dly_row:
-            db_prvs = int(dly_row[0] or 0)
-            db_tot  = int(dly_row[1] or 0)
-            db_mr   = float(dly_row[2] or 0)
+            db_prvs  = int(dly_row[0] or 0)
+            db_tot   = int(dly_row[1] or 0)
+            db_mr    = float(dly_row[2] or 0)
+            ref_date = dly_row[3]
 
-            # 현금(prvs_excc_amt) 초과 체크
-            if amt_buy_amt > db_prvs:
+            # 매수일 기존 매수 반영 후 잔여 예수금
+            avail_prvs = db_prvs - total_buy_on_date
+
+            # 예수금 잔액 초과 체크
+            if amt_buy_amt > avail_prvs:
                 return jsonify({
                     'error': (
-                        f"매수금액({amt_buy_amt:,}원)이 가용현금({db_prvs:,}원)을 초과합니다.\n"
-                        f"최대 매수 가능금액: {db_prvs:,}원 (기준일: {prev_biz})"
+                        f"매수금액({amt_buy_amt:,}원)이 잔여 예수금({avail_prvs:,}원)을 초과합니다.\n"
+                        f"기준잔고: {db_prvs:,}원 | 매수일 기존매수: {total_buy_on_date:,}원 | "
+                        f"잔여예수금: {avail_prvs:,}원 (기준일: {ref_date})"
                     )
                 }), 400
 
-            # 시장비율 초과 체크
+            # 시장비율 초과 체크 (매수일 전체 매수 포함)
             if db_tot > 0 and db_mr > 0:
-                new_prvs          = db_prvs - amt_buy_amt
-                new_current_ratio = 100 - (new_prvs / db_tot * 100)
-                if new_current_ratio > db_mr:
-                    max_buy       = max(0, db_prvs - int(db_tot * (100 - db_mr) / 100))
-                    excess_buy    = amt_buy_amt - max_buy
+                new_cash         = avail_prvs - amt_buy_amt
+                new_invest_ratio = 100 - (new_cash / db_tot * 100)
+                if new_invest_ratio > db_mr:
+                    max_buy    = max(0, avail_prvs - int(db_tot * (100 - db_mr) / 100))
+                    excess_buy = amt_buy_amt - max_buy
                     return jsonify({
                         'error': (
-                            f"시장비율({db_mr:.0f}%) 초과 — 매수 후 현재비율 {new_current_ratio:.1f}%\n"
-                            f"초과 매수금액: {excess_buy:,}원 (허용 가능 매수금액: {max_buy:,}원, 기준일: {prev_biz})"
+                            f"시장비율({db_mr:.0f}%) 초과 — 매수 후 현재비율 {new_invest_ratio:.1f}%\n"
+                            f"기존매수 포함 총매수: {total_buy_on_date + amt_buy_amt:,}원 | "
+                            f"초과금액: {excess_buy:,}원 | 허용 추가매수: {max_buy:,}원 (기준일: {ref_date})"
                         )
                     }), 400
 
