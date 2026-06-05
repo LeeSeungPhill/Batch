@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 import psycopg2 as db
 from datetime import datetime, timedelta
 import os
+import io
 import subprocess
 import requests
 import json
@@ -12,8 +13,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
-CONN_STRING = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONN_STRING  = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='postgres' password='asdf1234'"
+_SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+_EXPORT_DIR  = os.path.join(_SCRIPT_DIR, 'simul_exports')
+SIMUL_TABLES = ['dly_trading_balance_simul', 'trading_trail_simul', 'dly_acct_balance_simul']
 
 # ── KRX 종목 목록 (reservebot.py 동일 방식) ─────────────────────────
 _krx_df      = None
@@ -783,6 +786,134 @@ def stock_info():
             'suggest_loss_market_ratio': suggest_loss_market_ratio,
             'suggest_loss_base_dt': suggest_loss_base_dt,
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/import-csv', methods=['POST'])
+def api_import_csv():
+    """CSV 파일을 업로드하여 해당 테이블 데이터 교체."""
+    if 'file' not in request.files:
+        return jsonify({'error': '파일이 없습니다.'}), 400
+    f     = request.files['file']
+    fname = f.filename or ''
+    table = next((t for t in SIMUL_TABLES if fname.startswith(t)), None)
+    if table is None:
+        names = ' / '.join(SIMUL_TABLES)
+        return jsonify({'error': f'파일명에서 테이블을 인식할 수 없습니다. ({names} 중 하나로 시작해야 합니다)'}), 400
+    try:
+        raw = f.read()
+        if raw.startswith(b'\xef\xbb\xbf'):
+            raw = raw[3:]
+        buf = io.BytesIO(raw)
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"DELETE FROM {table}")
+        deleted = cur.rowcount
+        cur.copy_expert(f"COPY {table} FROM STDIN WITH CSV HEADER NULL ''", buf)
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'message': f'{table} 가져오기 완료 (기존 {deleted}건 삭제)', 'table': table})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+_SAVE_SQLS = {
+    'dly_trading_balance_simul': """
+        INSERT INTO dly_trading_balance_simul_save(
+            save_dtm, acct_no, code, name, balance_day, balance_price, balance_qty,
+            balance_amt, value_rate, value_amt, buy_qty, sell_qty, crt_dt, mod_dt, use_yn
+        )
+        SELECT TO_CHAR(NOW(),'YYYYMMDDHH24MISS'),
+            acct_no, code, name, balance_day, balance_price, balance_qty,
+            balance_amt, value_rate, value_amt, buy_qty, sell_qty, crt_dt, mod_dt, use_yn
+        FROM dly_trading_balance_simul
+    """,
+    'trading_trail_simul': """
+        INSERT INTO trading_trail_simul_save(
+            save_dtm, acct_no, name, code, trail_day, trail_dtm, trail_tp,
+            basic_price, basic_qty, basic_amt, volumn, stop_price, target_price,
+            proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt,
+            order_no, order_type, order_dt, order_tmd, order_price, order_amount,
+            complete_qty, remain_qty, trail_plan, trail_price, trail_qty,
+            trail_amt, trail_rate, trade_result, last_alert_keys
+        )
+        SELECT TO_CHAR(NOW(),'YYYYMMDDHH24MISS'),
+            acct_no, name, code, trail_day, trail_dtm, trail_tp,
+            basic_price, basic_qty, basic_amt, volumn, stop_price, target_price,
+            proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt,
+            order_no, order_type, order_dt, order_tmd, order_price, order_amount,
+            complete_qty, remain_qty, trail_plan, trail_price, trail_qty,
+            trail_amt, trail_rate, trade_result, last_alert_keys
+        FROM trading_trail_simul
+    """,
+    'dly_acct_balance_simul': """
+        INSERT INTO dly_acct_balance_simul_save(
+            save_dtm, acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt,
+            td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt,
+            evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date,
+            total_profit_loss_amt, buy_psbl_amt, cash_rate, market_ratio,
+            kospi_short, kosdak_short, kospi_mid, kosdak_mid, kospi_long, kosdak_long
+        )
+        SELECT TO_CHAR(NOW(),'YYYYMMDDHH24MISS'),
+            acct, dt, dnca_tot_amt, prvs_excc_amt, td_buy_amt, td_sell_amt,
+            td_tex_amt, user_evlu_amt, tot_evlu_amt, nass_amt, pchs_amt, evlu_amt,
+            evlu_pfls_amt, ytdt_tot_evlu_amt, asst_icdc_amt, last_chg_date,
+            total_profit_loss_amt, buy_psbl_amt, cash_rate, market_ratio,
+            kospi_short, kosdak_short, kospi_mid, kosdak_mid, kospi_long, kosdak_long
+        FROM dly_acct_balance_simul
+    """,
+}
+
+
+@app.route('/api/save-all', methods=['POST'])
+def api_save_all():
+    """3개 테이블 데이터를 _save 테이블 및 CSV 파일로 저장."""
+    os.makedirs(_EXPORT_DIR, exist_ok=True)
+    now_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+    results = []
+    conn = None
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        for table in SIMUL_TABLES:
+            cur.execute(_SAVE_SQLS[table])
+            inserted = cur.rowcount
+            fname = f'{table}_{now_str}.csv'
+            fpath = os.path.join(_EXPORT_DIR, fname)
+            buf = io.BytesIO()
+            cur.copy_expert(f"COPY {table} TO STDOUT WITH CSV HEADER", buf)
+            with open(fpath, 'wb') as fout:
+                fout.write(b'\xef\xbb\xbf')
+                fout.write(buf.getvalue())
+            results.append({'table': table, 'inserted': inserted, 'file': fname})
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'message': '전체저장 완료', 'results': results, 'export_dir': _EXPORT_DIR})
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except: pass
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/delete-all', methods=['POST'])
+def api_delete_all():
+    """3개 테이블 전체 데이터 삭제."""
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        counts = {}
+        for table in SIMUL_TABLES:
+            cur.execute(f"DELETE FROM {table}")
+            counts[table] = cur.rowcount
+        conn.commit()
+        cur.close()
+        conn.close()
+        total = sum(counts.values())
+        return jsonify({'message': f'전체삭제 완료 (총 {total}건)', 'counts': counts})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
