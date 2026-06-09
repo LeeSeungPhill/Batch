@@ -1011,6 +1011,8 @@ def callback_get(update, context) :
     global g_order_no
     global g_remain_qty
     global g_selected_accounts
+    global g_holding_edit_field
+    global g_interest_edit_field
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -1315,7 +1317,6 @@ def callback_get(update, context) :
 
     elif command in ("보유종목_수정", "holding_back"):
         initMenuNum()
-        global g_holding_edit_field
         g_holding_edit_field = ""
         _show_holding_edit_keyboard(query)
 
@@ -1436,7 +1437,6 @@ def callback_get(update, context) :
 
     elif command in ("관심종목_변경", "interest_edit_back"):
         initMenuNum()
-        global g_interest_edit_field
         g_interest_edit_field = ""
         _show_interest_edit_keyboard(query)
 
@@ -1480,7 +1480,6 @@ def callback_get(update, context) :
             query.edit_message_text(text=f"[관심종목 수정] 오류: {str(e)}")
 
     elif command.startswith("interest_edit_field_"):
-        global g_interest_edit_field
         g_interest_edit_field = command[len("interest_edit_field_"):]
         if g_interest_edit_field == "관심제외":
             try:
@@ -1577,7 +1576,6 @@ def callback_get(update, context) :
             query.edit_message_text(text=f"[보유종목 수정] 오류: {str(e)}")
 
     elif command.startswith("holding_edit_field_"):
-        global g_holding_edit_field
         field = command[len("holding_edit_field_"):]
         g_holding_edit_field = field
         menuNum = '02'
