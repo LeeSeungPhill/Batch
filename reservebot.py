@@ -1548,8 +1548,8 @@ def callback_get(update, context) :
                 with get_conn().cursor() as cur_tp:
                     cur_tp.execute(
                         'SELECT trading_plan, sign_resist_price, sign_support_price, end_target_price, end_loss_price '
-                        'FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
-                        (h_code,)
+                        'FROM public."stockBalance_stock_balance" WHERE acct_no = %s AND code = %s AND proc_yn = \'Y\'',
+                        (ac_h['acct_no'], h_code)
                     )
                     tp_row = cur_tp.fetchone()
                     if tp_row:
