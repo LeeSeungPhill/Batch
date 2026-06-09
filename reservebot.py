@@ -1314,6 +1314,9 @@ def callback_get(update, context) :
                                             message_id=query.message.message_id)
 
     elif command in ("보유종목_수정", "holding_back"):
+        initMenuNum()
+        global g_holding_edit_field
+        g_holding_edit_field = ""
         _show_holding_edit_keyboard(query)
 
     elif command == "관심종목_조회":
@@ -1432,6 +1435,9 @@ def callback_get(update, context) :
             )
 
     elif command in ("관심종목_변경", "interest_edit_back"):
+        initMenuNum()
+        global g_interest_edit_field
+        g_interest_edit_field = ""
         _show_interest_edit_keyboard(query)
 
     elif command.startswith("interest_edit_") and not command.startswith("interest_edit_field_"):
