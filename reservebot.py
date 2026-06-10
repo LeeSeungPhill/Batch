@@ -2928,7 +2928,7 @@ def callback_get(update, context) :
         menuNum = '41B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"[{ts_name}({ts_code})] 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2)를 입력하세요."
+            text=f"[{ts_name}({ts_code})] 이탈가(저가:0), 목표가(고가:0), 최종이탈가(저가:0), 추적상태(L,1,2)를 입력하세요."
         )
 
     elif command.startswith("trail_stop_"):
@@ -3477,19 +3477,20 @@ def echo(update, context):
                 text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
         return
 
-    # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 추적상태만 입력
+    # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 최종이탈가, 추적상태만 입력
     if menuNum == '41B':
         initMenuNum()
         global g_trail_state_code, g_trail_state_name
         ts_code = g_trail_state_code
         ts_name = g_trail_state_name
         parts41B = user_text.strip().split(',')
-        if (len(parts41B) < 3
+        if (len(parts41B) < 4
                 or not parts41B[0].strip().isdecimal()
                 or not parts41B[1].strip().isdecimal()
-                or parts41B[2].strip() not in ('L', '1', '2')):
+                or not parts41B[2].strip().isdecimal()
+                or parts41B[3].strip() not in ('L', '1', '2')):
             context.bot.send_message(chat_id=user_id,
-                text=f"[{ts_name}] 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 형식이 올바르지 않습니다.")
+                text=f"[{ts_name}] 이탈가(저가:0), 목표가(고가:0), 최종이탈가(저가:0), 추적상태(L,1,2) 형식이 올바르지 않습니다.")
             return
         try:
             ac_41b = account()
@@ -3507,7 +3508,8 @@ def echo(update, context):
                     hold_amt_41b = int(c_41b['pchs_amt'][i])
             stop_price_41b = stck_lwpr_41b if int(parts41B[0].strip()) == 0 else int(parts41B[0].strip())
             target_price_41b = stck_hgpr_41b if int(parts41B[1].strip()) == 0 else int(parts41B[1].strip())
-            trail_tp_41b = parts41B[2].strip()
+            exit_price_41b = stck_lwpr_41b if int(parts41B[2].strip()) == 0 else int(parts41B[2].strip())
+            trail_tp_41b = parts41B[3].strip()
             c41b = get_conn()
             with c41b.cursor() as cur_41b:
                 cur_41b.execute("""
@@ -3522,7 +3524,7 @@ def echo(update, context):
                         LIMIT 1
                     )
                     UPDATE trading_trail SET
-                        trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s,
+                        trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, exit_price = %s, 
                         proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
                         trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
                         trail_qty = NULL, trail_amt = NULL, volumn = NULL
@@ -3535,7 +3537,7 @@ def echo(update, context):
                 """, (
                     ts_code,
                     datetime.now().strftime('%H%M%S'), trail_tp_41b,
-                    stop_price_41b, target_price_41b,
+                    stop_price_41b, target_price_41b, exit_price_41b,
                     datetime.now().strftime('%H%M%S'), datetime.now(),
                     int(hold_price_41b), hldg_qty_41b, hold_amt_41b,
                 ))
@@ -3544,12 +3546,12 @@ def echo(update, context):
             if was_updated_41b:
                 context.bot.send_message(
                     chat_id=user_id,
-                    text=f"[{ts_name}(<code>{ts_code}</code>)] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 처리",
+                    text=f"[{ts_name}(<code>{ts_code}</code>)] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 처리",
                     parse_mode='HTML'
                 )
             else:
                 context.bot.send_message(chat_id=user_id,
-                    text=f"[{ts_name}({ts_code})] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 미처리")
+                    text=f"[{ts_name}({ts_code})] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 미처리")
         except Exception as e:
             try: get_conn().rollback()
             except Exception: pass
