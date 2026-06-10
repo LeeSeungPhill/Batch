@@ -2915,11 +2915,18 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_rn:
                 cur_rn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
+                    "SELECT name, stop_price, target_price, exit_price FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
                     (ts_code,)
                 )
                 rn_row = cur_rn.fetchone()
             ts_name = rn_row[0] if rn_row else ts_code
+            ts_stop_price = 0
+            ts_target_price = 0
+            ts_exit_price = 0
+            if rn_row:
+                ts_stop_price = int(rn_row[1])
+                ts_target_price = int(rn_row[2])
+                ts_exit_price = int(rn_row[3])
         except Exception:
             ts_name = ts_code
         global g_trail_state_code, g_trail_state_name
@@ -2928,7 +2935,7 @@ def callback_get(update, context) :
         menuNum = '41B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"[{ts_name}({ts_code})] 이탈가(저가:0), 목표가(고가:0), 최종이탈가(저가:0), 추적상태(L,1,2)를 입력하세요."
+            text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(저가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 추적상태(L,1,2)를 입력하세요."
         )
 
     elif command.startswith("trail_stop_"):
@@ -2958,11 +2965,18 @@ def callback_get(update, context) :
             c_sp = get_conn()
             with c_sp.cursor() as cur_sn:
                 cur_sn.execute(
-                    "SELECT DISTINCT name FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0",
+                    "SELECT name, stop_price, target_price, exit_price FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
                     (ts_code,)
                 )
                 sn_row = cur_sn.fetchone()
             ts_name = sn_row[0] if sn_row else ts_code
+            ts_stop_price = 0
+            ts_target_price = 0
+            ts_exit_price = 0
+            if rn_row:
+                ts_stop_price = int(rn_row[1])
+                ts_target_price = int(rn_row[2])
+                ts_exit_price = int(rn_row[3])
             with c_sp.cursor() as cur_sp:
                 cur_sp.execute("""
                     UPDATE trading_trail SET trail_tp = 'P', mod_dt = now()
@@ -2975,7 +2989,7 @@ def callback_get(update, context) :
             c_sp.commit()
             context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"[{ts_name}({ts_code})] 추적멈춤 처리 ({updated_sp}건)"
+                text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원, 목표가 {ts_target_price:,}원, 최종이탈가 {ts_exit_price:,}원 추적멈춤 처리 ({updated_sp}건)"
             )
         except Exception as e:
             try: get_conn().rollback()
