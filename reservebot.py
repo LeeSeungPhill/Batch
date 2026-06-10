@@ -2973,10 +2973,10 @@ def callback_get(update, context) :
             ts_stop_price = 0
             ts_target_price = 0
             ts_exit_price = 0
-            if rn_row:
-                ts_stop_price = int(rn_row[1])
-                ts_target_price = int(rn_row[2])
-                ts_exit_price = int(rn_row[3])
+            if sn_row:
+                ts_stop_price = int(sn_row[1])
+                ts_target_price = int(sn_row[2])
+                ts_exit_price = int(sn_row[3])
             with c_sp.cursor() as cur_sp:
                 cur_sp.execute("""
                     UPDATE trading_trail SET trail_tp = 'P', mod_dt = now()
