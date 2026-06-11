@@ -2193,6 +2193,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, menu_num)
 
     elif command.startswith("acc_") and command.endswith("_confirm"):
+        initMenuNum()
         # 계좌 선택 확인: callback_data = "acc_{menu_num}_confirm"
         menu_num = command.split("_")[1]
         menuNum = menu_num
