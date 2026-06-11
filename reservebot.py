@@ -2193,7 +2193,6 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, menu_num)
 
     elif command.startswith("acc_") and command.endswith("_confirm"):
-        initMenuNum()
         # 계좌 선택 확인: callback_data = "acc_{menu_num}_confirm"
         menu_num = command.split("_")[1]
         menuNum = menu_num
@@ -3210,6 +3209,7 @@ def echo(update, context):
     global g_risk_sum
     global g_low_price
     global g_selected_accounts
+    global menuNum
 
     # 관심종목 가격 직접입력 대기 처리
     pending = _pending_register.get(user_id)
