@@ -640,7 +640,7 @@ for nick in nickname_list:
                 ]
                 bot.send_message(
                     chat_id=chat_id,
-                    text="[종목 교체 고려 대상 매도비율 설정] 종목을 선택하세요:",
+                    text="[종목 교체 고려 대상 추적정보 변경] 종목을 선택하세요:",
                     reply_markup=InlineKeyboardMarkup(tp_buttons)
                 )
 
