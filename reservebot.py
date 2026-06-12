@@ -147,6 +147,8 @@ g_interest_edit_field = ""   # 수정할 필드명 (1차저항가/1차지지가/
 # 추적상태 재개/멈춤 버튼 선택 상태
 g_trail_state_code = ""
 g_trail_state_name = ""
+g_trail_state_acct_no = ""
+g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, nick_name, name, stop, target, exit) 리스트
 
 # 코스피/코스닥 변경 상태
 g_kk_code  = ""   # '0001':코스피, '1001':코스닥
@@ -285,7 +287,7 @@ def build_date_buttons3(days=7):
 
 def _show_holding_edit_keyboard(query, context_bot=None):
     """보유종목 수정 종목 선택 키보드 표시 (보유종목_수정 / 뒤로가기 공용)"""
-    ac = account()
+    ac = account(arguments[1])
     try:
         query.edit_message_text(text="[보유종목 수정] 조회 중...")
         c = stock_balance(ac['access_token'], ac['app_key'], ac['app_secret'], ac['acct_no'], "")
@@ -1013,7 +1015,7 @@ def callback_get(update, context) :
     global g_selected_accounts
     global g_holding_edit_field
     global g_interest_edit_field
-    global g_trail_state_code, g_trail_state_name
+    global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -1109,7 +1111,7 @@ def callback_get(update, context) :
     elif command.startswith("holding_") and not command.startswith("holding_edit_") and command != "holding_plan_toggle" and command != "holding_back":
         # 보유종목 종목 선택 → 기준계좌 잔고로 종목명 확인 후 계좌 선택 키보드 표시
         h_code = command[len("holding_"):]
-        ac_h = account()
+        ac_h = account(arguments[1])
         try:
             c_h = stock_balance(ac_h['access_token'], ac_h['app_key'], ac_h['app_secret'], ac_h['acct_no'], "")
             matched = [(c_h['prdt_name'][i], int(c_h['hldg_qty'][i]), int(c_h['prpr'][i]))
@@ -1140,7 +1142,7 @@ def callback_get(update, context) :
 
     elif command == "보유종목_조회":
 
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -1322,8 +1324,6 @@ def callback_get(update, context) :
         _show_holding_edit_keyboard(query)
 
     elif command == "관심종목_조회":
-        ac = account()
-        acct_no = ac['acct_no']
         try:
             query.edit_message_text(text="[관심종목 조회] 조회 중...")
             with get_conn().cursor() as cur_ii:
@@ -1535,7 +1535,7 @@ def callback_get(update, context) :
 
     elif command.startswith("holding_edit_") and not command.startswith("holding_edit_field_"):
         h_code = command[len("holding_edit_"):]
-        ac_h = account()
+        ac_h = account(arguments[1])
         try:
             c = stock_balance(ac_h['access_token'], ac_h['app_key'], ac_h['app_secret'], ac_h['acct_no'], "")
             matched = [(c['prdt_name'][i],) for i, _ in enumerate(c.index) if c['pdno'][i] == h_code]
@@ -1686,7 +1686,7 @@ def callback_get(update, context) :
 
     elif command == "전체주문":
 
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -1779,7 +1779,7 @@ def callback_get(update, context) :
         cb_buy_price = g_buy21_buy_price
         cb_buy_qty = g_buy21_buy_qty
         target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
-        ac_default = account()
+        ac_default = account(arguments[1])
 
         def process_buy21(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             try:
@@ -1871,7 +1871,7 @@ def callback_get(update, context) :
     
     elif command == "전체예약":
     
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -2011,7 +2011,7 @@ def callback_get(update, context) :
         cb_year_day = g_trail71_year_day
         cb_hour_minute = g_trail71_hour_minute
         target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
-        ac_default = account()
+        ac_default = account(arguments[1])
 
         def process_trail71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             try:
@@ -2222,7 +2222,6 @@ def callback_get(update, context) :
             "63": "예약철회할 종목코드(종목명)를 입력하세요.",
             "71": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "72": "종목코드(종목명), 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
-            "81": "종목코드(종목명), 이탈가(현재가:0), 목표가(고가:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
@@ -2242,7 +2241,7 @@ def callback_get(update, context) :
         )
 
     elif command.startswith("sell_trace_date:"):
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -2465,7 +2464,7 @@ def callback_get(update, context) :
         )
             
     elif command.startswith("trace_delete_date:"):            
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
 
         try:
@@ -2524,18 +2523,7 @@ def callback_get(update, context) :
 
     elif command == "재개" and "추적상태" in data_selected:
         try:
-            ac = account()
-            acct_no = ac['acct_no']
-
             with get_conn().cursor() as cur_rs:
-                # cur_rs.execute("""
-                #     SELECT DISTINCT code, name FROM trading_trail
-                #     WHERE trail_tp IN ('P', 'C', 'U')
-                #     AND acct_no = %s 
-                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
-                #     AND basic_qty > 0
-                #     ORDER BY name
-                # """, (acct_no,))
                 cur_rs.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('P', 'C', 'U')
@@ -2560,18 +2548,7 @@ def callback_get(update, context) :
 
     elif command == "멈춤" and "추적상태" in data_selected:
         try:
-            ac = account()
-            acct_no = ac['acct_no']
-
             with get_conn().cursor() as cur_st:
-                # cur_st.execute("""
-                #     SELECT DISTINCT code, name FROM trading_trail
-                #     WHERE trail_tp IN ('1', '2', 'L')
-                #     AND acct_no = %s 
-                #     AND trail_day = prev_business_day_char(CURRENT_DATE)
-                #     AND basic_qty > 0
-                #     ORDER BY name
-                # """, (acct_no,))
                 cur_st.execute("""
                     SELECT DISTINCT code, name FROM trading_trail
                     WHERE trail_tp IN ('1', '2', 'L')
@@ -2601,7 +2578,7 @@ def callback_get(update, context) :
         )
             
     elif command.startswith("trading_trail_date:"):            
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -2937,22 +2914,28 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_rn:
                 cur_rn.execute(
-                    "SELECT name, stop_price, target_price, exit_price FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
+                    "SELECT t.acct_no, s.nick_name, t.name, "
+                    "min(t.stop_price), max(t.target_price), min(t.exit_price) "
+                    "FROM trading_trail t "
+                    "JOIN \"stockAccount_stock_account\" s ON s.acct_no = t.acct_no "
+                    "WHERE t.code = %s AND t.trail_day = prev_business_day_char(CURRENT_DATE) "
+                    "AND t.basic_qty > 0 AND t.trail_tp IN ('P', 'C', 'U') "
+                    "GROUP BY t.acct_no, s.nick_name, t.name",
                     (ts_code,)
                 )
-                rn_row = cur_rn.fetchone()
-            ts_name = rn_row[0] if rn_row else ts_code
-            ts_stop_price = 0
-            ts_target_price = 0
-            ts_exit_price = 0
-            if rn_row:
-                ts_stop_price = int(rn_row[1])
-                ts_target_price = int(rn_row[2])
-                ts_exit_price = int(rn_row[3])
+                rn_rows = cur_rn.fetchall()
+            # rn_rows: [(acct_no, nick_name, name, min_stop, max_target, min_exit), ...]
+            ts_name = rn_rows[0][2] if rn_rows else ts_code
+            ts_stop_price  = int(rn_rows[0][3]) if rn_rows and rn_rows[0][3] else 0
+            ts_target_price = int(rn_rows[0][4]) if rn_rows and rn_rows[0][4] else 0
+            ts_exit_price  = int(rn_rows[0][5]) if rn_rows and rn_rows[0][5] else 0
         except Exception:
+            rn_rows = []
             ts_name = ts_code
+            ts_stop_price = ts_target_price = ts_exit_price = 0
         g_trail_state_code = ts_code
         g_trail_state_name = ts_name
+        g_trail_state_accounts = rn_rows
         menuNum = '41B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
@@ -3044,29 +3027,35 @@ def callback_get(update, context) :
         except Exception:
             pass
         try:
-            ac_tc = account()
             with get_conn().cursor() as cur_tc2:
                 cur_tc2.execute(
-                    "SELECT name, stop_price, target_price, exit_price FROM trading_trail "
-                    "WHERE acct_no = %s AND code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) "
-                    "AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
-                    (ac_tc['acct_no'], ts_code)
+                     "SELECT t.acct_no, s.nick_name, t.name, "
+                    "min(t.stop_price), max(t.target_price), min(t.exit_price) "
+                    "FROM trading_trail t "
+                    "JOIN \"stockAccount_stock_account\" s ON s.acct_no = t.acct_no "
+                    "WHERE t.code = %s AND t.trail_day = prev_business_day_char(CURRENT_DATE) "
+                    "AND t.basic_qty > 0 AND t.trail_tp IN ('1', '2', 'L') "
+                    "GROUP BY t.acct_no, s.nick_name, t.name",
+                    (ts_code,)
                 )
-                tc2_row = cur_tc2.fetchone()
-            ts_name = tc2_row[0] if tc2_row else ts_code
-            ts_stop_price = int(tc2_row[1]) if tc2_row and tc2_row[1] else 0
-            ts_target_price = int(tc2_row[2]) if tc2_row and tc2_row[2] else 0
-            ts_exit_price = int(tc2_row[3]) if tc2_row and tc2_row[3] else 0
+                tc2_row = cur_tc2.fetchall()
+            # tc2_row: [(acct_no, nick_name, name, min_stop, max_target, min_exit), ...]
+            ts_name = tc2_row[0][2] if tc2_row else ts_code
+            ts_stop_price  = int(tc2_row[0][3]) if tc2_row and tc2_row[0][3] else 0
+            ts_target_price = int(tc2_row[0][4]) if tc2_row and tc2_row[0][4] else 0
+            ts_exit_price  = int(tc2_row[0][5]) if tc2_row and tc2_row[0][5] else 0
         except Exception:
+            tc2_row = []
             ts_name = ts_code
             ts_stop_price = ts_target_price = ts_exit_price = 0
         g_trail_state_code = ts_code
         g_trail_state_name = ts_name
+        g_trail_state_accounts = tc2_row
         menuNum = '81B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(현재가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 매도비율을 입력하세요."
-        )
+            text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(저가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 매도비율을 입력하세요."
+        )                
 
     elif command in ("코스피변경", "코스닥변경"):
         global g_kk_code, g_kk_name, g_kk_field
@@ -3320,7 +3309,7 @@ def echo(update, context):
             if nick is not None:
                 ac_01 = account(nick)
             else:
-                ac_01 = account()
+                ac_01 = account(arguments[1])
                 nick  = arguments[1]
             t = threading.Thread(target=process_nick_01,
                                  args=(nick, ac_01['acct_no'], ac_01['access_token'],
@@ -3390,7 +3379,7 @@ def echo(update, context):
 
         def process_signal_sell_94():
             try:
-                ac_03 = account()
+                ac_03 = account(arguments[1])
                 sell_price_03 = input_price
                 if sell_price_03 == 0:
                     ap = inquire_price(ac_03['access_token'], ac_03['app_key'], ac_03['app_secret'], ss_code)
@@ -3518,211 +3507,11 @@ def echo(update, context):
                 text=f"[{g_interest_edit_name}] {g_interest_edit_field} 업데이트 오류: {str(e)}")
         return
 
-    # 코스피/코스닥 필드값 변경 — 숫자만 입력
-    if menuNum == '06':
-        initMenuNum()
-        global g_kk_code, g_kk_name, g_kk_field
-        kk_field_col_map = {
-            "돌파가":    "through_price",
-            "이탈가":    "leave_price",
-            "지지가":    "support_price",
-            "저항가":    "resist_price",
-            "추세상한가": "trend_high_price",
-            "추세이탈가": "trend_low_price",
-        }
-        col06 = kk_field_col_map.get(g_kk_field)
-        if not col06:
-            context.bot.send_message(chat_id=user_id, text="변경할 항목이 선택되지 않았습니다.")
-            return
-        if not user_text.strip().lstrip('-').isdecimal():
-            context.bot.send_message(chat_id=user_id,
-                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field}: 숫자만 입력하세요.")
-            return
-        new_val06 = int(user_text.strip())
-        try:
-            c06 = get_conn()
-            with c06.cursor() as cur06:
-                cur06.execute(
-                    f'UPDATE public."interestItem_interest_item" '
-                    f'SET last_chg_date = now(), {col06} = %s '
-                    f"WHERE code = %s",
-                    (new_val06, g_kk_code)
-                )
-                updated06 = cur06.rowcount
-            c06.commit()
-            context.bot.send_message(
-                chat_id=user_id,
-                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} → {format(new_val06, ',d')}원 ({updated06}건 업데이트)"
-            )
-        except Exception as e:
-            try: get_conn().rollback()
-            except Exception: pass
-            context.bot.send_message(chat_id=user_id,
-                text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
-        return
-
-    # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 최종이탈가, 추적상태만 입력
-    if menuNum == '41B':
-        initMenuNum()
-        global g_trail_state_code, g_trail_state_name
-        ts_code = g_trail_state_code
-        ts_name = g_trail_state_name
-        parts41B = user_text.strip().split(',')
-        if (len(parts41B) < 4
-                or not parts41B[0].strip().isdecimal()
-                or not parts41B[1].strip().isdecimal()
-                or not parts41B[2].strip().isdecimal()
-                or parts41B[3].strip() not in ('L', '1', '2')):
-            context.bot.send_message(chat_id=user_id,
-                text=f"[{ts_name}] 이탈가(저가:0), 목표가(고가:0), 최종이탈가(저가:0), 추적상태(L,1,2) 형식이 올바르지 않습니다.")
-            return
-        try:
-            ac_41b = account()
-            ap_41b = inquire_price(ac_41b['access_token'], ac_41b['app_key'], ac_41b['app_secret'], ts_code)
-            stck_lwpr_41b = int(ap_41b['stck_lwpr'])
-            stck_hgpr_41b = int(ap_41b['stck_hgpr'])
-            c_41b = stock_balance(ac_41b['access_token'], ac_41b['app_key'], ac_41b['app_secret'], ac_41b['acct_no'], "")
-            hold_price_41b = 0
-            hldg_qty_41b = 0
-            hold_amt_41b = 0
-            for i in range(len(c_41b)):
-                if c_41b['pdno'][i] == ts_code:
-                    hold_price_41b = float(c_41b['pchs_avg_pric'][i])
-                    hldg_qty_41b = int(c_41b['hldg_qty'][i])
-                    hold_amt_41b = int(c_41b['pchs_amt'][i])
-            stop_price_41b = stck_lwpr_41b if int(parts41B[0].strip()) == 0 else int(parts41B[0].strip())
-            target_price_41b = stck_hgpr_41b if int(parts41B[1].strip()) == 0 else int(parts41B[1].strip())
-            exit_price_41b = stck_lwpr_41b if int(parts41B[2].strip()) == 0 else int(parts41B[2].strip())
-            trail_tp_41b = parts41B[3].strip()
-            c41b = get_conn()
-            with c41b.cursor() as cur_41b:
-                cur_41b.execute("""
-                    WITH target AS (
-                        SELECT code, trail_day, trail_dtm, trail_tp
-                        FROM trading_trail
-                        WHERE code = %s
-                        AND trail_day = prev_business_day_char(CURRENT_DATE)
-                        AND trail_tp IN ('C', 'U', 'P')
-                        AND basic_qty > 0
-                        ORDER BY trail_dtm DESC
-                        LIMIT 1
-                    )
-                    UPDATE trading_trail SET
-                        trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, exit_price = %s, 
-                        proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
-                        trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
-                        trail_qty = NULL, trail_amt = NULL, volumn = NULL
-                    FROM target
-                    WHERE trading_trail.code = target.code
-                      AND trading_trail.trail_day = target.trail_day
-                      AND trading_trail.trail_dtm = target.trail_dtm
-                      AND trading_trail.trail_tp = target.trail_tp
-                    RETURNING 1
-                """, (
-                    ts_code,
-                    datetime.now().strftime('%H%M%S'), trail_tp_41b,
-                    stop_price_41b, target_price_41b, exit_price_41b,
-                    datetime.now().strftime('%H%M%S'), datetime.now(),
-                    int(hold_price_41b), hldg_qty_41b, hold_amt_41b,
-                ))
-                was_updated_41b = cur_41b.fetchone() is not None
-            c41b.commit()
-            if was_updated_41b:
-                context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"[{ts_name}(<code>{ts_code}</code>)] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 처리",
-                    parse_mode='HTML'
-                )
-            else:
-                context.bot.send_message(chat_id=user_id,
-                    text=f"[{ts_name}({ts_code})] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 미처리")
-        except Exception as e:
-            try: get_conn().rollback()
-            except Exception: pass
-            context.bot.send_message(chat_id=user_id, text=f"[추적재개] 오류: {str(e)}")
-        return
-
-    if menuNum == '81B':
-        initMenuNum()
-        ts_code = g_trail_state_code
-        ts_name = g_trail_state_name
-        parts81b = user_text.strip().split(',')
-        if (len(parts81b) < 4
-                or not parts81b[0].strip().isdecimal()
-                or not parts81b[1].strip().isdecimal()
-                or not parts81b[2].strip().isdecimal()
-                or not is_positive_int(parts81b[3].strip())):
-            context.bot.send_message(chat_id=user_id,
-                text=f"[{ts_name}] 이탈가(현재가:0), 목표가(고가:0), 최종이탈가(저가:0), 매도비율(1~100) 형식이 올바르지 않습니다.")
-            menuNum = '81B'
-            return
-        try:
-            ac_81b = account()
-            ap_81b = inquire_price(ac_81b['access_token'], ac_81b['app_key'], ac_81b['app_secret'], ts_code)
-            stck_prpr_81b = int(ap_81b['stck_prpr'])
-            stck_hgpr_81b = int(ap_81b['stck_hgpr'])
-            stck_lwpr_81b = int(ap_81b['stck_lwpr'])
-            c_81b = stock_balance(ac_81b['access_token'], ac_81b['app_key'], ac_81b['app_secret'], ac_81b['acct_no'], "")
-            hold_price_81b = 0
-            hldg_qty_81b = 0
-            for i in range(len(c_81b)):
-                if c_81b['pdno'][i] == ts_code:
-                    hold_price_81b = float(c_81b['pchs_avg_pric'][i])
-                    hldg_qty_81b = int(c_81b['hldg_qty'][i])
-                    break
-            loss_price_81b = stck_prpr_81b if int(parts81b[0].strip()) == 0 else int(parts81b[0].strip())
-            sell_price_81b = stck_hgpr_81b if int(parts81b[1].strip()) == 0 else int(parts81b[1].strip())
-            exit_price_81b = stck_lwpr_81b if int(parts81b[2].strip()) == 0 else int(parts81b[2].strip())
-            sell_rate_81b = int(parts81b[3].strip())
-            sell_qty_81b = int(hldg_qty_81b * sell_rate_81b * 0.01)
-            if sell_qty_81b <= 0:
-                context.bot.send_message(chat_id=user_id,
-                    text=f"[{ts_name}({ts_code})] 보유수량 부족으로 미처리 (보유:{hldg_qty_81b}주, 매도비율:{sell_rate_81b}%)")
-                return
-            year_day_81b = datetime.now().strftime("%Y%m%d")
-            hour_minute_81b = datetime.now().strftime('%H%M%S')
-            c_upd_81b = get_conn()
-            with c_upd_81b.cursor() as cur_81b:
-                cur_81b.execute("""
-                    UPDATE trading_trail SET
-                        trail_dtm = %s, trail_tp = %s, trail_plan = %s,
-                        stop_price = %s, target_price = %s, exit_price = %s,
-                        loss_amt = (basic_price - %s) * basic_qty,
-                        proc_min = %s, trail_price = NULL, trail_rate = NULL,
-                        trail_qty = NULL, trail_amt = NULL, volumn = NULL, mod_dt = %s
-                    WHERE acct_no = %s AND code = %s AND trail_day = %s
-                      AND trail_tp NOT IN ('4', 'Y')
-                    RETURNING 1
-                """, (
-                    hour_minute_81b, '1', str(sell_rate_81b),
-                    loss_price_81b, sell_price_81b, exit_price_81b,
-                    exit_price_81b,
-                    hour_minute_81b, datetime.now(),
-                    ac_81b['acct_no'], ts_code, year_day_81b
-                ))
-                was_updated_81b = cur_81b.fetchone() is not None
-            c_upd_81b.commit()
-            if was_updated_81b:
-                context.bot.send_message(chat_id=user_id,
-                    text=f"[{ts_name}(<code>{ts_code}</code>)] 보유가:{format(int(hold_price_81b), ',d')}원, 보유량:{format(hldg_qty_81b, ',d')}주, "
-                         f"목표가:{format(sell_price_81b, ',d')}원, 이탈가:{format(loss_price_81b, ',d')}원, "
-                         f"최종이탈가:{format(exit_price_81b, ',d')}원, 매도비율:{sell_rate_81b}% 추적변경 처리",
-                    parse_mode='HTML')
-            else:
-                context.bot.send_message(chat_id=user_id,
-                    text=f"[{ts_name}({ts_code})] 목표가:{format(sell_price_81b, ',d')}원, 이탈가:{format(loss_price_81b, ',d')}원, "
-                         f"최종이탈가:{format(exit_price_81b, ',d')}원, 매도비율:{sell_rate_81b}% 추적변경 미처리")
-        except Exception as e:
-            try: get_conn().rollback()
-            except Exception: pass
-            context.bot.send_message(chat_id=user_id, text=f"[추적변경] 오류: {str(e)}")
-        return
-
     # 신규 관심종목 등록 — 종목코드(종목명) 입력 후 가격 조회 → 2단계 확인
     if menuNum == '05':
         initMenuNum()
         try:
-            ac05 = account()
+            ac05 = account(arguments[1])
             input_stripped = user_text.strip()
             # 종목코드 또는 종목명으로 코드 확인
             if input_stripped[:6].isdecimal() and len(input_stripped) >= 6:
@@ -3784,7 +3573,294 @@ def echo(update, context):
                 text=f"[관심종목 신규 등록] 오류: {str(e)}")
         return
 
-    # trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
+    # 코스피/코스닥 필드값 변경 — 숫자만 입력
+    if menuNum == '06':
+        initMenuNum()
+        global g_kk_code, g_kk_name, g_kk_field
+        kk_field_col_map = {
+            "돌파가":    "through_price",
+            "이탈가":    "leave_price",
+            "지지가":    "support_price",
+            "저항가":    "resist_price",
+            "추세상한가": "trend_high_price",
+            "추세이탈가": "trend_low_price",
+        }
+        col06 = kk_field_col_map.get(g_kk_field)
+        if not col06:
+            context.bot.send_message(chat_id=user_id, text="변경할 항목이 선택되지 않았습니다.")
+            return
+        if not user_text.strip().lstrip('-').isdecimal():
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field}: 숫자만 입력하세요.")
+            return
+        new_val06 = int(user_text.strip())
+        try:
+            c06 = get_conn()
+            with c06.cursor() as cur06:
+                cur06.execute(
+                    f'UPDATE public."interestItem_interest_item" '
+                    f'SET last_chg_date = now(), {col06} = %s '
+                    f"WHERE code = %s",
+                    (new_val06, g_kk_code)
+                )
+                updated06 = cur06.rowcount
+            c06.commit()
+            context.bot.send_message(
+                chat_id=user_id,
+                text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} → {format(new_val06, ',d')}원 ({updated06}건 업데이트)"
+            )
+        except Exception as e:
+            try: get_conn().rollback()
+            except Exception: pass
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
+        return
+
+    # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 최종이탈가, 추적상태만 입력
+    if menuNum == '41B':
+        initMenuNum()
+        ts_code = g_trail_state_code
+        ts_name = g_trail_state_name
+        parts41B = user_text.strip().split(',')
+        if (len(parts41B) < 4
+                or not parts41B[0].strip().isdecimal()
+                or not parts41B[1].strip().isdecimal()
+                or not parts41B[2].strip().isdecimal()
+                or parts41B[3].strip() not in ('L', '1', '2')):
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{ts_name}] 이탈가(저가:0), 목표가(고가:0), 최종이탈가(저가:0), 추적상태(L,1,2) 형식이 올바르지 않습니다.")
+            menuNum = '41B'
+            return
+
+        def process_nick_41b(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            try:
+                ap_41b = inquire_price(t_access_token, t_app_key, t_app_secret, ts_code)
+                stck_lwpr_41b = int(ap_41b['stck_lwpr'])
+                stck_hgpr_41b = int(ap_41b['stck_hgpr'])
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"[추적재개] 가격 조회 오류: {str(e)}")
+                return
+            stop_price_41b   = stck_lwpr_41b if int(parts41B[0].strip()) == 0 else int(parts41B[0].strip())
+            target_price_41b = stck_hgpr_41b if int(parts41B[1].strip()) == 0 else int(parts41B[1].strip())
+            exit_price_41b   = stck_lwpr_41b if int(parts41B[2].strip()) == 0 else int(parts41B[2].strip())
+            trail_tp_41b = parts41B[3].strip()
+            hour_minute_41b = datetime.now().strftime('%H%M%S')
+            try:
+                c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                hold_price = 0
+                hldg_qty = 0
+                hold_amt = 0
+                for i in range(len(c_bal)):
+                    if c_bal['pdno'][i] == ts_code:
+                        hold_price = float(c_bal['pchs_avg_pric'][i])
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        hold_amt = int(c_bal['pchs_amt'][i])
+                        break
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적재개] 잔고 조회 오류: {str(e)}")
+                return
+            thread_conn = db.connect(conn_string)
+            try:
+                with thread_conn.cursor() as cur:
+                    cur.execute("""
+                        WITH target AS (
+                            SELECT acct_no, code, trail_day, trail_dtm, trail_tp
+                            FROM trading_trail
+                            WHERE acct_no = %s AND code = %s
+                            AND trail_day = prev_business_day_char(CURRENT_DATE)
+                            AND trail_tp IN ('C', 'U', 'P')
+                            AND basic_qty > 0
+                            ORDER BY trail_dtm DESC
+                            LIMIT 1
+                        )
+                        UPDATE trading_trail SET
+                            trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, exit_price = %s,
+                            proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
+                            trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
+                            trail_qty = NULL, trail_amt = NULL, volumn = NULL
+                        FROM target
+                        WHERE trading_trail.acct_no = target.acct_no
+                          AND trading_trail.code = target.code
+                          AND trading_trail.trail_day = target.trail_day
+                          AND trading_trail.trail_dtm = target.trail_dtm
+                          AND trading_trail.trail_tp = target.trail_tp
+                        RETURNING 1
+                    """, (
+                        t_acct_no, ts_code,
+                        hour_minute_41b, trail_tp_41b,
+                        stop_price_41b, target_price_41b, exit_price_41b,
+                        hour_minute_41b, datetime.now(),
+                        int(hold_price), hldg_qty, hold_amt,
+                    ))
+                    was_updated = cur.fetchone() is not None
+                thread_conn.commit()
+                if was_updated:
+                    context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"-{nick}-[{ts_name}(<code>{ts_code}</code>)] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 처리",
+                        parse_mode='HTML'
+                    )
+                else:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"-{nick}-[{ts_name}({ts_code})] 이탈가:{format(stop_price_41b, ',d')}원, 목표가:{format(target_price_41b, ',d')}원, 최종이탈가:{format(exit_price_41b, ',d')}원, 추적상태:{trail_tp_41b} 추적재개 미처리")
+            except Exception as e:
+                thread_conn.rollback()
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적재개] 오류: {str(e)}")
+            finally:
+                thread_conn.close()
+
+        threads_41b = []
+        rows_41b = g_trail_state_accounts if g_trail_state_accounts else []
+        if not rows_41b:
+            context.bot.send_message(chat_id=user_id, text=f"[{ts_name}({ts_code})] 추적재개 대상 계좌가 없습니다.")
+            return
+        for row in rows_41b:
+            t_acct_no = row[0]
+            nick = row[1]
+            try:
+                ac_row = account(nick)
+                t_access_token = ac_row['access_token']
+                t_app_key = ac_row['app_key']
+                t_app_secret = ac_row['app_secret']
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적재개] 계정 조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(
+                target=process_nick_41b,
+                args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret)
+            )
+            threads_41b.append(t)
+            t.start()
+        for t in threads_41b:
+            t.join()
+        return
+
+    if menuNum == '81B':
+        initMenuNum()
+        ts_code = g_trail_state_code
+        ts_name = g_trail_state_name
+        parts81B = user_text.strip().split(',')
+        if (len(parts81B) < 4
+                or not parts81B[0].strip().isdecimal()
+                or not parts81B[1].strip().isdecimal()
+                or not parts81B[2].strip().isdecimal()
+                or not is_positive_int(parts81B[3].strip())):
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{ts_name}] 이탈가(현재가:0), 목표가(고가:0), 최종이탈가(저가:0), 매도비율(1~100) 형식이 올바르지 않습니다.")
+            menuNum = '81B'
+            return
+
+        def process_nick_81b(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            try:
+                ap_81b = inquire_price(t_access_token, t_app_key, t_app_secret, ts_code)
+                stck_lwpr_81b = int(ap_81b['stck_lwpr'])
+                stck_hgpr_81b = int(ap_81b['stck_hgpr'])
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"[추적변경] 가격 조회 오류: {str(e)}")
+                return
+            stop_price_81b   = stck_lwpr_81b if int(parts81B[0].strip()) == 0 else int(parts81B[0].strip())
+            target_price_81b = stck_hgpr_81b if int(parts81B[1].strip()) == 0 else int(parts81B[1].strip())
+            exit_price_81b   = stck_lwpr_81b if int(parts81B[2].strip()) == 0 else int(parts81B[2].strip())
+            sell_rate_81b = int(parts81B[3].strip())
+            hour_minute_81b = datetime.now().strftime('%H%M%S')
+            try:
+                c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                hold_price = 0
+                hldg_qty = 0
+                hold_amt = 0
+                for i in range(len(c_bal)):
+                    if c_bal['pdno'][i] == ts_code:
+                        hold_price = float(c_bal['pchs_avg_pric'][i])
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        hold_amt = int(c_bal['pchs_amt'][i])
+                        break
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적변경] 잔고 조회 오류: {str(e)}")
+                return
+            
+            sell_qty_81b = int(hldg_qty * sell_rate_81b * 0.01)
+            if sell_qty_81b <= 0:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"[{ts_name}({ts_code})] 보유수량 부족으로 미처리 (보유:{hldg_qty}주, 매도비율:{sell_rate_81b}%)")
+                return
+            
+            thread_conn = db.connect(conn_string)
+            try:
+                with thread_conn.cursor() as cur:
+                    cur.execute("""
+                        WITH target AS (
+                            SELECT acct_no, code, trail_day, trail_dtm, trail_tp
+                            FROM trading_trail
+                            WHERE acct_no = %s AND code = %s
+                            AND trail_day = prev_business_day_char(CURRENT_DATE)
+                            AND trail_tp IN ('1', '2', 'L')
+                            AND basic_qty > 0
+                            ORDER BY trail_dtm DESC
+                            LIMIT 1
+                        )
+                        UPDATE trading_trail SET
+                            trail_dtm = %s, trail_tp = '1', stop_price = %s, target_price = %s, exit_price = %s,
+                            proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
+                            trail_plan = %s, trail_price = NULL, trail_rate = NULL,
+                            trail_qty = NULL, trail_amt = NULL, volumn = NULL
+                        FROM target
+                        WHERE trading_trail.acct_no = target.acct_no
+                          AND trading_trail.code = target.code
+                          AND trading_trail.trail_day = target.trail_day
+                          AND trading_trail.trail_dtm = target.trail_dtm
+                          AND trading_trail.trail_tp = target.trail_tp
+                        RETURNING 1
+                    """, (
+                        t_acct_no, ts_code,
+                        hour_minute_81b, stop_price_81b, target_price_81b, exit_price_81b,
+                        hour_minute_81b, datetime.now(), int(hold_price), hldg_qty, hold_amt,
+                        parts81B[3].strip()
+                    ))
+                    was_updated = cur.fetchone() is not None
+                thread_conn.commit()
+                if was_updated:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"[{ts_name}(<code>{ts_code}</code>)] 보유가:{format(int(hold_price), ',d')}원, 보유량:{format(hldg_qty, ',d')}주, "
+                            f"목표가:{format(target_price_81b, ',d')}원, 이탈가:{format(stop_price_81b, ',d')}원, "
+                            f"최종이탈가:{format(exit_price_81b, ',d')}원, 매도비율:{sell_rate_81b}% 추적변경 처리",
+                        parse_mode='HTML')
+                else:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"[{ts_name}({ts_code})] 목표가:{format(target_price_81b, ',d')}원, 이탈가:{format(stop_price_81b, ',d')}원, "
+                            f"최종이탈가:{format(exit_price_81b, ',d')}원, 매도비율:{sell_rate_81b}% 추적변경 미처리")
+            except Exception as e:
+                thread_conn.rollback()
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적변경] 오류: {str(e)}")
+            finally:
+                thread_conn.close()
+
+        threads_81b = []
+        rows_81b = g_trail_state_accounts if g_trail_state_accounts else []
+        if not rows_81b:
+            context.bot.send_message(chat_id=user_id, text=f"[{ts_name}({ts_code})] 추적변경 대상 계좌가 없습니다.")
+            return
+        for row in rows_81b:
+            t_acct_no = row[0]
+            nick = row[1]
+            try:
+                ac_row = account(nick)
+                t_access_token = ac_row['access_token']
+                t_app_key = ac_row['app_key']
+                t_app_secret = ac_row['app_secret']
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{nick}- [추적변경] 계정 조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(
+                target=process_nick_81b,
+                args=(nick, t_acct_no, t_access_token, t_app_key, t_app_secret)
+            )
+            threads_81b.append(t)
+            t.start()
+        for t in threads_81b:
+            t.join()
+        return
+
+    # stop_price, target_price, exit_price, trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
     if menuNum == 'tp':
         val_text = user_text.split(',', 3)
         if val_text[3] == '0':
@@ -3805,7 +3881,7 @@ def echo(update, context):
             return
         trail_plan = str(int(val_text[3]))
         try:
-            ac_tp = account()
+            ac_tp = account(arguments[1])
             ap = inquire_price(ac_tp['access_token'], ac_tp['app_key'], ac_tp['app_secret'], item['code'])
             stop_price = int(ap['stck_prpr']) if val_text[0].strip() == '0' else int(val_text[0].strip())
             target_price = int(int(ap['stck_prpr']) + int(ap['stck_prpr']) * 0.05) if val_text[1].strip() == '0' else int(val_text[1].strip())
@@ -3887,7 +3963,7 @@ def echo(update, context):
 
     if code != "":
 
-        ac = account()
+        ac = account(arguments[1])
         acct_no = ac['acct_no']
         access_token = ac['access_token']
         app_key = ac['app_key']
@@ -4257,89 +4333,6 @@ def echo(update, context):
             else:
                 print("매도가(현재가:0) 미존재 또는 부적합")
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0) 미존재 또는 부적합")         
-
-        elif menuNum == '41':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-               
-                commandBot = user_text.split(sep=',', maxsplit=4)
-                print("commandBot[1] : ", commandBot[1])    # 이탈가(저가:0)
-                print("commandBot[2] : ", commandBot[2])    # 목표가(고가:0)
-                print("commandBot[3] : ", commandBot[3])    # 추적상태(L,1,2)
-
-            # 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3] in ('L', '1', '2'):
-
-                stop_price = int(stck_lwpr) if int(commandBot[1]) == 0 else int(commandBot[1])
-                target_price = int(stck_hgpr) if int(commandBot[2]) == 0 else int(commandBot[2])
-
-                # 계좌잔고 조회
-                c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
-                hold_price = 0
-                hldg_qty = 0
-                hold_amt = 0
-
-                for i, name in enumerate(c.index):
-                    if code == c['pdno'][i]:
-                        hold_price = float(c['pchs_avg_pric'][i])
-                        hldg_qty = int(c['hldg_qty'][i])
-                        hold_amt = int(c['pchs_amt'][i])
-
-                try:
-                    with conn.cursor() as cur:
-                        # 매매추적 update
-                        update_query1 = """
-                            UPDATE trading_trail tt SET
-                                trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s, trail_plan = NULL, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL
-                            WHERE code = %s
-                            AND trail_day = %s
-                            AND trail_tp IN ('C', 'U', 'P')
-                            RETURNING 1;
-                            """
-                        cur.execute(update_query1, (datetime.now().strftime('%H%M%S'), str(commandBot[3]), stop_price, target_price, datetime.now().strftime('%H%M%S'), datetime.now(), int(hold_price), hldg_qty, hold_amt, code, datetime.now().strftime("%Y%m%d")))
-                        was_updated1 = cur.fetchone() is not None
-
-                        if was_updated1:
-                            conn.commit()
-                            context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime('%Y%m%d')+"]" + company + "[{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 처리", parse_mode='HTML')
-                        else:
-                            context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime('%Y%m%d')+"]" + company + " 이탈가 : " + format(stop_price, ',d') + "원, 목표가 : " + format(target_price, ',d') + "원, 추적상태 : " + str(commandBot[3]) + " 추적재개 미처리")                        
-                except Exception as e:
-                    conn.rollback()
-                    print(f"Error 발생: {e}")
-                    context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다:[{datetime.now().strftime('%Y%m%d')}] {e}")
-            
-            else:
-                print("이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가(저가:0), 목표가(고가:0), 추적상태(L,1,2) 미존재 또는 부적합")
-
-        elif menuNum == '42':
-            initMenuNum()
-
-            try:
-                with conn.cursor() as cur:
-                    # 매매추적 update : trail_tp = 'P' 추적멈춤
-                    update_query1 = """
-                        UPDATE trading_trail tt SET
-                            trail_tp = %s, mod_dt = %s
-                        WHERE code = %s
-                        AND trail_day = %s
-                        AND trail_tp IN ('1', '2', 'L')
-                        RETURNING 1;
-                        """
-                    cur.execute(update_query1, ("P", datetime.now(), code, datetime.now().strftime("%Y%m%d")))
-                    was_updated1 = cur.fetchone() is not None
-
-                    if was_updated1:
-                        conn.commit()
-                        context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime('%Y%m%d')+"]" + company + "[{<code>"+code+"</code>}] 추적멈춤 처리", parse_mode='HTML')
-                    else:
-                        context.bot.send_message(chat_id=user_id, text="["+datetime.now().strftime('%Y%m%d')+"]" + company + " 추적멈춤 미처리")                        
-            except Exception as e:
-                conn.rollback()
-                print(f"Error 발생: {e}")
-                context.bot.send_message(chat_id=user_id, text=f"처리 중 오류가 발생했습니다:[{datetime.now().strftime('%Y%m%d')}] {e}") 
 
         elif menuNum == '51':
             initMenuNum()
@@ -4941,97 +4934,6 @@ def echo(update, context):
                     t.start()
                 for t in threads_72:
                     t.join()
-
-        elif menuNum == '81':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-                
-                commandBot = user_text.split(sep=',', maxsplit=5)
-                print("commandBot[1] : ", commandBot[1])    # 목표가(고가:0)
-                print("commandBot[2] : ", commandBot[2])    # 이탈가(저가:0)
-                print("commandBot[3] : ", commandBot[3])    # 비중(%)
-                print("commandBot[4] : ", commandBot[4])    # 최종이탈가(저가:0)
-
-            # 목표거(고가:0), 이탈가(저가:0), 비중(%), 최종이탈가(저가:0) 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and is_positive_int(commandBot[3]) and commandBot[4].isdecimal() :
-                year_day = datetime.now().strftime("%Y%m%d")                                                # 날짜-8자리(YYYYMMDD, 현재일자:0)
-                hour_minute = datetime.now().strftime('%H%M%S')                                             # 시간-6자리(HHMMSS, 현재일시:0)
-                sell_price = int(stck_hgpr) if commandBot[1] == '0' else int(commandBot[1])                 # 목표가(고가:0)
-                loss_price = int(stck_lwpr) if commandBot[2] == '0' else int(commandBot[2])                 # 이탈가(저가:0)
-                sell_rate = int(commandBot[3])                                                              # 비중(%)
-                exit_price = int(stck_lwpr) if commandBot[4] == '0' else int(commandBot[4])                 # 최종이탈가(저가:0)
-                target_nicks = g_selected_accounts if g_selected_accounts else [None]
-
-                def process_nick_81(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-                    # 계좌잔고 조회
-                    c = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
-
-                    hold_price = 0
-                    hldg_qty = 0
-
-                    for i, _ in enumerate(c.index):
-                        if code == c['pdno'][i]:
-                            hold_price = float(c['pchs_avg_pric'][i])
-                            hldg_qty = int(c['hldg_qty'][i])
-
-                    # 매매추적 보유가, 보유수량, 추적유형 조회 (스레드별 별도 DB 연결)
-                    thread_conn = db.connect(conn_string)
-                    try:
-                        sell_qty = int(hldg_qty * sell_rate * 0.01)
-
-                        if sell_qty > 0:
-                            try:
-                                with thread_conn.cursor() as cur:
-                                    # 매매추적 update
-                                    update_query1 = """
-                                        UPDATE trading_trail tt SET
-                                            trail_dtm = %s, trail_tp = %s, trail_plan = %s, stop_price = %s, target_price = %s, exit_price = %s, loss_amt = (basic_price-%s)*basic_qty, proc_min = %s, trail_price = NULL, trail_rate = NULL, trail_qty = NULL, trail_amt = NULL, volumn = NULL, mod_dt = %s
-                                        WHERE acct_no = %s
-                                        AND code = %s
-                                        AND trail_day = %s
-                                        AND trail_tp NOT IN ('4', 'Y')
-                                        RETURNING 1;
-                                        """
-                                    cur.execute(update_query1, (hour_minute, "1", str(sell_rate), loss_price, sell_price, exit_price, exit_price, hour_minute, datetime.now(), t_acct_no, code, year_day))
-                                    was_updated1 = cur.fetchone() is not None
-
-                                    if was_updated1:
-                                        thread_conn.commit()
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 저가 : " + format(int(stck_lwpr), ',d') + "원, 고가 : " + format(int(stck_hgpr), ',d') + "원, 보유가 : " + format(int(hold_price), ',d') + "원, 보유량 : " + format(hldg_qty, ',d') + "주, 목표가 : " + format(sell_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 최종이탈가 : " + format(exit_price, ',d') + "원, 매도비율(%) : " + str(sell_rate) + "% 추적변경 처리", parse_mode='HTML')
-                                    else:
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 목표가 : " + format(sell_price, ',d') + "원, 이탈가 : " + format(loss_price, ',d') + "원, 최종이탈가 : " + format(exit_price, ',d') + "원, 매도비율(%) : " + str(sell_rate) + "% 추적변경 미처리")
-
-                            except Exception as e:
-                                thread_conn.rollback()
-                                print(f"Error 발생: {e}")
-                                context.bot.send_message(chat_id=user_id, text=f"-{nick}- 처리 중 오류가 발생했습니다: {e}")
-                        else:
-                            context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 목표가 : " + format(sell_price, ',d') + "원, 매도량 부족 미처리")
-                    finally:
-                        thread_conn.close()
-
-                threads_81 = []
-                for nick in target_nicks:
-                    if nick is not None:
-                        ac = account(nick)
-                        t_acct_no = ac['acct_no']
-                        t_access_token = ac['access_token']
-                        t_app_key = ac['app_key']
-                        t_app_secret = ac['app_secret']
-                    else:
-                        t_acct_no = acct_no
-                        t_access_token = access_token
-                        t_app_key = app_key
-                        t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_81, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_81.append(t)
-                    t.start()
-                for t in threads_81:
-                    t.join()
-
-            else:
-                print("목표가(고가:0), 이탈가(저가:0), 비중(%), 최종이탈가(자가:0) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 목표가(고가:0), 이탈가(저가:0), 비중(%), 최종이탈가(자가:0) 미존재 또는 부적합")                         
 
         elif menuNum == '91':
             initMenuNum()
