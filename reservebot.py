@@ -171,8 +171,8 @@ g_trail71_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail71_amt_buy_amt = 0    # 매수금액 기준 매수금액
 _trail71_from_signal = False  # 신호 버튼에서 진입 시 True → acc_71_confirm에서 입력 단계 생략
 
-# SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106', 'phills75', 'yh480825', 'phills13', 'phills15', 'chichipa', 'honeylong']  # 선택 가능 계좌 목록
-SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106', 'yh480825', 'phills13', 'phills15']  # 선택 가능 계좌 목록
+# SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
+SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 
 def format_number(value):
     try:
@@ -2890,6 +2890,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_resume_"):
         ts_code = command[len("trail_resume_"):]
+
+        # ── 유효성 검증: 현재도 재개 대상(trail_tp IN ('P','C','U'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('P', 'C', 'U')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 재개 대상이 아닙니다. (이미 재개되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적재개] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -2944,6 +2977,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_stop_"):
         ts_code = command[len("trail_stop_"):]
+
+        # ── 유효성 검증: 현재도 추적 대상(trail_tp IN ('1','2','L'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('1', '2', 'L')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 추적 대상이 아닙니다. (이미 멈춤/매도 처리되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적멈춤] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -3005,6 +3071,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_change_"):
         ts_code = command[len("trail_change_"):]
+
+        # ── 유효성 검증: 현재도 변경 대상(trail_tp IN ('1','2','L'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('1', '2', 'L')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 변경 대상이 아닙니다. (이미 멈춤/매도 처리되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적변경] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -3101,7 +3200,7 @@ def callback_get(update, context) :
     elif command == "손실금액계산":
         menuNum = "91"
 
-        context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
+        context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
 
@@ -3238,6 +3337,10 @@ def echo(update, context):
     pbr = ''
     # BPS
     bps = ''
+    # 대표시장
+    market_kor = ''
+    # 업종
+    industry_kor = ''
 
     chartReq = "1"
 
@@ -3979,6 +4082,8 @@ def echo(update, context):
         prdy_ctrt = a['prdy_ctrt']                      # 전일 대비율
         acml_vol = a['acml_vol']                        # 누적거래량
         prdy_vrss_vol_rate = a['prdy_vrss_vol_rate']    # 전일 대비 거래량 비율
+        market_kor = a['rprs_mrkt_kor_name']            # 대표시장
+        industry_kor = a['bstp_kor_isnm']               # 업종
         hts_avls = a['hts_avls']                        # 시가총액
         pbr = a['pbr']
         bps = a['bps']
@@ -4939,14 +5044,12 @@ def echo(update, context):
             initMenuNum()
             if len(user_text.split(",")) > 0:
                 
-                commandBot = user_text.split(sep=',', maxsplit=5)
+                commandBot = user_text.split(sep=',', maxsplit=3)
                 print("commandBot[1] : ", commandBot[1])    # 매수가(현재가:0)
                 print("commandBot[2] : ", commandBot[2])    # 이탈가(저가:0)
-                print("commandBot[3] : ", commandBot[3])    # 매수금액
-                print("commandBot[4] : ", commandBot[4])    # 손절금액
 
-            # 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
+            # 매수가(현재가:0), 이탈가(저가:0) 존재시
+            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
                 buy_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매수가(현재가:0)
                 loss_price = int(stck_lwpr) if commandBot[2] == '0' else int(commandBot[2])                 # 이탈가(저가:0)
                 input_buy_amt = commandBot[3]   # 매수금액
@@ -4990,8 +5093,8 @@ def echo(update, context):
                         context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(amt_buy_amt, ',d') + "원, 매수량 : " + format(loss_buy_qty, ',d') + "주, 손절율 : " + str(loss_rate) + "% 매수금액 : " + format(amt_buy_amt - int(b), ',d') +"원 부족", parse_mode='HTML')                        
             
             else:
-                print("매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
+                print("매수가(현재가:0), 이탈가(저가:0) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0) 미존재 또는 부적합")
 
 
 # 텔레그램봇 응답 처리
