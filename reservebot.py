@@ -150,6 +150,9 @@ g_trail_state_name = ""
 g_trail_state_acct_no = ""
 g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, nick_name, name, stop, target, exit) 리스트
 
+g_fibo_code = ""   # 피보나치매도 선택 종목코드
+g_fibo_name = ""   # 피보나치매도 선택 종목명
+
 # 코스피/코스닥 변경 상태
 g_kk_code  = ""   # '0001':코스피, '1001':코스닥
 g_kk_name  = ""
@@ -171,8 +174,8 @@ g_trail71_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail71_amt_buy_amt = 0    # 매수금액 기준 매수금액
 _trail71_from_signal = False  # 신호 버튼에서 진입 시 True → acc_71_confirm에서 입력 단계 생략
 
-# SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106', 'phills75', 'yh480825', 'phills13', 'phills15', 'chichipa', 'honeylong']  # 선택 가능 계좌 목록
-SELECTABLE_ACCOUNTS = ['phills2', 'mamalong', 'worry106', 'yh480825', 'phills13', 'phills15']  # 선택 가능 계좌 목록
+# SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
+SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 
 def format_number(value):
     try:
@@ -388,7 +391,7 @@ def get_command(update, context) :
                                  "전체예약", "예약주문", "예약정정", "예약철회", 
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "손실금액계산", "코스피변경", "코스닥변경"], callback_header="menu")
+                                 "매수손실금액", "피보나치매도", "코스피", "코스닥"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
@@ -1016,6 +1019,7 @@ def callback_get(update, context) :
     global g_holding_edit_field
     global g_interest_edit_field
     global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts
+    global g_fibo_code, g_fibo_name
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -2890,6 +2894,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_resume_"):
         ts_code = command[len("trail_resume_"):]
+
+        # ── 유효성 검증: 현재도 재개 대상(trail_tp IN ('P','C','U'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('P', 'C', 'U')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 재개 대상이 아닙니다. (이미 재개되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적재개] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -2944,6 +2981,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_stop_"):
         ts_code = command[len("trail_stop_"):]
+
+        # ── 유효성 검증: 현재도 추적 대상(trail_tp IN ('1','2','L'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('1', '2', 'L')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 추적 대상이 아닙니다. (이미 멈춤/매도 처리되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적멈춤] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -3005,6 +3075,39 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_change_"):
         ts_code = command[len("trail_change_"):]
+
+        # ── 유효성 검증: 현재도 변경 대상(trail_tp IN ('1','2','L'))인지 확인 ──
+        try:
+            with get_conn().cursor() as cur_chk:
+                cur_chk.execute("""
+                    SELECT DISTINCT name FROM trading_trail
+                    WHERE code = %s
+                      AND trail_day = prev_business_day_char(CURRENT_DATE)
+                      AND trail_tp IN ('1', '2', 'L')
+                      AND basic_qty > 0
+                    ORDER BY name
+                """, (ts_code,))
+                chk_row = cur_chk.fetchone()
+            if not chk_row:
+                try:
+                    context.bot.delete_message(
+                        chat_id=query.message.chat_id,
+                        message_id=query.message.message_id
+                    )
+                except Exception:
+                    pass
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"[{ts_code}] 더 이상 변경 대상이 아닙니다. (이미 멈춤/매도 처리되었거나 과거 버튼)"
+                )
+                return
+        except Exception as e_chk:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"[추적변경] 유효성 검증 오류: {str(e_chk)}"
+            )
+            return
+
         try:
             current_markup = query.message.reply_markup
             remaining = [
@@ -3057,10 +3160,10 @@ def callback_get(update, context) :
             text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(저가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 매도비율을 입력하세요."
         )                
 
-    elif command in ("코스피변경", "코스닥변경"):
+    elif command in ("코스피", "코스닥"):
         global g_kk_code, g_kk_name, g_kk_field
-        g_kk_code = '0001' if command == "코스피변경" else '1001'
-        g_kk_name = '코스피' if command == "코스피변경" else '코스닥'
+        g_kk_code = '0001' if command == "코스피" else '1001'
+        g_kk_name = '코스피' if command == "코스피" else '코스닥'
         try:
             with get_conn().cursor() as cur_kk:
                 cur_kk.execute(
@@ -3098,12 +3201,75 @@ def callback_get(update, context) :
             text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} 값을 입력하세요. (숫자만 입력)"
         )
 
-    elif command == "손실금액계산":
+    elif command == "매수손실금액":
         menuNum = "91"
 
-        context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
+        context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.",
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
+
+    elif command == "피보나치매도":
+        try:
+            ac_fb = account(arguments[1])
+            c_fb = stock_balance(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], ac_fb['acct_no'], "")
+            fb_buttons = [
+                InlineKeyboardButton(
+                    f"{c_fb['prdt_name'][i]}({c_fb['pdno'][i]})",
+                    callback_data=f"fibo_sell_{c_fb['pdno'][i]}"
+                )
+                for i in range(len(c_fb.index))
+                if int(c_fb['hldg_qty'][i]) > 0
+            ]
+            if fb_buttons:
+                query.edit_message_text(
+                    text="피보나치 매도할 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2))
+                )
+            else:
+                query.edit_message_text(text="보유종목이 없습니다.")
+        except Exception as e:
+            query.edit_message_text(text=f"[피보나치매도] 오류: {str(e)}")
+
+    elif command.startswith("fibo_sell_"):
+        fb_code = command[len("fibo_sell_"):]
+        try:
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+        except Exception:
+            pass
+        try:
+            ac_fb2 = account()
+            c_fb2 = stock_balance(ac_fb2['access_token'], ac_fb2['app_key'], ac_fb2['app_secret'], ac_fb2['acct_no'], "")
+            fb_name = fb_code
+            for i in range(len(c_fb2.index)):
+                if c_fb2['pdno'][i] == fb_code:
+                    fb_name = c_fb2['prdt_name'][i]
+                    break
+        except Exception:
+            fb_name = fb_code
+        g_fibo_code = fb_code
+        g_fibo_name = fb_name
+        menuNum = 'FB'
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"[{fb_name}({fb_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)"
+        )
 
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
@@ -3238,6 +3404,10 @@ def echo(update, context):
     pbr = ''
     # BPS
     bps = ''
+    # 대표시장
+    market_kor = ''
+    # 업종
+    industry_kor = ''
 
     chartReq = "1"
 
@@ -3860,6 +4030,84 @@ def echo(update, context):
             t.join()
         return
 
+    if menuNum == 'FB':
+        initMenuNum()
+        fb_code = g_fibo_code
+        fb_name = g_fibo_name
+        parts_fb = user_text.strip().split(',')
+        if (len(parts_fb) < 3
+                or not parts_fb[0].strip().isdecimal()
+                or not parts_fb[1].strip().isdecimal()
+                or not is_positive_int(parts_fb[2].strip())):
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{fb_name}] 고가(자동:0), 저가(자동:0), 매도비율(1~100) 형식이 올바르지 않습니다.")
+            menuNum = 'FB'
+            return
+        try:
+            ac_fb = account()
+            ap_fb = inquire_price(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code)
+            cur_price = int(ap_fb['stck_prpr'])
+
+            # 고가/저가 0이면 최근 1개월 일봉 고가/저가 자동 조회
+            input_high = int(parts_fb[0].strip())
+            input_low  = int(parts_fb[1].strip())
+            sell_rate  = int(parts_fb[2].strip())
+
+            if input_high == 0 or input_low == 0:
+                auto_high, auto_low = get_period_high_low(
+                    ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code, period="D", count=30
+                )
+                if input_high == 0:
+                    input_high = auto_high if auto_high else cur_price
+                if input_low == 0:
+                    input_low = auto_low if auto_low else cur_price
+
+            if input_high <= input_low:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"[{fb_name}] 고가({format(input_high, ',d')})가 저가({format(input_low, ',d')}) 이하입니다.")
+                return
+
+            diff = input_high - input_low
+
+            # 피보나치 되돌림 수준 계산 (고가 → 저가 방향)
+            fb_levels = [
+                (0.0,   input_high),
+                (23.6,  round(input_high - diff * 0.236)),
+                (38.2,  round(input_high - diff * 0.382)),
+                (50.0,  round(input_high - diff * 0.500)),
+                (61.8,  round(input_high - diff * 0.618)),
+                (76.4,  round(input_high - diff * 0.764)),
+                (100.0, input_low),
+            ]
+
+            # 보유수량 조회 (매도수량 계산용)
+            hldg_qty = 0
+            try:
+                c_bal = stock_balance(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], ac_fb['acct_no'], "")
+                for i in range(len(c_bal)):
+                    if c_bal['pdno'][i] == fb_code:
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        break
+            except Exception:
+                pass
+
+            sell_qty_per_level = int(hldg_qty * sell_rate / 100) if hldg_qty > 0 else 0
+
+            lines = [
+                f"[{fb_name}(<code>{fb_code}</code>)] 피보나치 매도가",
+                f"현재가: {format(cur_price, ',d')}원 | 고가: {format(input_high, ',d')}원 | 저가: {format(input_low, ',d')}원",
+                f"보유수량: {format(hldg_qty, ',d')}주 | 매도비율: {sell_rate}% → 매도수량: {format(sell_qty_per_level, ',d')}주",
+                "─────────────────",
+            ]
+            for ratio, price in fb_levels:
+                marker = " ◀ 현재가" if abs(price - cur_price) == min(abs(lv[1] - cur_price) for lv in fb_levels) else ""
+                lines.append(f"  {ratio:5.1f}%  {format(price, ',d'):>10}원{marker}")
+
+            context.bot.send_message(chat_id=user_id, text="\n".join(lines), parse_mode='HTML')
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id, text=f"[피보나치매도] 오류: {str(e)}")
+        return
+
     # stop_price, target_price, exit_price, trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
     if menuNum == 'tp':
         val_text = user_text.split(',', 3)
@@ -3979,6 +4227,8 @@ def echo(update, context):
         prdy_ctrt = a['prdy_ctrt']                      # 전일 대비율
         acml_vol = a['acml_vol']                        # 누적거래량
         prdy_vrss_vol_rate = a['prdy_vrss_vol_rate']    # 전일 대비 거래량 비율
+        market_kor = a['rprs_mrkt_kor_name']            # 대표시장
+        industry_kor = a['bstp_kor_isnm']               # 업종
         hts_avls = a['hts_avls']                        # 시가총액
         pbr = a['pbr']
         bps = a['bps']
@@ -3986,9 +4236,10 @@ def echo(update, context):
 
         # 종목 기본정보 (시장구분·업종·규모·매수금액 제안·손절금액 제안)
         stock_info_str = ""
+        suggest_buy_amt = 0
+        _suggest_loss = 50_000
+        _mr_si = 0
         try:
-            _mrkt_name = a.get('rprs_mrkt_kor_name', '')
-            _industry  = a.get('bstp_kor_isnm', '')
             try:
                 _mktcap = int(str(hts_avls).replace(',', ''))
             except Exception:
@@ -3996,7 +4247,6 @@ def echo(update, context):
             if   _mktcap >= 10000: _size, _amt_min, _amt_max, _amt_desc = '대형주', 2_000_000, 10_000_000, '유동성 높음/안정적'
             elif _mktcap >= 3000:  _size, _amt_min, _amt_max, _amt_desc = '중형주', 1_000_000,  5_000_000, '유동성 보통/중간 변동성'
             else:                  _size, _amt_min, _amt_max, _amt_desc = '소형주',   500_000,  2_000_000, '변동성 높음/소액 분산 권장'
-            _suggest_loss = 100_000
             try:
                 with get_conn().cursor() as _cur_si:
                     _cur_si.execute(
@@ -4006,14 +4256,21 @@ def echo(update, context):
                     _si_row = _cur_si.fetchone()
                     if _si_row and _si_row[0]:
                         _mr_si = float(_si_row[0])
-                        _suggest_loss = int(max(100_000, min(400_000, 100_000 + (_mr_si / 100) * 300_000)))
+                        _suggest_loss = int(max(50_000, min(250_000, 50_000 + (_mr_si / 100) * 200_000)))
             except Exception:
                 pass
+
+            suggest_buy_amt = int(
+                max(_amt_min, min(_amt_max,
+                    _amt_min + (_mr_si / 100) * (_amt_max - _amt_min)
+                ))
+            ) if _mr_si > 0 else _amt_min
+
             stock_info_str = (
                 "\n─────────────────\n"
-                f"  [{_mrkt_name}] {_size} | 업종: {_industry} | 시총: {format(_mktcap, ',d')}억원\n"
-                f"  매수금액 범위: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
-                f"  손절금액 제안: {format(_suggest_loss, ',d')}원"
+                f"  [{market_kor}] {_size} | 업종: {industry_kor} | 시총: {format(_mktcap, ',d')}억원 | 시장비율: {_mr_si:.0f}%\n"
+                f"  매수금액 권장: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
+                f"  매수금액 제안: {format(suggest_buy_amt, ',d')}원 | 손절금액 제안: {format(_suggest_loss, ',d')}원"
             )
         except Exception as _e_si:
             print(f"[stock_info] 조회 오류: {_e_si}")
@@ -4937,25 +5194,20 @@ def echo(update, context):
 
         elif menuNum == '91':
             initMenuNum()
-            if len(user_text.split(",")) > 0:
-                
-                commandBot = user_text.split(sep=',', maxsplit=5)
-                print("commandBot[1] : ", commandBot[1])    # 매수가(현재가:0)
-                print("commandBot[2] : ", commandBot[2])    # 이탈가(저가:0)
-                print("commandBot[3] : ", commandBot[3])    # 매수금액
-                print("commandBot[4] : ", commandBot[4])    # 손절금액
-
-            # 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal() and commandBot[3].isdecimal() and commandBot[4].isdecimal():
-                buy_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매수가(현재가:0)
-                loss_price = int(stck_lwpr) if commandBot[2] == '0' else int(commandBot[2])                 # 이탈가(저가:0)
-                input_buy_amt = commandBot[3]   # 매수금액
-                item_loss_sum = commandBot[4]   # 손절금액
+            commandBot = user_text.split(sep=',', maxsplit=2)
+            if (len(commandBot) < 3
+                    or not commandBot[1].strip().isdecimal()
+                    or not commandBot[2].strip().isdecimal()):
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0) 미존재 또는 부적합")
+            else:
+                buy_price  = int(stck_prpr) if commandBot[1].strip() == '0' else int(commandBot[1].strip())
+                loss_price = int(stck_lwpr) if commandBot[2].strip() == '0' else int(commandBot[2].strip())
+                buy_amt = int(suggest_buy_amt)   # 매수금액 제안 (stock_info_str 기준)
+                item_loss_sum = int(_suggest_loss)     # 손절금액 제안 (stock_info_str 기준)
 
                 if buy_price <= loss_price:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(" + format(buy_price, ',d') + ")가 이탈가(" + format(loss_price, ',d') + ") 이하입니다.")
                 else:
-                    # 공통 손절율
                     loss_rate = round((100 - (loss_price / buy_price) * 100) * -1, 2)
 
                     # ① 손절금액 기준
@@ -4963,35 +5215,37 @@ def echo(update, context):
                     loss_buy_amt = buy_price * loss_buy_qty
 
                     # ② 매수금액 기준
-                    amt_buy_qty = int(round(input_buy_amt / buy_price))
+                    amt_buy_qty = int(round(buy_amt / buy_price)) if buy_amt > 0 else 0
                     amt_buy_amt = buy_price * amt_buy_qty
                     amt_item_loss = (buy_price - loss_price) * amt_buy_qty
-
-                    preview_text = (
-                        "[" + company + "(<code>" + code + "</code>)]\n"
-                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%\n"
-                        "─────────────────\n"
-                        "  손절금액 기준\n"
-                        "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
-                        "─────────────────\n"
-                        "  매수금액 기준\n"
-                        "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
-                        + stock_info_str
-                    )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
 
                     # 매수 가능(현금) 조회
                     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                     print("매수 가능(현금) : " + format(int(b), ',d'))
 
-                    if int(b) < int(loss_buy_amt):  # 매수가능(현금)이 손절매수금액보다 작은 경우
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 손절매수금액 : " + format(loss_buy_amt, ',d') + "원, 매수량 : " + format(loss_buy_qty, ',d') + "주, 손절율 : " + str(loss_rate) + "% 매수금액 : " + format(loss_buy_amt - int(b), ',d') +"원 부족", parse_mode='HTML')
-                    if int(b) < int(amt_buy_amt):  # 매수가능(현금)이 매수금액보다 작은 경우
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가 : " + format(buy_price, ',d') + "원, 손절가 : " + format(loss_price, ',d') + "원, 매수금액 : " + format(amt_buy_amt, ',d') + "원, 매수량 : " + format(loss_buy_qty, ',d') + "주, 손절율 : " + str(loss_rate) + "% 매수금액 : " + format(amt_buy_amt - int(b), ',d') +"원 부족", parse_mode='HTML')                        
-            
-            else:
-                print("매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
+                    shortage_str1 = "손절금액 기준: "
+                    shortage_str2 = "매수금액 기준: "
+                    if int(b) < loss_buy_amt:
+                        shortage_str1 += format(loss_buy_amt - int(b), ',d') + "원 부족\n"
+                    else:
+                        shortage_str1 += "\n"
+                    if amt_buy_amt > 0 and int(b) < amt_buy_amt:
+                        shortage_str2 += format(amt_buy_amt - int(b), ',d') + "원 부족\n"
+                    else:
+                        shortage_str2 += "\n"
+
+                    preview_text = (
+                        "[" + company + "(<code>" + code + "</code>)]\n"
+                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%"
+                        + stock_info_str + "\n"
+                        "─────────────────\n"
+                        + shortage_str1 +
+                        "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
+                        "─────────────────\n"
+                        + shortage_str2 +
+                        "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
+                    )
+                    context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
 
 
 # 텔레그램봇 응답 처리

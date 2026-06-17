@@ -822,9 +822,10 @@ def get_kis_1min_from_datetime_simul(
                                 _w_stk_mkt       = _stk_mkt_pre
                                 _w_allow_ratio   = _calc_invest_ratio(_w_mkt_data, _w_stk_mkt)
                                 _w_total_invested = _get_total_invested(trade_date, conn)
-                                _w_allowed_invest = int(_w_mkt_data.get('dnca_tot_amt', '') * _w_allow_ratio / 100)
+                                _w_dnca_tot       = _w_mkt_data.get('dnca_tot_amt') or 0
+                                _w_allowed_invest = int(_w_dnca_tot * _w_allow_ratio / 100)
                                 _w_excess_invest  = _w_total_invested - _w_allowed_invest
-                                _w_invest_pct     = round(_w_total_invested / _w_mkt_data.get('dnca_tot_amt', '') * 100, 1)
+                                _w_invest_pct     = round(_w_total_invested / _w_dnca_tot * 100, 1) if _w_dnca_tot > 0 else 0
                                 _w_mid_key   = 'kospi_mid'  if _w_stk_mkt == 'KOSPI' else 'kosdak_mid'
                                 _w_long_key  = 'kospi_long' if _w_stk_mkt == 'KOSPI' else 'kosdak_long'
                                 _w_mid_str   = '상승' if _w_mkt_data.get(_w_mid_key)  == '03' else '하락'
@@ -852,9 +853,10 @@ def get_kis_1min_from_datetime_simul(
                         _stk_mkt        = _get_stock_market_type(stock_code, access_token, app_key, app_secret)
                         _allow_ratio    = _calc_invest_ratio(_mkt_data, _stk_mkt)
                         _total_invested = _get_total_invested(trade_date, conn)
-                        _allowed_invest = int(_mkt_data.get('dnca_tot_amt', '') * _allow_ratio / 100)
+                        _dnca_tot       = _mkt_data.get('dnca_tot_amt') or 0
+                        _allowed_invest = int(_dnca_tot * _allow_ratio / 100)
                         _excess_invest  = _total_invested - _allowed_invest
-                        _invest_pct     = round(_total_invested / _mkt_data.get('dnca_tot_amt', '') * 100, 1)
+                        _invest_pct     = round(_total_invested / _dnca_tot * 100, 1) if _dnca_tot > 0 else 0
                         _mid_key        = 'kospi_mid'  if _stk_mkt == 'KOSPI' else 'kosdak_mid'
                         _long_key       = 'kospi_long' if _stk_mkt == 'KOSPI' else 'kosdak_long'
                         _mid_str        = '상승' if _mkt_data.get(_mid_key)  == '03' else '하락'
@@ -1242,6 +1244,10 @@ def _update_dly_trading_balance_simul(trade_date: str, conn,
     """
     try:
         cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM public.dly_trading_balance_simul WHERE balance_day = %s",
+            (trade_date,)
+        )
         # 종목별 최신 레코드: 보유단가·수량·매도수량만 조회 (value 계산은 종가 기반)
         cur.execute(f"""
             WITH ranked AS (
@@ -1517,16 +1523,61 @@ def process_account_simul():
             ac['access_token'], ac['app_key'], ac['app_secret']
         )
 
-        # dly_acct_balance_simul 전일(trade_date -1일) tot_evlu_amt 조회
-        _prev_dt = (datetime.strptime(today, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+        # dly_acct_balance_simul tot_evlu_amt 조회
         _cur_tot = conn_acct.cursor()
         _cur_tot.execute("""
             SELECT tot_evlu_amt FROM dly_acct_balance_simul
             WHERE acct = '74346047' AND dt = prev_business_day_char(%s::date)
-        """, (_prev_dt,))
+        """, (today,))
         _tot_row = _cur_tot.fetchone()
         _cur_tot.close()
-        prev_tot_evlu_amt = int(_tot_row[0]) if _tot_row else None
+        prev_tot_evlu_amt = int(_tot_row[0]) if _tot_row else TOTAL_INVEST_BASE
+
+        # dly_acct_balance_simul 미존재시 생성
+        _cur_chk = conn_acct.cursor()
+        _cur_chk.execute("SELECT prev_business_day_char(%s)", (today,))
+        _prev_dt = _cur_chk.fetchone()[0]
+        _today_exists = _cur_chk.fetchone()
+        if not _today_exists:
+            _cur_chk.execute("""
+                SELECT market_ratio, kospi_short, kosdak_short,
+                       kospi_mid, kosdak_mid, kospi_long, kosdak_long
+                FROM public.dly_acct_balance
+                WHERE acct = '74346047' AND dt = prev_business_day_char(%s::date)
+            """, (today,))
+            _mkt = _cur_chk.fetchone()
+            if _mkt:
+                _mkt_ratio, _ks, _kds, _km, _kdm, _kl, _kdl = _mkt
+            else:
+                _mkt_ratio = _ks = _kds = _km = _kdm = _kl = _kdl = 0
+            _now = datetime.now()
+            _cur_chk.execute("""
+                INSERT INTO dly_acct_balance_simul (
+                    acct, dt,
+                    dnca_tot_amt, prvs_excc_amt,
+                    td_buy_amt, td_sell_amt, td_tex_amt,
+                    user_evlu_amt, tot_evlu_amt, nass_amt,
+                    pchs_amt, evlu_amt, evlu_pfls_amt,
+                    ytdt_tot_evlu_amt, asst_icdc_amt,
+                    total_profit_loss_amt, buy_psbl_amt,
+                    market_ratio, kospi_short, kosdak_short,
+                    kospi_mid, kosdak_mid, kospi_long, kosdak_long,
+                    last_chg_date
+                ) VALUES (
+                    '74346047', %s,
+                    %s, %s, 0, 0, 0, 0, %s, %s, 0, 0, 0, 0, 0, 0, 0,
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (acct, dt) DO NOTHING
+            """, (
+                _prev_dt,
+                TOTAL_INVEST_BASE, TOTAL_INVEST_BASE, TOTAL_INVEST_BASE, TOTAL_INVEST_BASE,
+                _mkt_ratio, _ks, _kds, _km, _kdm, _kl, _kdl,
+                _now,
+            ))
+            conn_acct.commit()
+            print(f"[SIMUL] dly_acct_balance_simul {today} 신규 생성 (dnca_tot_amt={prev_tot_evlu_amt})")
+        _cur_chk.close()
 
         # dly_acct_balance 시장흐름 값을 dly_acct_balance_simul 에 반영
         _sync_market_trend_to_simul(today, conn_acct, prev_tot_evlu_amt)

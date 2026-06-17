@@ -404,6 +404,34 @@
     }
     .btn-import     { background: #0077b6; color: #fff; flex: none; padding: 9px 18px; font-size: .85rem; }
     .btn-save-all   { background: #2dc653; color: #fff; flex: none; padding: 9px 18px; font-size: .85rem; }
+    .selected-stock-info { background:#f7f8ff; border:1px solid #e8eaff; border-radius:8px;
+                           padding:12px 14px; margin-bottom:16px; }
+    .ssi-title  { font-size:.88rem; color:#333; margin-bottom:10px; }
+    .ssi-code     { color:#888; font-size:.82rem; margin-left:4px; font-weight:400; }
+    .ssi-trail-tp { display:inline-block; margin-left:8px; padding:1px 7px;
+                    border-radius:10px; font-size:.72rem; font-weight:700;
+                    background:#e8eaff; color:#5c6bc0; vertical-align:middle; }
+    .ssi-grid   { display:flex; gap:0; }
+    .ssi-item   { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;
+                  padding:0 10px; border-left:1px solid #e0e4f0; }
+    .ssi-item:first-child { padding-left:0; border-left:none; }
+    .ssi-lbl    { font-size:.70rem; color:#999; font-weight:600; white-space:nowrap;
+                  overflow:hidden; text-overflow:ellipsis; }
+    .ssi-val    { font-size:.83rem; color:#333; font-weight:700; white-space:nowrap;
+                  overflow:hidden; text-overflow:ellipsis; }
+    .ssi-pos    { color:#2dc653; }
+    .ssi-neg    { color:#e63946; }
+    .ssi-target { color:#2dc653; }
+    .ssi-stop   { color:#e63946; }
+    .ssi-exit   { color:#f4a261; }
+    .download-panel { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+                      background:#e8f5e9; border:1px solid #a5d6a7; border-radius:8px;
+                      padding:10px 14px; margin:6px 0; }
+    .download-panel-title { font-weight:600; font-size:.85rem; color:#2e7d32; white-space:nowrap; }
+    .download-link  { font-size:.82rem; color:#1565c0; text-decoration:underline; white-space:nowrap; }
+    .download-link:hover { color:#0d47a1; }
+    .download-close { margin-left:auto; background:none; border:none; cursor:pointer;
+                      font-size:1rem; color:#888; line-height:1; }
     .btn-delete-all { background: #e63946; color: #fff; flex: none; padding: 9px 18px; font-size: .85rem; }
   </style>
 </head>
@@ -501,6 +529,17 @@
   <!-- 알림 -->
   <div v-if="alert.msg" :class="['alert', alert.type]">{{ alert.msg }}</div>
 
+  <!-- 전체저장 다운로드 패널 -->
+  <div v-if="downloadFiles.length" class="download-panel">
+    <span class="download-panel-title">📥 저장된 파일 다운로드</span>
+    <a v-for="r in downloadFiles" :key="r.file"
+       :href="r.download_url" download
+       class="download-link">
+      {{ r.table }} ({{ r.inserted }}건)
+    </a>
+    <button class="download-close" @click="downloadFiles = []">✕</button>
+  </div>
+
   <!-- 입력 폼 -->
   <div class="card" v-if="!preview">
     <div class="section-title">매수 정보 입력</div>
@@ -531,6 +570,10 @@
           💡 권장 매수금액: <b>{{ fmt(stockInfo.amt_min) }}원 ~ {{ fmt(stockInfo.amt_max) }}원</b>
           <span style="color:#888;font-size:.78rem;margin-left:6px">({{ stockInfo.amt_desc }})</span>
         </div>
+        <div class="amt-suggest" v-if="stockInfo.suggest_buy_amt">
+          💰 제안 매수금액: <b>{{ stockInfo.suggest_buy_amt_str }}</b>
+          <span style="color:#888;font-size:.78rem;margin-left:6px">(시장비율 {{ stockInfo.suggest_loss_market_ratio }}%<span v-if="stockInfo.suggest_loss_base_dt">, 기준일 {{ stockInfo.suggest_loss_base_dt }}</span>)</span>
+        </div>
         <div class="amt-suggest" v-if="stockInfo.suggest_loss_amt">
           ✂️ 제안 손절금액: <b>{{ stockInfo.suggest_loss_amt_str }}</b>
           <span style="color:#888;font-size:.78rem;margin-left:6px">(시장비율 {{ stockInfo.suggest_loss_market_ratio }}%<span v-if="stockInfo.suggest_loss_base_dt">, 기준일 {{ stockInfo.suggest_loss_base_dt }}</span>)</span>
@@ -558,12 +601,28 @@
       </div>
 
       <div class="field">
-        <label>매수금액 (원) *</label>
+        <label style="display:flex;align-items:center;gap:8px">
+          <span>매수금액 (원) *</span>
+          <label style="font-weight:normal;cursor:pointer;display:flex;align-items:center;gap:3px;margin-bottom:0">
+            <input type="checkbox" v-model="useLossAmt" style="cursor:pointer" />
+            손절금액
+          </label>
+        </label>
+        <input
+          v-model.number="form.loss_input_amt"
+          v-if="useLossAmt"
+          type="number"
+          min="1"
+          placeholder="손절금액 (예) 150000"
+          style="margin-bottom:5px"
+        />
         <input
           v-model.number="form.buy_amount"
           type="number"
           min="1"
           placeholder="예) 5000000"
+          :disabled="useLossAmt"
+          :style="useLossAmt ? 'background:#f0f4ff;color:#4361ee;font-weight:600' : ''"
         />
       </div>
 
@@ -694,10 +753,34 @@
     </template>
 
     <!-- 선택된 종목 정보 -->
-    <div v-if="selectedStock" style="background:#f7f8ff;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#444;margin-bottom:16px;border:1px solid #e8eaff">
-      <b>{{ selectedStock.name }}</b> ({{ selectedStock.code }})
-      &nbsp;·&nbsp; 보유단가 <b>{{ fmt(selectedStock.basic_price) }}원</b>
-      &nbsp;·&nbsp; 보유수량 <b>{{ fmt(selectedStock.basic_qty) }}주</b>
+    <div v-if="selectedStock" class="selected-stock-info">
+      <div class="ssi-title">
+        <b>{{ selectedStock.name }}</b>
+        <span class="ssi-code">({{ selectedStock.code }})</span>
+        <span class="ssi-trail-tp">{{ trailTpLabel(selectedStock.trail_tp) }}</span>
+      </div>
+      <div class="ssi-grid">
+        <div class="ssi-item">
+          <span class="ssi-lbl">보유단가</span>
+          <span class="ssi-val">{{ fmt(selectedStock.basic_price) }}원</span>
+        </div>
+        <div class="ssi-item">
+          <span class="ssi-lbl">보유수량</span>
+          <span class="ssi-val">{{ fmt(selectedStock.basic_qty) }}주</span>
+        </div>
+        <div class="ssi-item">
+          <span class="ssi-lbl">목표가</span>
+          <span class="ssi-val ssi-target">{{ selectedStock.target_price != null ? fmt(selectedStock.target_price) + '원' : '-' }}</span>
+        </div>
+        <div class="ssi-item">
+          <span class="ssi-lbl">이탈가</span>
+          <span class="ssi-val ssi-stop">{{ selectedStock.stop_price != null ? fmt(selectedStock.stop_price) + '원' : '-' }}</span>
+        </div>
+        <div class="ssi-item">
+          <span class="ssi-lbl">최종이탈가</span>
+          <span class="ssi-val ssi-exit">{{ selectedStock.exit_price != null ? fmt(selectedStock.exit_price) + '원' : '-' }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- 매도 입력 -->
@@ -949,8 +1032,10 @@ createApp({
 
     const form = ref({
       code: '', name: '', buy_price: null, loss_price: null,
-      buy_amount: null, buy_date: today, buy_time: ''
+      buy_amount: null, loss_input_amt: null, buy_date: today, buy_time: ''
     });
+
+    const useLossAmt = ref(false);
 
     const preview       = ref(null);
     const records       = ref([]);
@@ -958,6 +1043,7 @@ createApp({
     const nameLookingUp = ref(false);
     const listError     = ref('');
     const alert         = ref({ msg: '', type: 'error' });
+    const downloadFiles = ref([]);
     const updateLog     = ref([]);
     const stockInfo     = ref(null);
     const dashboard     = ref(null);
@@ -1114,6 +1200,22 @@ createApp({
       const e = trailEdit.value.exit_price;
       const q = trailEdit.value.basic_qty;
       return (p && e && q) ? (p - e) * q : null;
+    });
+
+    watch(
+      () => [useLossAmt.value, form.value.loss_input_amt, form.value.buy_price, form.value.loss_price],
+      ([use, lossAmt, buyPrice, lossPrice]) => {
+        if (!use) return;
+        if (lossAmt > 0 && buyPrice > 0 && lossPrice > 0 && buyPrice > lossPrice) {
+          form.value.buy_amount = Math.round(buyPrice * lossAmt / (buyPrice - lossPrice));
+        } else {
+          form.value.buy_amount = null;
+        }
+      }
+    );
+
+    watch(useLossAmt, (use) => {
+      if (!use) form.value.buy_amount = null;
     });
 
     const canCalc = computed(() =>
@@ -1403,10 +1505,8 @@ createApp({
         const res  = await fetch('/api/save-all', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) { showAlert(data.error || '전체저장 오류'); return; }
-        const detail = (data.results || [])
-          .map(r => `${r.table}: ${r.inserted}건 → ${r.file}`)
-          .join('\n');
-        showAlert(data.message + (detail ? '\n' + detail : ''), 'success', 7000);
+        downloadFiles.value = data.results || [];
+        showAlert(data.message, 'success', 5000);
       } catch (e) {
         showAlert('전체저장 오류: ' + e.message);
       } finally {
@@ -1450,10 +1550,11 @@ createApp({
     }
 
     function resetForm() {
-      form.value = { code: '', name: '', buy_price: null, loss_price: null, buy_amount: null, buy_date: today, buy_time: '' };
-      preview.value   = null;
-      stockInfo.value = null;
-      alert.value.msg = '';
+      form.value    = { code: '', name: '', buy_price: null, loss_price: null, buy_amount: null, loss_input_amt: null, buy_date: today, buy_time: '' };
+      useLossAmt.value = false;
+      preview.value    = null;
+      stockInfo.value  = null;
+      alert.value.msg  = '';
     }
 
     function fmt(n)     { return n == null ? '-' : Number(n).toLocaleString('ko-KR'); }
@@ -1471,7 +1572,7 @@ createApp({
     });
 
     return {
-      form, preview, records, loading, nameLookingUp, listError, alert,
+      form, preview, records, loading, nameLookingUp, listError, alert, downloadFiles,
       simDate, running, runLog,
       trailEdit, trailEditBasicAmt, trailEditLossAmt, trailEditLookingUp, updateLog,
       stockInfo, dashboard,
@@ -1479,6 +1580,7 @@ createApp({
       trailMode, trailActionDate, activeStocks, activeStocksLoading, selectedStock,
       loadActiveStocks, selectActiveStock,
       lookupSellName, calculateSell, executeSell,
+      useLossAmt,
       canCalc, lookupName, trailEditLookup, trailTpLabel,
       sizeClass, fetchStockInfo, loadDashboard,
       calculate, save, loadList, deleteRecord, resetForm,

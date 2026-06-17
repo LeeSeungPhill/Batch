@@ -131,7 +131,6 @@ def preview():
         if buy_price <= loss_price:
             return jsonify({'error': f'매수가({buy_price:,})가 이탈가({loss_price:,}) 이하입니다.'}), 400
 
-        # reservebot.py 3971~3980 동일 로직
         loss_rate     = round((100 - (loss_price / buy_price) * 100) * -1, 2)
         amt_buy_qty   = int(round(buy_amount / buy_price))
         amt_buy_amt   = buy_price * amt_buy_qty
@@ -736,8 +735,8 @@ def stock_info():
         else:
             amt_min, amt_max, amt_desc = 500000, 2000000, '변동성 높음, 소액 분산 권장'
 
-        # 손절금액 제안: market_ratio 기준 선형보간 (10만~40만원)
-        suggest_loss_amt          = 100_000
+        # 손절금액 제안: market_ratio 기준 선형보간 (5만~25만원)
+        suggest_loss_amt          = 50_000
         suggest_loss_market_ratio = 0
         suggest_loss_base_dt      = ''
         try:
@@ -769,18 +768,26 @@ def stock_info():
                 suggest_loss_market_ratio = float(mr_row[0])
                 suggest_loss_base_dt      = mr_row[1]
                 suggest_loss_amt = int(
-                    max(100_000, min(400_000,
-                        100_000 + (suggest_loss_market_ratio / 100) * 300_000
+                    max(50_000, min(250_000,
+                        50_000 + (suggest_loss_market_ratio / 100) * 200_000
                     ))
                 )
         except Exception:
             pass
+
+        suggest_buy_amt = int(
+            max(amt_min, min(amt_max,
+                amt_min + (suggest_loss_market_ratio / 100) * (amt_max - amt_min)
+            ))
+        ) if suggest_loss_market_ratio > 0 else amt_min
 
         return jsonify({
             'code': code, 'market': market, 'size': size,
             'industry': industry, 'mktcap': mktcap,
             'mktcap_str': f"{mktcap:,}억원" if mktcap else '',
             'amt_min': amt_min, 'amt_max': amt_max, 'amt_desc': amt_desc,
+            'suggest_buy_amt': suggest_buy_amt,
+            'suggest_buy_amt_str': f"{suggest_buy_amt:,}원",
             'suggest_loss_amt': suggest_loss_amt,
             'suggest_loss_amt_str': f"{suggest_loss_amt:,}원",
             'suggest_loss_market_ratio': suggest_loss_market_ratio,
@@ -891,12 +898,32 @@ def api_save_all():
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'message': '전체저장 완료', 'results': results, 'export_dir': _EXPORT_DIR})
+        for r in results:
+            r['download_url'] = f"/api/download/{r['file']}"
+        return jsonify({'message': '전체저장 완료', 'results': results})
     except Exception as e:
         if conn:
             try: conn.rollback()
             except: pass
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/download/<path:filename>', methods=['GET'])
+def api_download(filename):
+    """simul_exports 디렉터리의 CSV 파일 다운로드."""
+    return send_from_directory(_EXPORT_DIR, filename, as_attachment=True)
+
+
+@app.route('/api/download-list', methods=['GET'])
+def api_download_list():
+    """저장된 CSV 파일 목록 반환."""
+    if not os.path.isdir(_EXPORT_DIR):
+        return jsonify([])
+    files = sorted(
+        [f for f in os.listdir(_EXPORT_DIR) if f.endswith('.csv')],
+        reverse=True
+    )
+    return jsonify([{'file': f, 'download_url': f'/api/download/{f}'} for f in files])
 
 
 @app.route('/api/delete-all', methods=['POST'])
@@ -928,7 +955,8 @@ def api_active_stocks():
         conn = get_conn()
         cur  = conn.cursor()
         cur.execute("""
-            SELECT code, name, trail_tp, basic_price, basic_qty
+            SELECT code, name, trail_tp, basic_price, basic_qty,
+                   stop_price, target_price, exit_price
             FROM trading_trail_simul
             WHERE acct_no = 'SIMUL' AND trail_day = %s
               AND trail_tp IN ('1','2','L')
@@ -938,9 +966,16 @@ def api_active_stocks():
         cur.close()
         conn.close()
         return jsonify([
-            {'code': r[0], 'name': r[1], 'trail_tp': r[2],
-             'basic_price': int(r[3]) if r[3] else 0,
-             'basic_qty':   int(r[4]) if r[4] else 0}
+            {
+                'code':         r[0],
+                'name':         r[1],
+                'trail_tp':     r[2],
+                'basic_price':  int(r[3]) if r[3] else 0,
+                'basic_qty':    int(r[4]) if r[4] else 0,
+                'stop_price':   int(r[5]) if r[5] else None,
+                'target_price': int(r[6]) if r[6] else None,
+                'exit_price':   int(r[7]) if r[7] else None,
+            }
             for r in rows
         ])
     except Exception as e:
