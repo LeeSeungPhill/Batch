@@ -5091,8 +5091,9 @@ def echo(update, context):
 
                     preview_text = (
                         "[" + company + "(<code>" + code + "</code>)]\n"
-                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%\n"
+                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%"
                         + stock_info_str + "\n"
+                        "─────────────────\n"
                         + shortage_str1 +
                         "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
                         "─────────────────\n"
