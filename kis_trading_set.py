@@ -155,7 +155,7 @@ def get_prev_day_price_info(access_token, app_key, app_secret, code, prev_date):
         print(f"[get_prev_day_price_info] {code} 오류: {e}")
     return 0, 0
 
-nickname_list = ['chichipa', 'phills2', 'phills75', 'yh480825', 'phills13', 'phills15', 'mamalong', 'honeylong', 'worry106']
+nickname_list = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']
 
 for nick in nickname_list:
     try:
@@ -640,7 +640,7 @@ for nick in nickname_list:
                 ]
                 bot.send_message(
                     chat_id=chat_id,
-                    text="[종목 교체 고려 대상 추적정보 변경] 종목을 선택하세요:",
+                    text="[종목 교체 고려 대상 매도비율 설정] 종목을 선택하세요:",
                     reply_markup=InlineKeyboardMarkup(tp_buttons)
                 )
 
