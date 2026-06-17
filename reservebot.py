@@ -5074,27 +5074,32 @@ def echo(update, context):
                     amt_buy_amt = buy_price * amt_buy_qty
                     amt_item_loss = (buy_price - loss_price) * amt_buy_qty
 
-                    preview_text = (
-                        "[" + company + "(<code>" + code + "</code>)]\n"
-                        + stock_info_str + "\n"
-                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%\n"
-                        "─────────────────\n"
-                        "  손절금액 기준\n"
-                        "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
-                        "─────────────────\n"
-                        "  매수금액 기준\n"
-                        "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
-                    )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
-
                     # 매수 가능(현금) 조회
                     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
                     print("매수 가능(현금) : " + format(int(b), ',d'))
 
+                    shortage_str1 = "손절금액 기준: "
+                    shortage_str2 = "매수금액 기준: "
                     if int(b) < loss_buy_amt:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가:" + format(buy_price, ',d') + "원, 손절가:" + format(loss_price, ',d') + "원, 손절매수금액:" + format(loss_buy_amt, ',d') + "원, 매수량:" + format(loss_buy_qty, ',d') + "주, 손절율:" + str(loss_rate) + "% 매수금액:" + format(loss_buy_amt - int(b), ',d') + "원 부족", parse_mode='HTML')
+                        shortage_str1 += format(loss_buy_amt - int(b), ',d') + "원 부족\n"
+                    else:
+                        shortage_str1 += "\n"
                     if amt_buy_amt > 0 and int(b) < amt_buy_amt:
-                        context.bot.send_message(chat_id=user_id, text="[" + company + "{<code>"+code+"</code>}] 매수가:" + format(buy_price, ',d') + "원, 손절가:" + format(loss_price, ',d') + "원, 매수금액:" + format(amt_buy_amt, ',d') + "원, 매수량:" + format(amt_buy_qty, ',d') + "주, 손절율:" + str(loss_rate) + "% 매수금액:" + format(amt_buy_amt - int(b), ',d') + "원 부족", parse_mode='HTML')
+                        shortage_str2 += format(amt_buy_amt - int(b), ',d') + "원 부족\n"
+                    else:
+                        shortage_str2 += "\n"
+
+                    preview_text = (
+                        "[" + company + "(<code>" + code + "</code>)]\n"
+                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%\n"
+                        + stock_info_str + "\n"
+                        + shortage_str1 +
+                        "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
+                        "─────────────────\n"
+                        + shortage_str2 +
+                        "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
+                    )
+                    context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
 
 
 # 텔레그램봇 응답 처리
