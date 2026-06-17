@@ -4123,10 +4123,9 @@ def echo(update, context):
 
             stock_info_str = (
                 "\n─────────────────\n"
-                f"  [{market_kor}] {_size} | 업종: {industry_kor} | 시총: {format(_mktcap, ',d')}억원\n"
+                f"  [{market_kor}] {_size} | 업종: {industry_kor} | 시총: {format(_mktcap, ',d')}억원 | 시장비율: {_mr_si:.0f}%\n"
                 f"  매수금액 권장: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
-                f"  매수금액 제안: {format(suggest_buy_amt, ',d')}원\n"
-                f"  손절금액 제안: {format(_suggest_loss, ',d')}원"
+                f"  매수금액 제안: {format(suggest_buy_amt, ',d')}원 | 손절금액 제안: {format(_suggest_loss, ',d')}원"
             )
         except Exception as _e_si:
             print(f"[stock_info] 조회 오류: {_e_si}")
@@ -5077,6 +5076,7 @@ def echo(update, context):
 
                     preview_text = (
                         "[" + company + "(<code>" + code + "</code>)]\n"
+                        + stock_info_str + "\n"
                         "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%\n"
                         "─────────────────\n"
                         "  손절금액 기준\n"
@@ -5084,7 +5084,6 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
-                        + stock_info_str
                     )
                     context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
 
