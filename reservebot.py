@@ -5086,7 +5086,7 @@ def echo(update, context):
                         "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
                         + stock_info_str
                     )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
+                    context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
 
                     # 매수 가능(현금) 조회
                     b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
