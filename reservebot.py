@@ -150,6 +150,9 @@ g_trail_state_name = ""
 g_trail_state_acct_no = ""
 g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, nick_name, name, stop, target, exit) 리스트
 
+g_fibo_code = ""   # 피보나치매도 선택 종목코드
+g_fibo_name = ""   # 피보나치매도 선택 종목명
+
 # 코스피/코스닥 변경 상태
 g_kk_code  = ""   # '0001':코스피, '1001':코스닥
 g_kk_name  = ""
@@ -1016,6 +1019,7 @@ def callback_get(update, context) :
     global g_holding_edit_field
     global g_interest_edit_field
     global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts
+    global g_fibo_code, g_fibo_name
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -3204,6 +3208,69 @@ def callback_get(update, context) :
                                         chat_id=query.message.chat_id,
                                         message_id=query.message.message_id)
 
+    elif command == "피보나치매도":
+        try:
+            ac_fb = account(arguments[1])
+            c_fb = stock_balance(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], ac_fb['acct_no'], "")
+            fb_buttons = [
+                InlineKeyboardButton(
+                    f"{c_fb['prdt_name'][i]}({c_fb['pdno'][i]})",
+                    callback_data=f"fibo_sell_{c_fb['pdno'][i]}"
+                )
+                for i in range(len(c_fb.index))
+                if int(c_fb['hldg_qty'][i]) > 0
+            ]
+            if fb_buttons:
+                query.edit_message_text(
+                    text="피보나치 매도할 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2))
+                )
+            else:
+                query.edit_message_text(text="보유종목이 없습니다.")
+        except Exception as e:
+            query.edit_message_text(text=f"[피보나치매도] 오류: {str(e)}")
+
+    elif command.startswith("fibo_sell_"):
+        fb_code = command[len("fibo_sell_"):]
+        try:
+            current_markup = query.message.reply_markup
+            remaining = [
+                btn
+                for row in current_markup.inline_keyboard
+                for btn in row
+                if btn.callback_data != command
+            ]
+            if remaining:
+                context.bot.edit_message_reply_markup(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id,
+                    reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+                )
+            else:
+                context.bot.delete_message(
+                    chat_id=query.message.chat_id,
+                    message_id=query.message.message_id
+                )
+        except Exception:
+            pass
+        try:
+            ac_fb2 = account()
+            c_fb2 = stock_balance(ac_fb2['access_token'], ac_fb2['app_key'], ac_fb2['app_secret'], ac_fb2['acct_no'], "")
+            fb_name = fb_code
+            for i in range(len(c_fb2.index)):
+                if c_fb2['pdno'][i] == fb_code:
+                    fb_name = c_fb2['prdt_name'][i]
+                    break
+        except Exception:
+            fb_name = fb_code
+        g_fibo_code = fb_code
+        g_fibo_name = fb_name
+        menuNum = 'FB'
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"[{fb_name}({fb_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)"
+        )
+
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
         parts = data_selected.split(':')
@@ -3961,6 +4028,84 @@ def echo(update, context):
             t.start()
         for t in threads_81b:
             t.join()
+        return
+
+    if menuNum == 'FB':
+        initMenuNum()
+        fb_code = g_fibo_code
+        fb_name = g_fibo_name
+        parts_fb = user_text.strip().split(',')
+        if (len(parts_fb) < 3
+                or not parts_fb[0].strip().isdecimal()
+                or not parts_fb[1].strip().isdecimal()
+                or not is_positive_int(parts_fb[2].strip())):
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{fb_name}] 고가(자동:0), 저가(자동:0), 매도비율(1~100) 형식이 올바르지 않습니다.")
+            menuNum = 'FB'
+            return
+        try:
+            ac_fb = account()
+            ap_fb = inquire_price(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code)
+            cur_price = int(ap_fb['stck_prpr'])
+
+            # 고가/저가 0이면 최근 1개월 일봉 고가/저가 자동 조회
+            input_high = int(parts_fb[0].strip())
+            input_low  = int(parts_fb[1].strip())
+            sell_rate  = int(parts_fb[2].strip())
+
+            if input_high == 0 or input_low == 0:
+                auto_high, auto_low = get_period_high_low(
+                    ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code, period="D", count=30
+                )
+                if input_high == 0:
+                    input_high = auto_high if auto_high else cur_price
+                if input_low == 0:
+                    input_low = auto_low if auto_low else cur_price
+
+            if input_high <= input_low:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"[{fb_name}] 고가({format(input_high, ',d')})가 저가({format(input_low, ',d')}) 이하입니다.")
+                return
+
+            diff = input_high - input_low
+
+            # 피보나치 되돌림 수준 계산 (고가 → 저가 방향)
+            fb_levels = [
+                (0.0,   input_high),
+                (23.6,  round(input_high - diff * 0.236)),
+                (38.2,  round(input_high - diff * 0.382)),
+                (50.0,  round(input_high - diff * 0.500)),
+                (61.8,  round(input_high - diff * 0.618)),
+                (76.4,  round(input_high - diff * 0.764)),
+                (100.0, input_low),
+            ]
+
+            # 보유수량 조회 (매도수량 계산용)
+            hldg_qty = 0
+            try:
+                c_bal = stock_balance(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], ac_fb['acct_no'], "")
+                for i in range(len(c_bal)):
+                    if c_bal['pdno'][i] == fb_code:
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        break
+            except Exception:
+                pass
+
+            sell_qty_per_level = int(hldg_qty * sell_rate / 100) if hldg_qty > 0 else 0
+
+            lines = [
+                f"[{fb_name}(<code>{fb_code}</code>)] 피보나치 매도가",
+                f"현재가: {format(cur_price, ',d')}원 | 고가: {format(input_high, ',d')}원 | 저가: {format(input_low, ',d')}원",
+                f"보유수량: {format(hldg_qty, ',d')}주 | 매도비율: {sell_rate}% → 매도수량: {format(sell_qty_per_level, ',d')}주",
+                "─────────────────",
+            ]
+            for ratio, price in fb_levels:
+                marker = " ◀ 현재가" if abs(price - cur_price) == min(abs(lv[1] - cur_price) for lv in fb_levels) else ""
+                lines.append(f"  {ratio:5.1f}%  {format(price, ',d'):>10}원{marker}")
+
+            context.bot.send_message(chat_id=user_id, text="\n".join(lines), parse_mode='HTML')
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id, text=f"[피보나치매도] 오류: {str(e)}")
         return
 
     # stop_price, target_price, exit_price, trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
