@@ -3271,6 +3271,110 @@ def callback_get(update, context) :
             text=f"[{fb_name}({fb_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)"
         )
 
+    elif command.startswith("fibo_price:"):
+        parts_fp = command.split(":")
+        # parts_fp: ['fibo_price', code, price, qty]
+        if len(parts_fp) < 4:
+            query.answer("잘못된 요청입니다.")
+            return
+        fp_code  = parts_fp[1]
+        fp_price = parts_fp[2]
+        fp_qty   = parts_fp[3]
+        fp_name  = g_fibo_name if g_fibo_code == fp_code else fp_code
+        sell_buttons = [
+            InlineKeyboardButton("예약매도", callback_data=f"fibo_rsv:{fp_code}:{fp_price}:{fp_qty}"),
+            InlineKeyboardButton("매도주문", callback_data=f"fibo_ord:{fp_code}:{fp_price}:{fp_qty}"),
+        ]
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"[{fp_name}({fp_code})] {format(int(fp_price), ',d')}원 × {fp_qty}주\n주문 유형을 선택하세요:",
+            reply_markup=InlineKeyboardMarkup(build_menu(sell_buttons, 2))
+        )
+
+    elif command.startswith("fibo_rsv:"):
+        parts_fr = command.split(":")
+        if len(parts_fr) < 4:
+            query.answer("잘못된 요청입니다.")
+            return
+        fr_code  = parts_fr[1]
+        fr_price = parts_fr[2]
+        fr_qty   = int(parts_fr[3])
+        fr_name  = g_fibo_name if g_fibo_code == fr_code else fr_code
+        try:
+            context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        except Exception:
+            pass
+        reserve_end_dt = (datetime.today() + timedelta(days=30)).strftime('%Y%m%d')
+        try:
+            ac_fr = account(arguments[1])
+            fr_acct_no = ac_fr['acct_no']
+            e_fr = stock_balance(ac_fr['access_token'], ac_fr['app_key'], ac_fr['app_secret'], fr_acct_no, "")
+            ord_psbl_qty_fr = 0
+            for i in range(len(e_fr.index)):
+                if e_fr['pdno'][i] == fr_code:
+                    ord_psbl_qty_fr = int(e_fr['ord_psbl_qty'][i])
+                    break
+            if ord_psbl_qty_fr <= 0:
+                context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fr_name}({fr_code})] 주문가능수량이 없어 예약매도 불가")
+            else:
+                sell_qty_fr = min(fr_qty, ord_psbl_qty_fr)
+                rsv_result = order_reserve(
+                    ac_fr['access_token'], ac_fr['app_key'], ac_fr['app_secret'],
+                    str(fr_acct_no), fr_code, str(sell_qty_fr), str(fr_price),
+                    "01", "00", reserve_end_dt
+                )
+                if rsv_result.get('RSVN_ORD_SEQ', '') != '':
+                    context.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=(f"[{fr_name}(<code>{fr_code}</code>)] 예약주문번호: <code>{rsv_result['RSVN_ORD_SEQ']}</code>\n"
+                              f"예약매도주문: {format(int(fr_price), ',d')}원 × {sell_qty_fr}주"),
+                        parse_mode='HTML'
+                    )
+                else:
+                    context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fr_name}({fr_code})] 예약매도주문 실패")
+        except Exception as e:
+            context.bot.send_message(chat_id=query.message.chat_id, text=f"[피보나치 예약매도] 오류: {str(e)}")
+
+    elif command.startswith("fibo_ord:"):
+        parts_fo = command.split(":")
+        if len(parts_fo) < 4:
+            query.answer("잘못된 요청입니다.")
+            return
+        fo_code  = parts_fo[1]
+        fo_price = parts_fo[2]
+        fo_qty   = int(parts_fo[3])
+        fo_name  = g_fibo_name if g_fibo_code == fo_code else fo_code
+        try:
+            context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        except Exception:
+            pass
+        try:
+            ac_fo = account(arguments[1])
+            fo_acct_no = ac_fo['acct_no']
+            e_fo = stock_balance(ac_fo['access_token'], ac_fo['app_key'], ac_fo['app_secret'], fo_acct_no, "")
+            ord_psbl_qty_fo = 0
+            for i in range(len(e_fo.index)):
+                if e_fo['pdno'][i] == fo_code:
+                    ord_psbl_qty_fo = int(e_fo['ord_psbl_qty'][i])
+                    break
+            if ord_psbl_qty_fo <= 0:
+                context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fo_name}({fo_code})] 주문가능수량이 없어 매도 불가")
+            else:
+                sell_qty_fo = min(fo_qty, ord_psbl_qty_fo)
+                ord_result = order_cash(
+                    False, ac_fo['access_token'], ac_fo['app_key'], ac_fo['app_secret'],
+                    fo_acct_no, fo_code, "00", sell_qty_fo, int(fo_price)
+                )
+                ord_no = ord_result.get('KRX_FWDG_ORD_ORGNO', '') + '-' + ord_result.get('ODNO', '')
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=(f"[{fo_name}(<code>{fo_code}</code>)] 주문번호: <code>{ord_no}</code>\n"
+                          f"매도주문: {format(int(fo_price), ',d')}원 × {sell_qty_fo}주"),
+                    parse_mode='HTML'
+                )
+        except Exception as e:
+            context.bot.send_message(chat_id=query.message.chat_id, text=f"[피보나치 매도주문] 오류: {str(e)}")
+
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
         parts = data_selected.split(':')
@@ -4044,7 +4148,7 @@ def echo(update, context):
             menuNum = 'FB'
             return
         try:
-            ac_fb = account()
+            ac_fb = account(nick)
             ap_fb = inquire_price(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code)
             cur_price = int(ap_fb['stck_prpr'])
 
@@ -4093,17 +4197,25 @@ def echo(update, context):
 
             sell_qty_per_level = int(hldg_qty * sell_rate / 100) if hldg_qty > 0 else 0
 
-            lines = [
-                f"[{fb_name}(<code>{fb_code}</code>)] 피보나치 매도가",
-                f"현재가: {format(cur_price, ',d')}원 | 고가: {format(input_high, ',d')}원 | 저가: {format(input_low, ',d')}원",
-                f"보유수량: {format(hldg_qty, ',d')}주 | 매도비율: {sell_rate}% → 매도수량: {format(sell_qty_per_level, ',d')}주",
-                "─────────────────",
-            ]
-            for ratio, price in fb_levels:
-                marker = " ◀ 현재가" if abs(price - cur_price) == min(abs(lv[1] - cur_price) for lv in fb_levels) else ""
-                lines.append(f"  {ratio:5.1f}%  {format(price, ',d'):>10}원{marker}")
+            closest_idx = min(range(len(fb_levels)), key=lambda i: abs(fb_levels[i][1] - cur_price))
+            fb_buttons = []
+            for idx, (ratio, price) in enumerate(fb_levels):
+                marker = " ◀" if idx == closest_idx else ""
+                btn_text = f"{ratio:.1f}%  {format(price, ',d')}원{marker}"
+                cb_data = f"fibo_price:{fb_code}:{price}:{sell_qty_per_level}"
+                fb_buttons.append(InlineKeyboardButton(btn_text, callback_data=cb_data))
 
-            context.bot.send_message(chat_id=user_id, text="\n".join(lines), parse_mode='HTML')
+            info_text = (
+                f"[{fb_name}(<code>{fb_code}</code>)] 피보나치 매도가\n"
+                f"현재가: {format(cur_price, ',d')}원 | 고가: {format(input_high, ',d')}원 | 저가: {format(input_low, ',d')}원\n"
+                f"보유수량: {format(hldg_qty, ',d')}주 | 매도비율: {sell_rate}% → 매도수량: {format(sell_qty_per_level, ',d')}주"
+            )
+            context.bot.send_message(
+                chat_id=user_id,
+                text=info_text,
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 1))
+            )
         except Exception as e:
             context.bot.send_message(chat_id=user_id, text=f"[피보나치매도] 오류: {str(e)}")
         return
