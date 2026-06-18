@@ -3261,7 +3261,7 @@ def callback_get(update, context) :
         except Exception:
             pass
         try:
-            ac_fb2 = account()
+            ac_fb2 = account(arguments[1])
             c_fb2 = stock_balance(ac_fb2['access_token'], ac_fb2['app_key'], ac_fb2['app_secret'], ac_fb2['acct_no'], "")
             fb_name = fb_code
             for i in range(len(c_fb2.index)):
@@ -4207,7 +4207,7 @@ def echo(update, context):
             menuNum = 'FB'
             return
         try:
-            ac_fb = account(nick)
+            ac_fb = account(arguments[1])
             ap_fb = inquire_price(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], fb_code)
             cur_price = int(ap_fb['stck_prpr'])
 
