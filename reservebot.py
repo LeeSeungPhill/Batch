@@ -1889,6 +1889,7 @@ def callback_get(update, context) :
             
             reserve_strt_dt = datetime.now().strftime("%Y%m%d")
             reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
+            reserve_end_dt = get_previous_business_day(reserve_end_dt)
             # 전체예약 조회
             output = order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, reserve_end_dt, str(acct_no), "")
 
@@ -3309,6 +3310,7 @@ def callback_get(update, context) :
         except Exception:
             pass
         reserve_end_dt = (datetime.today() + timedelta(days=30)).strftime('%Y%m%d')
+        reserve_end_dt = get_previous_business_day(reserve_end_dt)
         target_nicks_fr = g_selected_accounts[:] if g_selected_accounts else [None]
 
         def process_nick_fibo_rsv(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -3589,6 +3591,7 @@ def echo(update, context):
             )
             return
         sell_price_01 = g_holding_sell_price if parts01[0].strip() == '0' else int(parts01[0].strip())
+        sell_price_01 = round_to_valid_price(sell_price_01, get_tick_size(sell_price_01))
         sell_ratio_01 = int(parts01[1].strip())
         cb_code_01    = g_holding_sell_code
         cb_name_01    = g_holding_sell_name
@@ -3672,6 +3675,7 @@ def echo(update, context):
                 text=f"[{g_holding_edit_name}({g_holding_edit_code})] {g_holding_edit_field}: 숫자만 입력하세요.")
             return
         new_val = int(user_text.strip())
+        new_val = round_to_valid_price(new_val, get_tick_size(new_val))
         try:
             c02 = get_conn()
             with c02.cursor() as cur02:
@@ -3706,6 +3710,7 @@ def echo(update, context):
                 text=f"[{g_signal_sell_name}] 매도가는 숫자(0=현재가)로 입력하세요.")
             return
         input_price = int(user_text.strip())
+        input_price = round_to_valid_price(input_price, get_tick_size(input_price))
         ss_code = g_signal_sell_code
         ss_name = g_signal_sell_name
         ss_qty  = g_signal_sell_qty
@@ -3771,6 +3776,7 @@ def echo(update, context):
                 text=f"[{g_interest_edit_name}({g_interest_edit_code})] {g_interest_edit_field}: 숫자만 입력하세요.")
             return
         new_val04 = int(user_text.strip())
+        new_val04 = round_to_valid_price(new_val04, get_tick_size(new_val04))
         try:
             c04 = get_conn()
             # 현재 DB 값 조회 (연쇄 비교용)
@@ -3974,8 +3980,11 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text=f"[추적재개] 가격 조회 오류: {str(e)}")
                 return
             stop_price_41b   = stck_lwpr_41b if int(parts41B[0].strip()) == 0 else int(parts41B[0].strip())
+            stop_price_41b = round_to_valid_price(stop_price_41b, get_tick_size(stop_price_41b))
             target_price_41b = stck_hgpr_41b if int(parts41B[1].strip()) == 0 else int(parts41B[1].strip())
+            target_price_41b = round_to_valid_price(target_price_41b, get_tick_size(target_price_41b))
             exit_price_41b   = stck_lwpr_41b if int(parts41B[2].strip()) == 0 else int(parts41B[2].strip())
+            exit_price_41b = round_to_valid_price(exit_price_41b, get_tick_size(exit_price_41b))
             trail_tp_41b = parts41B[3].strip()
             hour_minute_41b = datetime.now().strftime('%H%M%S')
             try:
@@ -4092,8 +4101,11 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text=f"[추적변경] 가격 조회 오류: {str(e)}")
                 return
             stop_price_81b   = stck_lwpr_81b if int(parts81B[0].strip()) == 0 else int(parts81B[0].strip())
+            stop_price_81b = round_to_valid_price(stop_price_81b, get_tick_size(stop_price_81b))
             target_price_81b = stck_hgpr_81b if int(parts81B[1].strip()) == 0 else int(parts81B[1].strip())
+            target_price_81b = round_to_valid_price(target_price_81b, get_tick_size(target_price_81b))
             exit_price_81b   = stck_lwpr_81b if int(parts81B[2].strip()) == 0 else int(parts81B[2].strip())
+            exit_price_81b = round_to_valid_price(exit_price_81b, get_tick_size(exit_price_81b))
             sell_rate_81b = int(parts81B[3].strip())
             hour_minute_81b = datetime.now().strftime('%H%M%S')
             try:
@@ -4230,16 +4242,18 @@ def echo(update, context):
                     text=f"[{fb_name}] 고가({format(input_high, ',d')})가 저가({format(input_low, ',d')}) 이하입니다.")
                 return
 
+            input_high = round_to_valid_price(input_high, get_tick_size(input_high))
+            input_low = round_to_valid_price(input_low, get_tick_size(input_low))
             diff = input_high - input_low
 
             # 피보나치 되돌림 수준 계산 (고가 → 저가 방향)
             fb_levels = [
                 (0.0,   input_high),
-                (23.6,  round(input_high - diff * 0.236)),
-                (38.2,  round(input_high - diff * 0.382)),
-                (50.0,  round(input_high - diff * 0.500)),
-                (61.8,  round(input_high - diff * 0.618)),
-                (76.4,  round(input_high - diff * 0.764)),
+                (23.6,  round_to_valid_price(int(round(input_high - diff * 0.236)), get_tick_size(int(round(input_high - diff * 0.236))))),
+                (38.2,  round_to_valid_price(int(round(input_high - diff * 0.382)), get_tick_size(int(round(input_high - diff * 0.382))))),
+                (50.0,  round_to_valid_price(int(round(input_high - diff * 0.500)), get_tick_size(int(round(input_high - diff * 0.500))))),
+                (61.8,  round_to_valid_price(int(round(input_high - diff * 0.618)), get_tick_size(int(round(input_high - diff * 0.618))))),
+                (76.4,  round_to_valid_price(int(round(input_high - diff * 0.764)), get_tick_size(int(round(input_high - diff * 0.764))))),
                 (100.0, input_low),
             ]
 
@@ -4303,8 +4317,11 @@ def echo(update, context):
             ac_tp = account(arguments[1])
             ap = inquire_price(ac_tp['access_token'], ac_tp['app_key'], ac_tp['app_secret'], item['code'])
             stop_price = int(ap['stck_prpr']) if val_text[0].strip() == '0' else int(val_text[0].strip())
+            stop_price = round_to_valid_price(stop_price, get_tick_size(stop_price))
             target_price = int(int(ap['stck_prpr']) + int(ap['stck_prpr']) * 0.05) if val_text[1].strip() == '0' else int(val_text[1].strip())
+            target_price = round_to_valid_price(target_price, get_tick_size(target_price))
             exit_price = int(ap['stck_lwpr']) if val_text[2].strip() == '0' else int(val_text[2].strip())
+            exit_price = round_to_valid_price(exit_price, get_tick_size(exit_price))
             if target_price <= stop_price:
                 context.bot.send_message(chat_id=user_id, text="목표가(" + format(target_price, ',d') + ")가 이탈가(" + format(stop_price, ',d') + ") 이하입니다.")
             elif target_price <= exit_price:
@@ -4455,7 +4472,9 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
             else:
                 buy_price_21 = int(stck_prpr) if parts21[1].strip() == '0' else int(parts21[1].strip())
+                buy_price_21 = round_to_valid_price(buy_price_21, get_tick_size(buy_price_21))
                 loss_price_21 = int(stck_lwpr) if parts21[2].strip() == '0' else int(parts21[2].strip())
+                loss_price_21 = round_to_valid_price(loss_price_21, get_tick_size(loss_price_21))
                 input_buy_amt_21 = int(parts21[3].strip())    # 입력 매수금액
                 item_loss_sum_21 = int(parts21[4].strip())    # 입력 손절금액
 
@@ -4518,6 +4537,7 @@ def echo(update, context):
             # 매도가(현재가:0), 매도량 존재시
             if commandBot[1].isdecimal() and commandBot[2].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
+                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
                 # 매도량
                 sell_qty = commandBot[2]
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
@@ -4596,6 +4616,7 @@ def echo(update, context):
             # 매도가(현재가:0) 존재시 : 전체
             if commandBot[1].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
+                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_32(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -4684,6 +4705,7 @@ def echo(update, context):
             # 매도가(현재가:0) 존재시 : 절반
             if commandBot[1].isdecimal():
                 sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
+                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
                 
                 def process_nick_33(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -4772,7 +4794,8 @@ def echo(update, context):
                 print("매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매매구분 값은 1(매수), 2(매도)만 허용됩니다.")
             else:
-                revise_price_51 = parts51[1].strip()
+                revise_price_51 = int(parts51[1].strip())
+                revise_price_51 = round_to_valid_price(revise_price_51, get_tick_size(revise_price_51))
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_51(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -4792,10 +4815,10 @@ def echo(update, context):
                             ord_type = row['sll_buy_dvsn_cd_name']
                             ord_price = row['ord_unpr']
                             try:
-                                c = order_cancel_revice(t_access_token, t_app_key, t_app_secret, t_acct_no, "01", order_no, remain_qty, int(revise_price_51))
+                                c = order_cancel_revice(t_access_token, t_app_key, t_app_secret, t_acct_no, "01", order_no, remain_qty, revise_price_51)
                                 if c is not None and c['ODNO'] != "":
                                     context.bot.send_message(chat_id=user_id,
-                                        text=f"[{nick}] 주문정정 완료 [{company}] {ord_type} {format(int(ord_price),',')}→{format(int(revise_price_51),',')}원, 주문번호: <code>{str(int(c['ODNO']))}</code>",
+                                        text=f"[{nick}] 주문정정 완료 [{company}] {ord_type} {format(int(ord_price),',')}→{format(revise_price_51,',')}원, 주문번호: <code>{str(int(c['ODNO']))}</code>",
                                         parse_mode='HTML')
                                     try:
                                         with conn.cursor() as cur:
@@ -4928,8 +4951,10 @@ def echo(update, context):
                 if commandBot[2].isdecimal() and commandBot[3].isdecimal() and len(commandBot[4]) == 8 and commandBot[4].isdigit():
 
                     ord_rsv_price_61 = int(commandBot[2])
+                    ord_rsv_price_61 = round_to_valid_price(ord_rsv_price_61, get_tick_size(ord_rsv_price_61))
                     ord_rsv_qty_61 = int(commandBot[3])
                     ord_rsv_end_dt_61 = commandBot[4]
+                    ord_rsv_end_dt_61 = get_previous_business_day(ord_rsv_end_dt_61)
                     trade_dvsn_61 = commandBot[1]
                     target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
@@ -5011,7 +5036,9 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text=f"입력 형식 오류 [{company}] - 종목코드(종목명), 정정가(시장가:0), 예약종료일-8자리(YYYYMMDD)")
             else:
                 ord_rsv_price_62 = int(parts62[1].strip())
+                ord_rsv_price_62 = round_to_valid_price(ord_rsv_price_62, get_tick_size(ord_rsv_price_62))
                 ord_rsv_end_dt_62 = parts62[2].strip()
+                ord_rsv_end_dt_62 = get_previous_business_day(ord_rsv_end_dt_62)
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_62(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -5072,6 +5099,7 @@ def echo(update, context):
                 now = datetime.now()
                 reserve_strt_dt = (now + timedelta(days=1)).strftime("%Y%m%d") if now > now.replace(hour=15, minute=40, second=0, microsecond=0) else now.strftime("%Y%m%d")
                 reserve_end_dt = (now + relativedelta(months=1)).strftime("%Y%m%d")
+                reserve_end_dt = get_previous_business_day(reserve_end_dt)
                 try:
                     output = order_reserve_complete(t_access_token, t_app_key, t_app_secret, reserve_strt_dt, reserve_end_dt, str(t_acct_no), "")
                     if not output:
@@ -5128,7 +5156,9 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액 미존재 또는 부적합")
             else:
                 buy_price_71 = int(stck_prpr) if parts71[1].strip() == '0' else int(parts71[1].strip())
+                buy_price_71 = round_to_valid_price(buy_price_71, get_tick_size(buy_price_71))
                 loss_price_71 = int(stck_lwpr) if parts71[2].strip() == '0' else int(parts71[2].strip())
+                loss_price_71 = round_to_valid_price(loss_price_71, get_tick_size(loss_price_71))
                 input_buy_amt_71 = int(parts71[3].strip())    # 입력 매수금액
                 item_loss_sum_71 = int(parts71[4].strip())    # 입력 손절금액
 
@@ -5245,8 +5275,11 @@ def echo(update, context):
 
             trail_plan = str(int(val_text[4]))
             stop_price = int(stck_prpr) if val_text[1].strip() == '0' else int(val_text[1].strip())
+            stop_price = round_to_valid_price(stop_price, get_tick_size(stop_price))
             target_price = int(int(stck_prpr) + int(stck_prpr) * 0.05) if val_text[2].strip() == '0' else int(val_text[2].strip())
+            target_price = round_to_valid_price(target_price, get_tick_size(target_price))
             exit_price = int(stck_lwpr) if val_text[3].strip() == '0' else int(val_text[3].strip())
+            exit_price = round_to_valid_price(exit_price, get_tick_size(exit_price))
             if target_price <= stop_price:
                 context.bot.send_message(chat_id=user_id, text="목표가(" + format(target_price, ',d') + ")가 이탈가(" + format(stop_price, ',d') + ") 이하입니다.")
             elif target_price <= exit_price:
@@ -5372,7 +5405,9 @@ def echo(update, context):
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0) 미존재 또는 부적합")
             else:
                 buy_price  = int(stck_prpr) if commandBot[1].strip() == '0' else int(commandBot[1].strip())
+                buy_price = round_to_valid_price(buy_price, get_tick_size(buy_price))
                 loss_price = int(stck_lwpr) if commandBot[2].strip() == '0' else int(commandBot[2].strip())
+                loss_price = round_to_valid_price(loss_price, get_tick_size(loss_price))
                 buy_amt = int(suggest_buy_amt)   # 매수금액 제안 (stock_info_str 기준)
                 item_loss_sum = int(_suggest_loss)     # 손절금액 제안 (stock_info_str 기준)
 
