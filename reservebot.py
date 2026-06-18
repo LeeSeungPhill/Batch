@@ -2229,7 +2229,14 @@ def callback_get(update, context) :
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
-        if menu_num == "01" and g_holding_sell_name:
+        if menu_num == "FB":
+            menuNum = "FB"
+            query.edit_message_text(
+                text=(f"[선택계좌: {selected_str}]\n"
+                      f"[{g_fibo_name}({g_fibo_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n"
+                      f"(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)")
+            )
+        elif menu_num == "01" and g_holding_sell_name:
             stock_prefix = f"[{g_holding_sell_name}(<code>{g_holding_sell_code}</code>)] "
             query.edit_message_text(
                 text=f"[선택계좌: {selected_str}]\n{stock_prefix}{prompt}",
@@ -3265,11 +3272,8 @@ def callback_get(update, context) :
             fb_name = fb_code
         g_fibo_code = fb_code
         g_fibo_name = fb_name
-        menuNum = 'FB'
-        context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=f"[{fb_name}({fb_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)"
-        )
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "FB", send_new=True, chat_id=query.message.chat_id, bot=context.bot)
 
     elif command.startswith("fibo_price:"):
         parts_fp = command.split(":")
@@ -3305,35 +3309,64 @@ def callback_get(update, context) :
         except Exception:
             pass
         reserve_end_dt = (datetime.today() + timedelta(days=30)).strftime('%Y%m%d')
-        try:
-            ac_fr = account(arguments[1])
-            fr_acct_no = ac_fr['acct_no']
-            e_fr = stock_balance(ac_fr['access_token'], ac_fr['app_key'], ac_fr['app_secret'], fr_acct_no, "")
-            ord_psbl_qty_fr = 0
-            for i in range(len(e_fr.index)):
-                if e_fr['pdno'][i] == fr_code:
-                    ord_psbl_qty_fr = int(e_fr['ord_psbl_qty'][i])
-                    break
-            if ord_psbl_qty_fr <= 0:
-                context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fr_name}({fr_code})] 주문가능수량이 없어 예약매도 불가")
-            else:
-                sell_qty_fr = min(fr_qty, ord_psbl_qty_fr)
-                rsv_result = order_reserve(
-                    ac_fr['access_token'], ac_fr['app_key'], ac_fr['app_secret'],
-                    str(fr_acct_no), fr_code, str(sell_qty_fr), str(fr_price),
-                    "01", "00", reserve_end_dt
-                )
-                if rsv_result.get('RSVN_ORD_SEQ', '') != '':
+        target_nicks_fr = g_selected_accounts[:] if g_selected_accounts else [None]
+
+        def process_nick_fibo_rsv(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            nick_label = f"[{nick}]" if nick else ""
+            try:
+                e_fr2 = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                ord_psbl_qty_fr = 0
+                for i in range(len(e_fr2.index)):
+                    if e_fr2['pdno'][i] == fr_code:
+                        ord_psbl_qty_fr = int(e_fr2['ord_psbl_qty'][i])
+                        break
+                if ord_psbl_qty_fr <= 0:
                     context.bot.send_message(
                         chat_id=query.message.chat_id,
-                        text=(f"[{fr_name}(<code>{fr_code}</code>)] 예약주문번호: <code>{rsv_result['RSVN_ORD_SEQ']}</code>\n"
-                              f"예약매도주문: {format(int(fr_price), ',d')}원 × {sell_qty_fr}주"),
-                        parse_mode='HTML'
+                        text=f"{nick_label}[{fr_name}({fr_code})] 주문가능수량이 없어 예약매도 불가"
                     )
                 else:
-                    context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fr_name}({fr_code})] 예약매도주문 실패")
-        except Exception as e:
-            context.bot.send_message(chat_id=query.message.chat_id, text=f"[피보나치 예약매도] 오류: {str(e)}")
+                    sell_qty_fr = min(fr_qty, ord_psbl_qty_fr)
+                    rsv_result = order_reserve(
+                        t_access_token, t_app_key, t_app_secret,
+                        str(t_acct_no), fr_code, str(sell_qty_fr), str(fr_price),
+                        "01", "00", reserve_end_dt
+                    )
+                    if rsv_result.get('RSVN_ORD_SEQ', '') != '':
+                        context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=(f"{nick_label}[{fr_name}(<code>{fr_code}</code>)] "
+                                  f"예약주문번호: <code>{rsv_result['RSVN_ORD_SEQ']}</code>\n"
+                                  f"예약매도주문: {format(int(fr_price), ',d')}원 × {sell_qty_fr}주"),
+                            parse_mode='HTML'
+                        )
+                    else:
+                        context.bot.send_message(
+                            chat_id=query.message.chat_id,
+                            text=f"{nick_label}[{fr_name}({fr_code})] 예약매도주문 실패"
+                        )
+            except Exception as e:
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"{nick_label}[피보나치 예약매도] 오류: {str(e)}"
+                )
+
+        threads_fr = []
+        for nick in target_nicks_fr:
+            try:
+                ac_fr = account(nick) if nick else account()
+            except Exception as e:
+                nick_label = f"[{nick}]" if nick else ""
+                context.bot.send_message(chat_id=query.message.chat_id, text=f"{nick_label}[계좌조회 오류] {str(e)}")
+                continue
+            t = threading.Thread(
+                target=process_nick_fibo_rsv,
+                args=(nick, ac_fr['acct_no'], ac_fr['access_token'], ac_fr['app_key'], ac_fr['app_secret'])
+            )
+            threads_fr.append(t)
+            t.start()
+        for t in threads_fr:
+            t.join()
 
     elif command.startswith("fibo_ord:"):
         parts_fo = command.split(":")
@@ -3348,32 +3381,58 @@ def callback_get(update, context) :
             context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         except Exception:
             pass
-        try:
-            ac_fo = account(arguments[1])
-            fo_acct_no = ac_fo['acct_no']
-            e_fo = stock_balance(ac_fo['access_token'], ac_fo['app_key'], ac_fo['app_secret'], fo_acct_no, "")
-            ord_psbl_qty_fo = 0
-            for i in range(len(e_fo.index)):
-                if e_fo['pdno'][i] == fo_code:
-                    ord_psbl_qty_fo = int(e_fo['ord_psbl_qty'][i])
-                    break
-            if ord_psbl_qty_fo <= 0:
-                context.bot.send_message(chat_id=query.message.chat_id, text=f"[{fo_name}({fo_code})] 주문가능수량이 없어 매도 불가")
-            else:
-                sell_qty_fo = min(fo_qty, ord_psbl_qty_fo)
-                ord_result = order_cash(
-                    False, ac_fo['access_token'], ac_fo['app_key'], ac_fo['app_secret'],
-                    fo_acct_no, fo_code, "00", sell_qty_fo, int(fo_price)
-                )
-                ord_no = ord_result.get('KRX_FWDG_ORD_ORGNO', '') + '-' + ord_result.get('ODNO', '')
+        target_nicks_fo = g_selected_accounts[:] if g_selected_accounts else [None]
+
+        def process_nick_fibo_ord(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            nick_label = f"[{nick}]" if nick else ""
+            try:
+                e_fo2 = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                ord_psbl_qty_fo = 0
+                for i in range(len(e_fo2.index)):
+                    if e_fo2['pdno'][i] == fo_code:
+                        ord_psbl_qty_fo = int(e_fo2['ord_psbl_qty'][i])
+                        break
+                if ord_psbl_qty_fo <= 0:
+                    context.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=f"{nick_label}[{fo_name}({fo_code})] 주문가능수량이 없어 매도 불가"
+                    )
+                else:
+                    sell_qty_fo = min(fo_qty, ord_psbl_qty_fo)
+                    ord_result = order_cash(
+                        False, t_access_token, t_app_key, t_app_secret,
+                        t_acct_no, fo_code, "00", sell_qty_fo, int(fo_price)
+                    )
+                    ord_no = ord_result.get('KRX_FWDG_ORD_ORGNO', '') + '-' + ord_result.get('ODNO', '')
+                    context.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=(f"{nick_label}[{fo_name}(<code>{fo_code}</code>)] "
+                              f"주문번호: <code>{ord_no}</code>\n"
+                              f"매도주문: {format(int(fo_price), ',d')}원 × {sell_qty_fo}주"),
+                        parse_mode='HTML'
+                    )
+            except Exception as e:
                 context.bot.send_message(
                     chat_id=query.message.chat_id,
-                    text=(f"[{fo_name}(<code>{fo_code}</code>)] 주문번호: <code>{ord_no}</code>\n"
-                          f"매도주문: {format(int(fo_price), ',d')}원 × {sell_qty_fo}주"),
-                    parse_mode='HTML'
+                    text=f"{nick_label}[피보나치 매도주문] 오류: {str(e)}"
                 )
-        except Exception as e:
-            context.bot.send_message(chat_id=query.message.chat_id, text=f"[피보나치 매도주문] 오류: {str(e)}")
+
+        threads_fo = []
+        for nick in target_nicks_fo:
+            try:
+                ac_fo = account(nick) if nick else account()
+            except Exception as e:
+                nick_label = f"[{nick}]" if nick else ""
+                context.bot.send_message(chat_id=query.message.chat_id, text=f"{nick_label}[계좌조회 오류] {str(e)}")
+                continue
+            t = threading.Thread(
+                target=process_nick_fibo_ord,
+                args=(nick, ac_fo['acct_no'], ac_fo['access_token'], ac_fo['app_key'], ac_fo['app_secret'])
+            )
+            threads_fo.append(t)
+            t.start()
+        for t in threads_fo:
+            t.join()
 
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
