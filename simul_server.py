@@ -744,22 +744,19 @@ def stock_info():
             cur_mr  = conn_mr.cursor()
 
             if len(buy_date) == 8:
-                # buy_date 전영업일 기준 market_ratio 조회
-                business_day = f"{buy_date[:4]}-{buy_date[4:6]}-{buy_date[6:]}"
-                prev_biz = get_previous_business_day(
-                    (datetime.strptime(business_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-                )
+                # buy_date 영업일 기준 market_ratio 조회
+                prev_biz = get_previous_business_day(buy_date)
                 cur_mr.execute("""
-                    SELECT market_ratio, dt FROM dly_acct_balance_simul
-                    WHERE acct = '74346047' AND dt = %s
-                """, (prev_biz,))
+                    SELECT market_ratio, %s AS dt FROM "stockFundMng_stock_fund_mng" WHERE acct_no = '74346047' 
+                    UNION ALL
+                    SELECT market_ratio, dt FROM dly_acct_balance WHERE acct = '74346047' AND dt = %s
+                    ORDER BY dt LIMIT 1
+                """, (datetime.now().strftime('%Y%m%d'), prev_biz,))
             else:
                 # buy_date 미입력 시 최신 레코드
                 cur_mr.execute("""
-                    SELECT market_ratio, dt FROM dly_acct_balance_simul
-                    WHERE acct = '74346047' AND market_ratio > 0
-                    ORDER BY dt DESC LIMIT 1
-                """)
+                    SELECT market_ratio, %s AS dt FROM "stockFundMng_stock_fund_mng" WHERE acct_no = '74346047' 
+                """, (datetime.now().strftime('%Y%m%d'),))
 
             mr_row = cur_mr.fetchone()
             cur_mr.close()

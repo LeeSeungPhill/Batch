@@ -754,7 +754,7 @@ def get_kis_1min_full_day(
 
 def get_valid_sell_price(price: int) -> int:
     """KIS 호가단위 기준으로 price를 유효한 매도 호가로 내림처리."""
-    if price < 1000:
+    if price < 2000:
         tick = 1
     elif price < 5000:
         tick = 5
