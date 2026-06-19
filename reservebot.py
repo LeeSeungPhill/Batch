@@ -2816,27 +2816,27 @@ def callback_get(update, context) :
             selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"[{g_sell3x_company}({g_sell3x_code})] 매도가(현재가:0), 매도비율(%)을 입력하세요.")
+                      f"[{g_sell3x_company}({g_sell3x_code})] 매도가(현재가:0), 매도비율(1~100)을 입력하세요.")
             )
         elif menu_num == "FB":
             menuNum = "FB"
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"[{g_fibo_name}({g_fibo_code})] 고가(자동:0), 저가(자동:0), 매도비율(%)을 입력하세요.\n"
+                      f"[{g_fibo_name}({g_fibo_code})] 고가(자동:0), 저가(자동:0), 매도비율(1~100)을 입력하세요.\n"
                       f"(0 입력 시 최근 1개월 일봉 고가/저가 자동 적용)")
             )
         elif menu_num == "61B":
             menuNum = "61B"
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"종목코드, 매수가(현재가:0), 매수량, 예약종료일(YYYYMMDD, 생략시 30일후)을 입력하세요.\n")
+                      f"종목코드, 매수가(현재가:0), 매수금액(원), 예약종료일(YYYYMMDD, 생략시 30일후)을 입력하세요.\n")
             )
         elif menu_num == "61S":
             menuNum = "61S"
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
                       f"[{g_rsv_sell_name}({g_rsv_sell_code})] "
-                      f"매도가(현재가:0), 매도량, 예약종료일(YYYYMMDD, 생략시 30일후)을 입력하세요.\n")
+                      f"매도가(현재가:0), 매도비율(%), 예약종료일(YYYYMMDD, 생략시 30일후)을 입력하세요.\n")
             )
         elif menu_num == "62N":
             menuNum = "62N"
@@ -3774,7 +3774,7 @@ def callback_get(update, context) :
         menuNum = '81B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(저가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 매도비율을 입력하세요."
+            text=f"[{ts_name}({ts_code})] 이탈가 {ts_stop_price:,}원(저가:0), 목표가 {ts_target_price:,}원(고가:0), 최종이탈가 {ts_exit_price:,}원(저가:0), 매도비율(1~100)을 입력하세요."
         )                
 
     elif command in ("코스피", "코스닥"):
@@ -5193,20 +5193,21 @@ def echo(update, context):
         if not rs_code:
             context.bot.send_message(chat_id=user_id, text="선택된 종목이 없습니다. 다시 시도하세요.")
             return
-        # 입력: 매도가(현재가:0), 매도량[, 예약종료일YYYYMMDD]
+        # 입력: 매도가(현재가:0), 매도비율(1~100), 예약종료일(YYYYMMDD)
         parts_61s = user_text.strip().split(',')
         if (len(parts_61s) < 2
                 or not parts_61s[0].strip().isdecimal()
-                or not parts_61s[1].strip().isdecimal()):
+                or not parts_61s[1].strip().isdecimal()
+                or not (1 <= int(parts_61s[1].strip()) <= 100)):
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{rs_name}] 입력 형식 오류: 매도가(현재가:0), 매도량[, 예약종료일YYYYMMDD]"
+                text=f"[{rs_name}] 입력 형식 오류: 매도가(현재가:0), 매도비율(1~100), 예약종료일(YYYYMMDD)"
             )
             menuNum = '61S'
             return
-        ord_price_61s = int(parts_61s[0].strip())
-        ord_price_61s = round_to_valid_price(ord_price_61s, get_tick_size(ord_price_61s)) if ord_price_61s > 0 else 0
-        ord_qty_61s   = int(parts_61s[1].strip())
+        ord_price_61s  = int(parts_61s[0].strip())
+        ord_price_61s  = round_to_valid_price(ord_price_61s, get_tick_size(ord_price_61s)) if ord_price_61s > 0 else 0
+        ord_ratio_61s  = int(parts_61s[1].strip())   # 매도비율(%)
         if len(parts_61s) >= 3 and len(parts_61s[2].strip()) == 8 and parts_61s[2].strip().isdigit():
             ord_end_dt_61s = parts_61s[2].strip()
         else:
@@ -5236,12 +5237,8 @@ def echo(update, context):
                         text=f"-{t_nick_label}-[{rs_name}] 주문가능수량 없음"
                     )
                     return
-                if ord_psbl_qty_61s < ord_qty_61s:
-                    context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"-{t_nick_label}-[{rs_name}] 매도수량({format(ord_qty_61s, ',d')}주)이 주문가능수량({format(ord_psbl_qty_61s, ',d')}주)보다 많음"
-                    )
-                    return
+                # 매도비율로 수량 계산
+                ord_qty_61s = max(1, int(ord_psbl_qty_61s * ord_ratio_61s / 100))
                 dvsn_cd_61s = "01" if ord_price_61s == 0 else "00"
                 rsv_result_61s = order_reserve(
                     t_access_token, t_app_key, t_app_secret,
@@ -5254,7 +5251,7 @@ def echo(update, context):
                         text=(f"-{t_nick_label}-[{rs_name}(<code>{rs_code}</code>)] "
                               f"예약매도주문 완료 | 예약번호: <code>{rsv_result_61s['RSVN_ORD_SEQ']}</code> | "
                               f"가격: {format(ord_price_61s, ',d') if ord_price_61s > 0 else '시장가'}원 | "
-                              f"수량: {format(ord_qty_61s, ',d')}주 | 종료일: {ord_end_dt_61s}"),
+                              f"수량: {format(ord_qty_61s, ',d')}주 ({ord_ratio_61s}%) | 종료일: {ord_end_dt_61s}"),
                         parse_mode='HTML'
                     )
                 else:
@@ -5303,12 +5300,12 @@ def echo(update, context):
         if not rc_code:
             context.bot.send_message(chat_id=user_id, text="선택된 종목이 없습니다. 다시 시도하세요.")
             return
-        # 입력: 정정가(현재가:0)[, 예약종료일YYYYMMDD]
+        # 입력: 정정가(현재가:0), 예약종료일(YYYYMMDD)
         parts_62n = user_text.strip().split(',')
         if not parts_62n[0].strip().isdecimal():
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{rc_name}] 입력 형식 오류: 정정가(현재가:0)[, 예약종료일YYYYMMDD]"
+                text=f"[{rc_name}] 입력 형식 오류: 정정가(현재가:0), 예약종료일(YYYYMMDD)"
             )
             menuNum = '62N'
             return
@@ -5588,28 +5585,46 @@ def echo(update, context):
 
         elif menuNum == '61B':
             initMenuNum()
-            # 입력: 종목코드, 매수가(현재가:0), 매수량[, 예약종료일YYYYMMDD]
+            # 입력: 종목코드, 매수가(현재가:0), 매수금액(원), 예약종료일(YYYYMMDD)
             parts_61b = user_text.split(',')
             if len(parts_61b) < 3 or not parts_61b[1].strip().isdecimal() or not parts_61b[2].strip().isdecimal():
                 context.bot.send_message(
                     chat_id=user_id,
-                    text=f"[{company}] 입력 형식 오류: 종목코드, 매수가(현재가:0), 매수량[, 예약종료일YYYYMMDD]"
+                    text=f"[{company}] 입력 형식 오류: 종목코드, 매수가(현재가:0), 매수금액(원), 예약종료일(YYYYMMDD)"
                 )
             else:
-                ord_price_61b = int(parts_61b[1].strip())
-                ord_price_61b = round_to_valid_price(ord_price_61b, get_tick_size(ord_price_61b)) if ord_price_61b > 0 else 0
-                ord_qty_61b   = int(parts_61b[2].strip())
+                ord_price_61b  = int(parts_61b[1].strip())
+                ord_budget_61b = int(parts_61b[2].strip())   # 매수금액
                 if len(parts_61b) >= 4 and len(parts_61b[3].strip()) == 8 and parts_61b[3].strip().isdigit():
                     ord_end_dt_61b = parts_61b[3].strip()
                 else:
                     ord_end_dt_61b = (datetime.today() + timedelta(days=30)).strftime('%Y%m%d')
                 ord_end_dt_61b = get_previous_business_day(ord_end_dt_61b)
 
+                # 현재가 조회 (매수가 0 → 현재가로 수량 계산)
+                try:
+                    ac_61b_ref = account(arguments[1])
+                    if ord_price_61b == 0:
+                        ap_61b = inquire_price(ac_61b_ref['access_token'], ac_61b_ref['app_key'], ac_61b_ref['app_secret'], code)
+                        calc_price_61b = int(ap_61b['stck_prpr'])
+                    else:
+                        calc_price_61b = ord_price_61b
+                    calc_price_61b = round_to_valid_price(calc_price_61b, get_tick_size(calc_price_61b))
+                    ord_price_61b  = round_to_valid_price(ord_price_61b, get_tick_size(ord_price_61b)) if ord_price_61b > 0 else 0
+                except Exception as e:
+                    context.bot.send_message(chat_id=user_id, text=f"[{company}] 현재가 조회 오류: {str(e)}")
+                    return
+
+                if calc_price_61b <= 0:
+                    context.bot.send_message(chat_id=user_id, text=f"[{company}] 매수가 산출 오류")
+                    return
+                ord_qty_61b = max(1, ord_budget_61b // calc_price_61b)
+
                 target_nicks_61b = g_selected_accounts[:] if g_selected_accounts else [None]
 
                 def process_nick_61b(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
                     t_nick_label = nick if nick else arguments[1]
-                    buy_expect = ord_price_61b * ord_qty_61b
+                    buy_expect = calc_price_61b * ord_qty_61b
                     try:
                         b_61b = inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no)
                         if int(b_61b) < buy_expect:
@@ -5630,7 +5645,8 @@ def echo(update, context):
                                 text=(f"-{t_nick_label}-[{company}(<code>{code}</code>)] "
                                       f"예약매수주문 완료 | 예약번호: <code>{rsv_result_61b['RSVN_ORD_SEQ']}</code> | "
                                       f"가격: {format(ord_price_61b, ',d') if ord_price_61b > 0 else '시장가'}원 | "
-                                      f"수량: {format(ord_qty_61b, ',d')}주 | 종료일: {ord_end_dt_61b}"),
+                                      f"수량: {format(ord_qty_61b, ',d')}주 (매수금액: {format(ord_budget_61b, ',d')}원) | "
+                                      f"종료일: {ord_end_dt_61b}"),
                                 parse_mode='HTML'
                             )
                         else:
