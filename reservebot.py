@@ -153,6 +153,9 @@ g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, n
 g_fibo_code = ""   # 피보나치매도 선택 종목코드
 g_fibo_name = ""   # 피보나치매도 선택 종목명
 
+g_sell3x_code = ""      # 매도주문 선택 종목코드
+g_sell3x_company = ""   # 매도주문 선택 종목명
+
 # 코스피/코스닥 변경 상태
 g_kk_code  = ""   # '0001':코스피, '1001':코스닥
 g_kk_name  = ""
@@ -1020,6 +1023,7 @@ def callback_get(update, context) :
     global g_interest_edit_field
     global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts
     global g_fibo_code, g_fibo_name
+    global g_sell3x_code, g_sell3x_company
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -1845,26 +1849,51 @@ def callback_get(update, context) :
         query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.")
 
     elif command == "매도주문":
-        button_list = build_button(["도가도량", "전체", "절반"], data_selected)
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
+        try:
+            ac_sl = account(arguments[1])
+            c_sl = stock_balance(ac_sl['access_token'], ac_sl['app_key'], ac_sl['app_secret'], ac_sl['acct_no'], "")
+            sl_buttons = []
+            for i in range(len(c_sl.index)):
+                if int(c_sl['hldg_qty'][i]) <= 0:
+                    continue
+                sl_name     = c_sl['prdt_name'][i]
+                sl_code_i   = c_sl['pdno'][i]
+                sl_qty      = int(c_sl['hldg_qty'][i])
+                try:
+                    sl_rate = float(c_sl['evlu_pfls_rt'][i])
+                    sl_evlu = int(c_sl['evlu_amt'][i])
+                    sign    = "+" if sl_rate >= 0 else ""
+                    btn_txt = f"{sl_name}({sl_code_i}) | {format(sl_qty, ',')}주 | {sign}{sl_rate:.2f}% | {format(sl_evlu, ',')}원"
+                except Exception:
+                    btn_txt = f"{sl_name}({sl_code_i}) | {format(sl_qty, ',')}주"
+                sl_buttons.append(InlineKeyboardButton(btn_txt, callback_data=f"sell_ord_{sl_code_i}"))
+            if sl_buttons:
+                query.edit_message_text(
+                    text="매도할 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(sl_buttons, 1))
+                )
+            else:
+                query.edit_message_text(text="보유종목이 없습니다.")
+        except Exception as e:
+            query.edit_message_text(text=f"[매도주문] 오류: {str(e)}")
 
-        context.bot.edit_message_text(text="매도방식을 선택해 주세요.",
-                                        chat_id=update.callback_query.message.chat_id,
-                                        message_id=update.callback_query.message.message_id,
-                                        reply_markup=show_markup)
-
-    elif command == "도가도량" and "매도주문" in data_selected:
+    elif command.startswith("sell_ord_"):
+        sl_code = command[len("sell_ord_"):]
+        try:
+            ac_sl2 = account(arguments[1])
+            c_sl2 = stock_balance(ac_sl2['access_token'], ac_sl2['app_key'], ac_sl2['app_secret'], ac_sl2['acct_no'], "")
+            sl_company = sl_code
+            for i in range(len(c_sl2.index)):
+                if c_sl2['pdno'][i] == sl_code:
+                    sl_company = c_sl2['prdt_name'][i]
+                    break
+        except Exception:
+            sl_company = sl_code
+        g_sell3x_code = sl_code
+        g_sell3x_company = sl_company
         g_selected_accounts.clear()
-        show_account_selection_keyboard(query, "31")
+        show_account_selection_keyboard(query, "SL")
 
-    elif command == "전체" and "매도주문" in data_selected:
-        g_selected_accounts.clear()
-        show_account_selection_keyboard(query, "32")
-
-    elif command == "절반" and "매도주문" in data_selected:
-        g_selected_accounts.clear()
-        show_account_selection_keyboard(query, "33")
-    
     elif command == "주문정정":
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "51")
@@ -2217,9 +2246,6 @@ def callback_get(update, context) :
             "02": "수정할 가격 값을 입력하세요. (숫자만 입력)",
             "03": "매도가를 입력하세요. (현재가:0)",
             "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
-            "31": "종목코드(종목명), 매도가(현재가:0), 매도량을 입력하세요.",
-            "32": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
-            "33": "종목코드(종목명), 매도가(현재가:0)를 입력하세요.",
             "51": "주문정정할 종목코드(종목명), 정정가(시장가:0), 매매구분(매수:1 매도:2)을 입력하세요.",
             "52": "주문취소할 종목코드(종목명), 매매구분(매수:1 매도:2)을 입력하세요.",
             "61": "예약주문할 종목코드(종목명), 매매구분(매수:1 매도:2), 단가(시장가:0), 수량, 예약종료일-8자리(YYYYMMDD)를 입력하세요.",
@@ -2230,7 +2256,14 @@ def callback_get(update, context) :
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
-        if menu_num == "FB":
+        if menu_num == "SL":
+            menuNum = "SL"
+            selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
+            query.edit_message_text(
+                text=(f"[선택계좌: {selected_str}]\n"
+                      f"[{g_sell3x_company}({g_sell3x_code})] 매도가(현재가:0), 매도비율(%)을 입력하세요.")
+            )
+        elif menu_num == "FB":
             menuNum = "FB"
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
@@ -3388,6 +3421,9 @@ def callback_get(update, context) :
         def process_nick_fibo_ord(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             nick_label = f"[{nick}]" if nick else ""
             try:
+                # 주문정보 존재시 취소 처리
+                if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), fo_code, '01') != 'success':
+                    return
                 e_fo2 = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
                 ord_psbl_qty_fo = 0
                 for i in range(len(e_fo2.index)):
@@ -3403,7 +3439,7 @@ def callback_get(update, context) :
                     sell_qty_fo = min(fo_qty, ord_psbl_qty_fo)
                     ord_result = order_cash(
                         False, t_access_token, t_app_key, t_app_secret,
-                        t_acct_no, fo_code, "00", sell_qty_fo, int(fo_price)
+                        str(t_acct_no), fo_code, "00", str(sell_qty_fo), str(int(fo_price))
                     )
                     ord_no = ord_result.get('KRX_FWDG_ORD_ORGNO', '') + '-' + ord_result.get('ODNO', '')
                     context.bot.send_message(
@@ -3530,6 +3566,7 @@ def echo(update, context):
     global g_low_price
     global g_selected_accounts
     global menuNum
+    global g_sell3x_code, g_sell3x_company
 
     # 관심종목 가격 직접입력 대기 처리
     pending = _pending_register.get(user_id)
@@ -4353,6 +4390,112 @@ def echo(update, context):
             context.bot.send_message(chat_id=user_id, text=f"이탈가, 목표가, 최종이탈가, 매도비율 업데이트 오류: {str(e_tp)}")
         return
 
+    if menuNum == 'SL':
+        initMenuNum()
+        s3x_code    = g_sell3x_code
+        s3x_company = g_sell3x_company
+        if not s3x_code:
+            context.bot.send_message(chat_id=user_id, text="선택된 종목이 없습니다. 다시 시도하세요.")
+            return
+        try:
+            ac_s3x = account(arguments[1])
+            ap_s3x = inquire_price(ac_s3x['access_token'], ac_s3x['app_key'], ac_s3x['app_secret'], s3x_code)
+            s3x_cur_price = int(ap_s3x['stck_prpr'])
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id, text=f"[{s3x_company}] 현재가 조회 오류: {str(e)}")
+            return
+
+        # 입력: 매도가(현재가:0), 매도비율(%)
+        parts_s3x = user_text.strip().split(',')
+        if (len(parts_s3x) < 2
+                or not parts_s3x[0].strip().isdecimal()
+                or not parts_s3x[1].strip().isdecimal()
+                or not (1 <= int(parts_s3x[1].strip()) <= 100)):
+            context.bot.send_message(
+                chat_id=user_id,
+                text=f"[{s3x_company}] 매도가(현재가:0), 매도비율(1~100) 형식이 올바르지 않습니다."
+            )
+            menuNum = 'SL'
+            return
+        s3x_sell_price = s3x_cur_price if parts_s3x[0].strip() == '0' else int(parts_s3x[0].strip())
+        s3x_sell_price = round_to_valid_price(s3x_sell_price, get_tick_size(s3x_sell_price))
+        s3x_sell_ratio = int(parts_s3x[1].strip())
+
+        target_nicks_s3x = g_selected_accounts[:] if g_selected_accounts else [None]
+
+        def process_nick_s3x(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            t_nick_label = nick if nick else arguments[1]
+            t_sell_price = s3x_sell_price
+            try:
+                # 주문정보 존재시 취소 처리
+                if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), s3x_code, '01') != 'success':
+                    return
+                e_s3x = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                ord_psbl_qty_s3x = 0
+                for j, _ in enumerate(e_s3x.index):
+                    if e_s3x['pdno'][j] == s3x_code:
+                        ord_psbl_qty_s3x = int(e_s3x['ord_psbl_qty'][j])
+                        break
+                if ord_psbl_qty_s3x <= 0:
+                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{s3x_company}] 주문가능수량 없음")
+                    return
+                t_sell_qty = max(1, int(ord_psbl_qty_s3x * s3x_sell_ratio / 100))
+                c_s3x = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
+                                   s3x_code, "00", str(t_sell_qty), str(t_sell_price))
+                if c_s3x is not None and c_s3x['ODNO'] != "":
+                    time.sleep(0.5)
+                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret,
+                                                   t_acct_no, s3x_code, c_s3x['ODNO'], '01')
+                    tdf = pd.DataFrame(output1)
+                    d = tdf[['odno', 'avg_prvs', 'ord_unpr', 'tot_ccld_qty', 'tot_ccld_amt']]
+                    for k, _ in enumerate(d.index):
+                        d_order_no    = int(d['odno'][k])
+                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                        d_ccld_qty    = d['tot_ccld_qty'][k]
+                        d_ccld_amt    = d['tot_ccld_amt'][k]
+                        context.bot.send_message(
+                            chat_id=user_id,
+                            text=(f"-{t_nick_label}-[{s3x_company}(<code>{s3x_code}</code>)] "
+                                  f"매도가:{format(int(d_order_price), ',d')}원 "
+                                  f"체결량:{format(int(d_ccld_qty), ',d')}주 "
+                                  f"체결금액:{format(int(d_ccld_amt), ',d')}원 "
+                                  f"주문번호:<code>{d_order_no}</code>"),
+                            parse_mode='HTML'
+                        )
+                else:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"-{t_nick_label}-[{s3x_company}] {format(t_sell_price, ',d')}원 매도주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"-{t_nick_label}-[{s3x_company}(<code>{s3x_code}</code>)] 매도주문 오류: {str(e)}",
+                    parse_mode='HTML')
+
+        threads_s3x = []
+        for nick in target_nicks_s3x:
+            if nick is not None:
+                try:
+                    ac_s3x2 = account(nick)
+                except Exception as e:
+                    context.bot.send_message(chat_id=user_id, text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                    continue
+                t_acct_no_s3x = ac_s3x2['acct_no']
+                t_token_s3x   = ac_s3x2['access_token']
+                t_key_s3x     = ac_s3x2['app_key']
+                t_sec_s3x     = ac_s3x2['app_secret']
+            else:
+                t_acct_no_s3x = ac_s3x['acct_no']
+                t_token_s3x   = ac_s3x['access_token']
+                t_key_s3x     = ac_s3x['app_key']
+                t_sec_s3x     = ac_s3x['app_secret']
+            t = threading.Thread(target=process_nick_s3x,
+                                 args=(nick, t_acct_no_s3x, t_token_s3x, t_key_s3x, t_sec_s3x))
+            threads_s3x.append(t)
+            t.start()
+            time.sleep(0.5)
+        for t in threads_s3x:
+            t.join()
+        return
+
     # 입력메시지가 6자리 이상인 경우,
     if len(user_text) >= 6:
         # 입력메시지가 앞의 1자리가 숫자인 경우,
@@ -4525,264 +4668,6 @@ def echo(update, context):
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')         
-
-        elif menuNum == '31':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-                
-                commandBot = user_text.split(sep=',', maxsplit=3)
-                print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
-                print("commandBot[2] : ", commandBot[2])    # 매도량
-
-            # 매도가(현재가:0), 매도량 존재시
-            if commandBot[1].isdecimal() and commandBot[2].isdecimal():
-                sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
-                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
-                # 매도량
-                sell_qty = commandBot[2]
-                target_nicks = g_selected_accounts if g_selected_accounts else [None]
-                
-                def process_nick_31(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-                    t_sell_price = sell_price
-                    t_sell_qty = sell_qty
-                    ord_dvsn = "00"
-                    try:
-                        # 주문정보 존재시 취소 처리
-                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
-                        
-                            # 매도 : 지정가 주문
-                            c = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, ord_dvsn, str(int(t_sell_qty)), str(int(t_sell_price)))
-
-                            if c is not None and c['ODNO'] != "":
-                                # 일별주문체결 조회
-                                output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
-                                tdf = pd.DataFrame(output1)
-                                d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
-
-                                for k, name in enumerate(d.index):
-                                    d_order_no = int(d['odno'][k])
-                                    d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                                    d_order_dt = d['ord_dt'][k]
-                                    d_order_tmd = d['ord_tmd'][k]
-                                    d_name = d['prdt_name'][k]
-                                    d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                                    d_order_amount = d['ord_qty'][k]
-                                    d_total_complete_qty = d['tot_ccld_qty'][k]
-                                    d_remain_qty = d['rmn_qty'][k]
-                                    d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                                    print("매도주문 완료")
-                                    context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(d_order_price),',d')+"원, 매도체결량 : "+format(int(d_total_complete_qty), ',d')+"주, 매도체결금액 : "+format(int(d_total_complete_amt), ',d')+"원 주문 완료, 주문번호 : <code>"+str(d_order_no)+"</code>", parse_mode='HTML')
-
-                            else:
-                                print("매도주문 실패")
-                                context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(t_sell_price),',d')+"원, 매도량 : "+format(int(t_sell_qty), ',d')+"주, 매도주문실패", parse_mode='HTML')
-
-                    except Exception as e:
-                        print('매도주문 오류.', e)
-                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
-                        
-                threads_31 = []
-                for nick in target_nicks:
-                    if nick is not None:
-                        ac = account(nick)
-                        t_acct_no = ac['acct_no']
-                        t_access_token = ac['access_token']
-                        t_app_key = ac['app_key']
-                        t_app_secret = ac['app_secret']
-                    else:
-                        t_acct_no = acct_no
-                        t_access_token = access_token
-                        t_app_key = app_key
-                        t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_31, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_31.append(t)
-                    t.start()
-                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
-                for t in threads_31:
-                    t.join()
-
-            else:
-                print("매도가(현재가:0), 매도량 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0), 매도량 미존재 또는 부적합")         
-
-        elif menuNum == '32':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-                
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
-
-            # 매도가(현재가:0) 존재시 : 전체
-            if commandBot[1].isdecimal():
-                sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
-                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
-                target_nicks = g_selected_accounts if g_selected_accounts else [None]
-                
-                def process_nick_32(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-                    t_sell_price = sell_price
-                    t_sell_qty = 0
-                    ord_dvsn = "00"
-                    try:
-                        # 주문정보 존재시 취소 처리
-                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
-
-                            # 계좌잔고 조회
-                            e = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
-                            
-                            ord_psbl_qty = 0
-                            for j, name in enumerate(e.index):
-                                e_code = e['pdno'][j]
-                                if e_code == code:
-                                    ord_psbl_qty = int(e['ord_psbl_qty'][j])
-                            print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
-                            if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
-                                t_sell_qty = int(round(ord_psbl_qty))
-
-                                # 매도 : 지정가 주문
-                                c = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, ord_dvsn, str(int(t_sell_qty)), str(int(t_sell_price)))
-
-                                if c is not None and c['ODNO'] != "":
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
-                                    tdf = pd.DataFrame(output1)
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
-
-                                    for k, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][k])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                                        d_order_dt = d['ord_dt'][k]
-                                        d_order_tmd = d['ord_tmd'][k]
-                                        d_name = d['prdt_name'][k]
-                                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                                        d_order_amount = d['ord_qty'][k]
-                                        d_total_complete_qty = d['tot_ccld_qty'][k]
-                                        d_remain_qty = d['rmn_qty'][k]
-                                        d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                                        print("매도주문 완료")
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(d_order_price),',d')+"원, 매도체결량 : "+format(int(d_total_complete_qty), ',d')+"주, 매도체결금액 : "+format(int(d_total_complete_amt), ',d')+"원 주문 완료, 주문번호 : <code>"+str(d_order_no)+"</code>", parse_mode='HTML')
-
-                                else:
-                                    print("매도주문 실패")
-                                    context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(t_sell_price),',d')+"원, 매도량 : "+format(int(t_sell_qty), ',d')+"주, 매도주문실패", parse_mode='HTML')
-
-                    except Exception as e:
-                        print('매도주문 오류.', e)
-                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
-                        
-                threads_32 = []
-                for nick in target_nicks:
-                    if nick is not None:
-                        ac = account(nick)
-                        t_acct_no = ac['acct_no']
-                        t_access_token = ac['access_token']
-                        t_app_key = ac['app_key']
-                        t_app_secret = ac['app_secret']
-                    else:
-                        t_acct_no = acct_no
-                        t_access_token = access_token
-                        t_app_key = app_key
-                        t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_32, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_32.append(t)
-                    t.start()
-                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
-                for t in threads_32:
-                    t.join()
-
-            else:
-                print("매도가(현재가:0) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0) 미존재 또는 부적합")         
-
-        elif menuNum == '33':
-            initMenuNum()
-            if len(user_text.split(",")) > 0:
-                
-                commandBot = user_text.split(sep=',', maxsplit=2)
-                print("commandBot[1] : ", commandBot[1])    # 매도가(현재가:0)
-
-            # 매도가(현재가:0) 존재시 : 절반
-            if commandBot[1].isdecimal():
-                sell_price = int(stck_prpr) if commandBot[1] == '0' else int(commandBot[1])                  # 매도가(현재가:0)
-                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
-                target_nicks = g_selected_accounts if g_selected_accounts else [None]
-                
-                def process_nick_33(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
-                    t_sell_price = sell_price
-                    t_sell_qty = 0
-                    ord_dvsn = "00"
-                    try:
-                        # 주문정보 존재시 취소 처리
-                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, '01') == 'success':
-
-                            # 계좌잔고 조회
-                            e = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
-                            
-                            ord_psbl_qty = 0
-                            for j, name in enumerate(e.index):
-                                e_code = e['pdno'][j]
-                                if e_code == code:
-                                    ord_psbl_qty = int(e['ord_psbl_qty'][j])
-                            print("주문가능수량 : " + format(ord_psbl_qty, ',d'))
-                            if ord_psbl_qty > 0:  # 주문가능수량이 존재하는 경우
-                                t_sell_qty = int(round(ord_psbl_qty / 2))
-
-                                # 매도 : 지정가 주문
-                                c = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no), code, ord_dvsn, str(int(t_sell_qty)), str(int(t_sell_price)))
-
-                                if c is not None and c['ODNO'] != "":
-                                    # 일별주문체결 조회
-                                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, code, c['ODNO'], '01')
-                                    tdf = pd.DataFrame(output1)
-                                    d = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
-
-                                    for k, name in enumerate(d.index):
-                                        d_order_no = int(d['odno'][k])
-                                        d_order_type = d['sll_buy_dvsn_cd_name'][k]
-                                        d_order_dt = d['ord_dt'][k]
-                                        d_order_tmd = d['ord_tmd'][k]
-                                        d_name = d['prdt_name'][k]
-                                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                                        d_order_amount = d['ord_qty'][k]
-                                        d_total_complete_qty = d['tot_ccld_qty'][k]
-                                        d_remain_qty = d['rmn_qty'][k]
-                                        d_total_complete_amt = d['tot_ccld_amt'][k]
-
-                                        print("매도주문 완료")
-                                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(d_order_price),',d')+"원, 매도체결량 : "+format(int(d_total_complete_qty), ',d')+"주, 매도체결금액 : "+format(int(d_total_complete_amt), ',d')+"원 주문 완료, 주문번호 : <code>"+str(d_order_no)+"</code>", parse_mode='HTML')
-
-                                else:
-                                    print("매도주문 실패")
-                                    context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : "+format(int(t_sell_price),',d')+"원, 매도량 : "+format(int(t_sell_qty), ',d')+"주, 매도주문실패", parse_mode='HTML')
-
-                    except Exception as e:
-                        print('매도주문 오류.', e)
-                        context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "{<code>"+code+"</code>}] 매도가 : " + format(int(t_sell_price), ',d') + "원, 매도량 : " + format(int(t_sell_qty), ',d') + "주 [매도주문 오류] - " + str(e), parse_mode='HTML')
-                        
-                threads_33 = []
-                for nick in target_nicks:
-                    if nick is not None:
-                        ac = account(nick)
-                        t_acct_no = ac['acct_no']
-                        t_access_token = ac['access_token']
-                        t_app_key = ac['app_key']
-                        t_app_secret = ac['app_secret']
-                    else:
-                        t_acct_no = acct_no
-                        t_access_token = access_token
-                        t_app_key = app_key
-                        t_app_secret = app_secret
-                    t = threading.Thread(target=process_nick_33, args=(nick if nick is not None else arguments[1], t_acct_no, t_access_token, t_app_key, t_app_secret))
-                    threads_33.append(t)
-                    t.start()
-                    time.sleep(0.5)  # KIS API 중복 오류 방지용 계좌 간 호출 간격
-                for t in threads_33:
-                    t.join()
-
-            else:
-                print("매도가(현재가:0) 미존재 또는 부적합")
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매도가(현재가:0) 미존재 또는 부적합")         
 
         elif menuNum == '51':
             initMenuNum()
