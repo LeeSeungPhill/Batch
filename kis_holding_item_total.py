@@ -823,8 +823,10 @@ def process_account(nick):
                     _base_amt   = int(i[15])         if i[15] is not None else 0
 
                     if _base_qty > 0:
-                        _yd  = datetime.now().strftime("%Y%m%d")
-                        _hms = datetime.now().strftime('%H%M%S')
+                        _now = datetime.now()
+                        _yd       = _now.strftime("%Y%m%d")
+                        _hms_proc = _now.strftime('%H%M%S')                          # proc_min: 실제 신호 발생 시각
+                        _hms_dtm  = (_now - timedelta(minutes=10)).strftime('%H%M%S') # trail_dtm: 10분 소급 → loop_start_dt를 현재 10분봉 구간으로 당김
                         _cur = int(a['stck_prpr'])
 
                         _resist  = int(i[2]) if i[2] else 0
@@ -851,8 +853,8 @@ def process_account(nick):
                                 # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
                                 _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
                             elif trail_signal_code == '08': # 지지가 이탈
-                                # stop_price = sign_support_price, target_price = sign_resist_price, exit_price = end_loss_price
-                                _tt_stop, _tt_tgt, _tt_exit = _support, _resist, _eloss
+                                # stop_price = sign_support_price, target_price = sign_resist_price, exit_price = sign_support_price(즉시매도)
+                                _tt_stop, _tt_tgt, _tt_exit = _support, _resist, _support
                             elif trail_signal_code == '09': # 최종목표가 돌파
                                 # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
                                 _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
@@ -863,6 +865,19 @@ def process_account(nick):
                             _tt_loss = int((_base_price - _tt_exit) * _base_qty) if _tt_exit > 0 else 0
                             try:
                                 with conn.cursor() as cur_tt:
+                                    # 당일 활성 레코드(trail_tp IN ('1','2'))가 있으면 'C'로 닫고 새로 INSERT
+                                    cur_tt.execute("""
+                                        SELECT 1 FROM trading_trail
+                                        WHERE acct_no = %s AND code = %s
+                                          AND trail_day = %s AND trail_tp IN ('1','2')
+                                    """, (acct_no, i[0], _yd))
+                                    if cur_tt.fetchone():
+                                        cur_tt.execute("""
+                                            UPDATE trading_trail SET trail_tp = 'C', mod_dt = %s
+                                            WHERE acct_no = %s AND code = %s
+                                              AND trail_day = %s AND trail_tp IN ('1','2')
+                                        """, (datetime.now(), acct_no, i[0], _yd))
+
                                     cur_tt.execute("""
                                         INSERT INTO trading_trail (
                                             acct_no, code, name, trail_day, trail_dtm, trail_tp,
@@ -871,10 +886,10 @@ def process_account(nick):
                                             proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt
                                         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                                     """, (
-                                        acct_no, i[0], i[1], _yd, _hms, '1',
+                                        acct_no, i[0], i[1], _yd, _hms_dtm, '1',
                                         _tt_stop, _tt_tgt, _tt_plan,
                                         _base_price, _base_qty, _base_amt,
-                                        _hms, 'M', _tt_exit, _tt_loss,
+                                        _hms_proc, 'M', _tt_exit, _tt_loss,
                                         datetime.now(), datetime.now()
                                     ))
                                 conn.commit()
