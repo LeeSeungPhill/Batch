@@ -803,8 +803,8 @@ def process_account(nick):
                         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(sig_price, ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원")
                         sell_markup = InlineKeyboardMarkup([[
                             InlineKeyboardButton(
-                                f"전량매도 ({format(sig_price, ',d')}원)",
-                                callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}"
+                                f"신호발생({format(sig_price, ',d')}원) 전량매도",
+                                callback_data=f"menu,signal_sell_{i[1]}_{i[0]}_{n_sell_amount}"
                             )
                         ]])
                         bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=sell_markup)

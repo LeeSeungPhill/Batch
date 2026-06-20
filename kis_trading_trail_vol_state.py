@@ -1463,9 +1463,9 @@ def get_kis_1min_from_datetime(
                                             f" 현재진행:{_w_invest_pct}%({_w_total_invested:,}원)"
                                             f" 초과:{_w_excess_invest:,}원→{_w_plan}% 매도 필요"
                                         )
-                                        _cb_data = f"prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}"
+                                        _cb_data = f"prevlow_sell:{stock_name}:{stock_code}:{basic_qty}"
                                         sell_btn = InlineKeyboardButton(
-                                            text=f"전량매도 {prev_low:,}원",
+                                            text=f"전일저가({prev_low:,}원) 이탈 전량매도",
                                             callback_data=_cb_data
                                         )
                                         markup = InlineKeyboardMarkup([[sell_btn]])

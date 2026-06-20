@@ -134,6 +134,11 @@ g_holding_edit_code = ""
 g_holding_edit_name = ""
 g_holding_edit_field = ""   # 수정할 필드명 (이탈가/최종이탈가/목표가/최종목표가)
 
+# 추적정보 전일저가 이탈 전량매도 상태
+g_trail_sell_code = ""
+g_trail_sell_name = ""
+g_trail_sell_qty  = 0
+
 # 신호 전량매도 상태
 g_signal_sell_code = ""
 g_signal_sell_name = ""
@@ -1670,43 +1675,28 @@ def callback_get(update, context) :
             query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
 
     elif command.startswith("prevlow_sell:"):
-        # kis_trading_trail_vol_state.py 에서 발송한 전일저가 이탈 전량매도 버튼
-        # callback_data 형식: prevlow_sell:{nick}:{stock_code}:{basic_qty}:{prev_low}
+        # kis_trading_trail_vol_state.py 에서 전송한 전일저가 이탈 전량매도 대상 매도가 입력 처리
         parts = command.split(":")
-        p_nick  = parts[1]
+        p_name  = parts[1]
         p_code  = parts[2]
         p_qty   = int(parts[3])
-        p_price = int(parts[4])
-        try:
-            query.answer("매도 주문 처리 중...")
-        except Exception:
-            pass
-        try:
-            ac_p = account(p_nick)
-            c_ord = order_cash(
-                False, ac_p['access_token'], ac_p['app_key'], ac_p['app_secret'],
-                str(ac_p['acct_no']), p_code, "00", str(p_qty), str(p_price)
-            )
-            if c_ord:
-                try:
-                    query.edit_message_reply_markup(reply_markup=None)
-                except Exception:
-                    pass
-                context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"✅ [{p_nick}] 전량매도 완료\n종목: {p_code} | {format(p_qty, ',d')}주 | {format(p_price, ',d')}원"
-                )
-            else:
-                query.edit_message_text(text=f"❌ [{p_nick}] 전량매도 실패: {p_code}")
-        except Exception as e:
-            query.edit_message_text(text=f"[prevlow_sell] 오류: {str(e)}")
+        global g_trail_sell_code, g_trail_sell_name, g_trail_sell_qty
+        g_trail_sell_code = p_code
+        g_trail_sell_name = p_name
+        g_trail_sell_qty = p_qty
+        menuNum = '07'
+        query.edit_message_text(
+            text=f"[{p_name}({p_code})] {format(p_qty, ',d')}주 전량매도\n매도가를 입력하세요. (현재가:0)"
+        )
 
     elif command.startswith("signal_sell_"):
+        # kis_holding_item_total.py 에서 전송한 전량매도 대상 매도가 입력 처리
         parts = command.split("_")
-        sig_code = parts[2]
-        sig_qty  = int(parts[3])
-        sig_name_match = stock_code[stock_code.code == sig_code]
-        sig_name = sig_name_match.company.values[0].strip() if len(sig_name_match) > 0 else sig_code
+        sig_name = parts[2]
+        sig_code = parts[3]
+        sig_qty  = int(parts[4])
+        # sig_name_match = stock_code[stock_code.code == sig_code]
+        # sig_name = sig_name_match.company.values[0].strip() if len(sig_name_match) > 0 else sig_code
         global g_signal_sell_code, g_signal_sell_name, g_signal_sell_qty
         g_signal_sell_code = sig_code
         g_signal_sell_name = sig_name
@@ -4049,7 +4039,7 @@ def callback_get(update, context) :
             t.join()
 
     elif data_selected.startswith('tp:'):
-        # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 trail_plan 설정 버튼
+        # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 이탈가(stop_price), 목표가(target_price), 최종이탈가(exit_price), 매도비율(trail_plan) 입력 처리
         parts = data_selected.split(':')
         if len(parts) == 7:
             global g_tp_pending
@@ -4320,7 +4310,7 @@ def echo(update, context):
                 text=f"[{g_holding_edit_name}] {g_holding_edit_field} 업데이트 오류: {str(e)}")
         return
 
-    # 신호 전량매도 — 매도가만 입력
+    # kis_holding_item_total.py 에서 전송한 전량매도 대상 매도가 입력 처리
     if menuNum == '03':
         initMenuNum()
         global g_signal_sell_code, g_signal_sell_name, g_signal_sell_qty
@@ -4572,6 +4562,60 @@ def echo(update, context):
             except Exception: pass
             context.bot.send_message(chat_id=user_id,
                 text=f"[{g_kk_name}] {g_kk_field} 업데이트 오류: {str(e)}")
+        return
+
+    # kis_trading_trail_vol_state.py 에서 전송한 전일저가 이탈 전량매도 대상 매도가 입력 처리
+    if menuNum == '07':
+        initMenuNum()
+        global g_trail_sell_code, g_trail_sell_name, g_trail_sell_qty
+        if not user_text.strip().isdecimal():
+            context.bot.send_message(chat_id=user_id,
+                text=f"[{g_signal_sell_name}] 매도가는 숫자(0=현재가)로 입력하세요.")
+            return
+        input_price = int(user_text.strip())
+        input_price = round_to_valid_price(input_price, get_tick_size(input_price))
+        ss_code = g_trail_sell_code
+        ss_name = g_trail_sell_name
+        ss_qty  = g_trail_sell_qty
+
+        def process_trail_sell_07():
+            try:
+                ac_03 = account(arguments[1])
+                sell_price_03 = input_price
+                if sell_price_03 == 0:
+                    ap = inquire_price(ac_03['access_token'], ac_03['app_key'], ac_03['app_secret'], ss_code)
+                    sell_price_03 = int(ap['stck_prpr'])
+                c_ord = order_cash(False, ac_03['access_token'], ac_03['app_key'], ac_03['app_secret'],
+                                   str(ac_03['acct_no']), ss_code, "00", str(ss_qty), str(sell_price_03))
+                if c_ord is not None and c_ord['ODNO'] != "":
+                    time.sleep(0.5)
+                    output1 = daily_order_complete(ac_03['access_token'], ac_03['app_key'], ac_03['app_secret'],
+                                                   ac_03['acct_no'], ss_code, c_ord['ODNO'], '01')
+                    tdf = pd.DataFrame(output1)
+                    d = tdf[['odno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'tot_ccld_amt', 'rmn_qty']]
+                    for k, _ in enumerate(d.index):
+                        d_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
+                        d_qty  = d['ord_qty'][k]
+                        d_ccld = d['tot_ccld_qty'][k]
+                        d_amt  = d['tot_ccld_amt'][k]
+                        d_rmn  = d['rmn_qty'][k]
+                        d_no   = int(d['odno'][k])
+                        context.bot.send_message(
+                            chat_id=user_id,
+                            text=f"[{ss_name}(<code>{ss_code}</code>)] "
+                                 f"매도가:{format(int(d_price), ',d')}원 | 주문량:{format(int(d_qty), ',d')}주 | "
+                                 f"체결량:{format(int(d_ccld), ',d')}주 | 체결금:{format(int(d_amt), ',d')}원 | "
+                                 f"잔량:{format(int(d_rmn), ',d')}주 | 주문번호:<code>{d_no}</code>",
+                            parse_mode='HTML'
+                        )
+                else:
+                    context.bot.send_message(chat_id=user_id,
+                        text=f"[{ss_name}({ss_code})] 전량매도 주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id,
+                    text=f"[{ss_name}({ss_code})] 전량매도 오류: {str(e)}")
+
+        threading.Thread(target=process_trail_sell_07).start()
         return
 
     # 추적재개 — 버튼에서 종목 선택 후 이탈가, 목표가, 최종이탈가, 추적상태만 입력
@@ -4912,7 +4956,7 @@ def echo(update, context):
             context.bot.send_message(chat_id=user_id, text=f"[피보나치매도] 오류: {str(e)}")
         return
 
-    # stop_price, target_price, exit_price, trail_plan 설정 입력 (kis_trading_set.py 버튼에서 진입)
+    # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 이탈가(stop_price), 목표가(target_price), 최종이탈가(exit_price), 매도비율(trail_plan) 입력 처리
     if menuNum == 'tp':
         val_text = user_text.split(',', 3)
         if val_text[3] == '0':
