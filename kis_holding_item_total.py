@@ -712,7 +712,7 @@ def process_account(nick):
         # 보유정보 조회
         cur03 = conn.cursor()
         cur03.execute("""
-            SELECT code, name, sign_resist_price, sign_support_price, end_target_price, end_loss_price, purchase_amount,
+            SELECT A.code, A.name, A.sign_resist_price, A.sign_support_price, A.end_target_price, A.end_loss_price, A.purchase_amount,
                 (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '02') AS market_dead,
                 (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = '0001' AND trail_signal_code = '04') AS market_over,
                 CASE WHEN cast(A.purchase_amount AS INTEGER) > 0
@@ -720,12 +720,32 @@ def process_account(nick):
                         ELSE null END AS low_price,
                 (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '07') AS regist_over,
                 (SELECT 1 FROM trail_signal_recent WHERE acct_no = %s AND trail_day = TO_CHAR(now(), 'YYYYMMDD') AND code = A.code AND trail_signal_code = '09') AS target_over,
-                COALESCE(NULLIF(trading_plan, ''), 'as'), COALESCE(safe_margin_sum, 0)
+                COALESCE(NULLIF(A.trading_plan, ''), 'as'), COALESCE(A.safe_margin_sum, 0),
+                A.purchase_price,
+                A.purchase_sum,
+                F.market_ratio,
+                F.prvs_rcdl_excc_amt,
+                (SELECT COALESCE(SUM(S.eval_sum), 0)
+                 FROM "stockBalance_stock_balance" S
+                 WHERE S.acct_no = A.acct_no AND S.proc_yn = 'Y'
+                   AND (S.trading_plan IS NULL OR S.trading_plan NOT IN ('i', 'h'))
+                ) AS filtered_scts_evlu
             FROM "stockBalance_stock_balance" A
-            WHERE acct_no = %s AND proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
+            LEFT JOIN "stockFundMng_stock_fund_mng" F ON F.acct_no = A.acct_no
+            WHERE A.acct_no = %s AND A.proc_yn = 'Y' AND (A.trading_plan IS NULL OR A.trading_plan NOT IN ('i'))
         """, (str(acct_no), str(acct_no), str(acct_no), str(acct_no), str(acct_no)))
         result_three = cur03.fetchall()
         cur03.close()
+
+        market_ratio_v = None
+        u_prvs_rcdl_excc_amt = 0
+        filtered_tot_evlu = 0
+        if result_three:
+            _r0 = result_three[0]
+            market_ratio_v       = float(_r0[16]) if _r0[16] is not None else None
+            u_prvs_rcdl_excc_amt = int(_r0[17])   if _r0[17] is not None else 0
+            _fsv                 = int(_r0[18])    if _r0[18] is not None else 0
+            filtered_tot_evlu    = u_prvs_rcdl_excc_amt + _fsv
 
         for i in result_three:
             a = ""
@@ -796,6 +816,72 @@ def process_account(nick):
                 if len(result_four) > 0:
                     continue
 
+                # trading_plan ='h' 대상의 신호 발생 시 trading_trail 레코드 생성
+                if i[12] == 'h' and trail_signal_code in ('07', '08', '09', '10'):
+                    _base_qty   = int(i[6])          if i[6]  is not None else 0
+                    _base_price = int(float(i[14]))  if i[14] is not None else 0
+                    _base_amt   = int(i[15])         if i[15] is not None else 0
+
+                    if _base_qty > 0:
+                        _yd  = datetime.now().strftime("%Y%m%d")
+                        _hms = datetime.now().strftime('%H%M%S')
+                        _cur = int(a['stck_prpr'])
+
+                        _resist  = int(i[2]) if i[2] else 0
+                        _support = int(i[3]) if i[3] else 0
+                        _etgt    = int(i[4]) if i[4] else 0
+                        _eloss   = int(i[5]) if i[5] else 0
+
+                        if trail_signal_code in ('09', '10'):                                       # 최종목표가 돌파, 최종이탈가 이탈시
+                            _tt_plan = '100'                                                        # 매도비율 100% 설정
+                        else:                                                                       # 저항가 돌파, 이탈가 이탈시 
+                            _tt_plan = None
+                            if market_ratio_v is not None and filtered_tot_evlu > 0 and _cur > 0:
+                                _req_cash = int(filtered_tot_evlu * (100 - market_ratio_v) / 100)
+                                if u_prvs_rcdl_excc_amt < _req_cash:                                # 시장비율의 현금액이 현재 현금액보다 클 경우
+                                    _shortage = _req_cash - u_prvs_rcdl_excc_amt
+                                    _pv = min(100, round(_shortage / (_cur * _base_qty) * 100))     # 매도비율 최대 100% 설정(매도 대상 금액이 시장비율의 현금액과 현재 현금액의 차액보다 작을 경우)
+                                    if _pv > 0:
+                                        _tt_plan = str(_pv)
+                                else:                                                               # 시장비율의 현금액이 현재 현금액보다 작을 경우
+                                    _tt_plan = '50'                                                 # 매도비율 50% 설정
+
+                        if _tt_plan is not None:
+                            if trail_signal_code == '07':   # 저항가 돌파
+                                # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
+                                _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
+                            elif trail_signal_code == '08': # 지지가 이탈
+                                # stop_price = sign_support_price, target_price = sign_resist_price, exit_price = end_loss_price
+                                _tt_stop, _tt_tgt, _tt_exit = _support, _resist, _eloss
+                            elif trail_signal_code == '09': # 최종목표가 돌파
+                                # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
+                                _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
+                            else:                           # 최종이탈가 이탈
+                                # stop_price = end_loss_price, target_price = sign_resist_price, exit_price = end_loss_price
+                                _tt_stop, _tt_tgt, _tt_exit = _eloss,   _resist, _eloss
+
+                            _tt_loss = int((_base_price - _tt_exit) * _base_qty) if _tt_exit > 0 else 0
+                            try:
+                                with conn.cursor() as cur_tt:
+                                    cur_tt.execute("""
+                                        INSERT INTO trading_trail (
+                                            acct_no, code, name, trail_day, trail_dtm, trail_tp,
+                                            stop_price, target_price, trail_plan,
+                                            basic_price, basic_qty, basic_amt,
+                                            proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt
+                                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                    """, (
+                                        acct_no, i[0], i[1], _yd, _hms, '1',
+                                        _tt_stop, _tt_tgt, _tt_plan,
+                                        _base_price, _base_qty, _base_amt,
+                                        _hms, 'M', _tt_exit, _tt_loss,
+                                        datetime.now(), datetime.now()
+                                    ))
+                                conn.commit()
+                                print(f"trading_trail 생성: {i[1]}[{i[0]}] 신호:{trail_signal_code} plan:{_tt_plan}%")
+                            except Exception as _tte:
+                                print(f"trading_trail 생성 실패: {i[1]}[{i[0]}] {_tte}")
+
                 try:
                     print("종목명 : " + i[1] + " 추적신호 : " + trail_signal_name)
                     sig_price = int(a['stck_prpr'])
@@ -803,8 +889,8 @@ def process_account(nick):
                         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(sig_price, ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원")
                         sell_markup = InlineKeyboardMarkup([[
                             InlineKeyboardButton(
-                                f"전량매도 ({format(sig_price, ',d')}원)",
-                                callback_data=f"menu,signal_sell_{i[0]}_{n_sell_amount}"
+                                f"신호발생({format(sig_price, ',d')}원) 전량매도",
+                                callback_data=f"menu,signal_sell_{i[1]}_{i[0]}_{n_sell_amount}"
                             )
                         ]])
                         bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=sell_markup)
