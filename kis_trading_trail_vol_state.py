@@ -1351,20 +1351,23 @@ def get_kis_1min_from_datetime(
                             if not _cond_b_capable:
                                 fixed_stop = int(stop_price) if stop_price else 0
                                 if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
-                                    breakdown_wait.update({
-                                        "active": True,
-                                        "tenmin_key": current_10min_key,
-                                        "tenmin_low": None,
-                                        "tenmin_vol_ok": None,
-                                        "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
-                                        "signal_type": "FIXED_STOP",
-                                        "effective_stop": fixed_stop,
-                                        "order_price": 0,
-                                    })
 
                                     # 시장 단기 하락인 경우 매도 진행
                                     if _short_market_down:
+                                        breakdown_wait.update({
+                                            "active": True,
+                                            "tenmin_key": current_10min_key,
+                                            "tenmin_low": None,
+                                            "tenmin_vol_ok": None,
+                                            "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
+                                            "signal_type": "FIXED_STOP",
+                                            "effective_stop": fixed_stop,
+                                            "order_price": close_price,
+                                        })                                        
                                         sell_trigger = True
+                                        sell_reason = f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                        sell_signal_type = "FIXED_STOP"
+                                        order_price = close_price
 
                                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1382,6 +1385,16 @@ def get_kis_1min_from_datetime(
                                                 print(f"텔레그램 발송 실패: {te}")
 
                                     else:
+                                        breakdown_wait.update({
+                                            "active": True,
+                                            "tenmin_key": current_10min_key,
+                                            "tenmin_low": None,
+                                            "tenmin_vol_ok": None,
+                                            "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
+                                            "signal_type": "FIXED_STOP",
+                                            "effective_stop": fixed_stop,
+                                            "order_price": 0,
+                                        })
                                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
                                         if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
@@ -1405,20 +1418,23 @@ def get_kis_1min_from_datetime(
 
                         # 이탈가(stop_price) 이탈하고, 현재시간 기준 거래량 비율 초과한 경우
                         if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
-                            breakdown_wait.update({
-                                "active": True,
-                                "tenmin_key": current_10min_key,
-                                "tenmin_low": None,
-                                "tenmin_vol_ok": None,
-                                "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
-                                "signal_type": "FIXED_STOP",
-                                "effective_stop": fixed_stop,
-                                "order_price": 0,
-                            })
 
                             # 시장 단기 하락인 경우 매도 진행
                             if _short_market_down:
+                                breakdown_wait.update({
+                                    "active": True,
+                                    "tenmin_key": current_10min_key,
+                                    "tenmin_low": None,
+                                    "tenmin_vol_ok": None,
+                                    "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
+                                    "signal_type": "FIXED_STOP",
+                                    "effective_stop": fixed_stop,
+                                    "order_price": close_price,
+                                })                                
                                 sell_trigger = True
+                                sell_reason = f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                sell_signal_type = "FIXED_STOP"
+                                order_price = close_price
 
                                 # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1436,6 +1452,16 @@ def get_kis_1min_from_datetime(
                                         print(f"텔레그램 발송 실패: {te}")
 
                             else:
+                                breakdown_wait.update({
+                                    "active": True,
+                                    "tenmin_key": current_10min_key,
+                                    "tenmin_low": None,
+                                    "tenmin_vol_ok": None,
+                                    "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
+                                    "signal_type": "FIXED_STOP",
+                                    "effective_stop": fixed_stop,
+                                    "order_price": 0,
+                                })                                
                                 # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
                                 if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
