@@ -850,17 +850,13 @@ def process_account(nick):
 
                         if _tt_plan is not None:
                             if trail_signal_code == '07':   # 저항가 돌파
-                                # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
-                                _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
+                                _tt_stop, _tt_tgt, _tt_exit = _resist,   int(_resist  * 1.05), _support
                             elif trail_signal_code == '08': # 지지가 이탈
-                                # stop_price = sign_support_price, target_price = sign_resist_price, exit_price = sign_support_price(즉시매도)
-                                _tt_stop, _tt_tgt, _tt_exit = _support, _resist, _support
+                                _tt_stop, _tt_tgt, _tt_exit = _support,  int(_support * 1.05), _support
                             elif trail_signal_code == '09': # 최종목표가 돌파
-                                # stop_price = sign_resist_price, target_price = end_target_price, exit_price = end_loss_price
-                                _tt_stop, _tt_tgt, _tt_exit = _resist,  _etgt,   _eloss
+                                _tt_stop, _tt_tgt, _tt_exit = _etgt,     int(_etgt    * 1.05), _resist
                             else:                           # 최종이탈가 이탈
-                                # stop_price = end_loss_price, target_price = sign_resist_price, exit_price = end_loss_price
-                                _tt_stop, _tt_tgt, _tt_exit = _eloss,   _resist, _eloss
+                                _tt_stop, _tt_tgt, _tt_exit = _eloss,    int(_eloss   * 1.05), _eloss
 
                             _tt_loss = int((_base_price - _tt_exit) * _base_qty) if _tt_exit > 0 else 0
                             try:
