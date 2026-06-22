@@ -1103,7 +1103,7 @@ def get_kis_1min_from_datetime(
         _short_val         = _mkt_trend_pre.get(_short_key, '')
         _short_market_down = (_short_val == '02')
         if verbose and _short_market_down:
-            print(f"[시뮬] {stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
+            print(f"{stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
 
     if trail_tp == 'L':
         _start_time = "163000" if trade_date.endswith("1119") else "153000"
@@ -1351,20 +1351,23 @@ def get_kis_1min_from_datetime(
                             if not _cond_b_capable:
                                 fixed_stop = int(stop_price) if stop_price else 0
                                 if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
-                                    breakdown_wait.update({
-                                        "active": True,
-                                        "tenmin_key": current_10min_key,
-                                        "tenmin_low": None,
-                                        "tenmin_vol_ok": None,
-                                        "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
-                                        "signal_type": "FIXED_STOP",
-                                        "effective_stop": fixed_stop,
-                                        "order_price": 0,
-                                    })
 
                                     # 시장 단기 하락인 경우 매도 진행
                                     if _short_market_down:
+                                        breakdown_wait.update({
+                                            "active": True,
+                                            "tenmin_key": current_10min_key,
+                                            "tenmin_low": None,
+                                            "tenmin_vol_ok": None,
+                                            "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
+                                            "signal_type": "FIXED_STOP",
+                                            "effective_stop": fixed_stop,
+                                            "order_price": close_price,
+                                        })                                        
                                         sell_trigger = True
+                                        sell_reason = f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                        sell_signal_type = "FIXED_STOP"
+                                        order_price = close_price
 
                                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1382,6 +1385,16 @@ def get_kis_1min_from_datetime(
                                                 print(f"텔레그램 발송 실패: {te}")
 
                                     else:
+                                        breakdown_wait.update({
+                                            "active": True,
+                                            "tenmin_key": current_10min_key,
+                                            "tenmin_low": None,
+                                            "tenmin_vol_ok": None,
+                                            "reason": f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%]",
+                                            "signal_type": "FIXED_STOP",
+                                            "effective_stop": fixed_stop,
+                                            "order_price": 0,
+                                        })
                                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
                                         if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
@@ -1405,20 +1418,23 @@ def get_kis_1min_from_datetime(
 
                         # 이탈가(stop_price) 이탈하고, 현재시간 기준 거래량 비율 초과한 경우
                         if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
-                            breakdown_wait.update({
-                                "active": True,
-                                "tenmin_key": current_10min_key,
-                                "tenmin_low": None,
-                                "tenmin_vol_ok": None,
-                                "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
-                                "signal_type": "FIXED_STOP",
-                                "effective_stop": fixed_stop,
-                                "order_price": 0,
-                            })
 
                             # 시장 단기 하락인 경우 매도 진행
                             if _short_market_down:
+                                breakdown_wait.update({
+                                    "active": True,
+                                    "tenmin_key": current_10min_key,
+                                    "tenmin_low": None,
+                                    "tenmin_vol_ok": None,
+                                    "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
+                                    "signal_type": "FIXED_STOP",
+                                    "effective_stop": fixed_stop,
+                                    "order_price": close_price,
+                                })                                
                                 sell_trigger = True
+                                sell_reason = f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                sell_signal_type = "FIXED_STOP"
+                                order_price = close_price
 
                                 # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1436,6 +1452,16 @@ def get_kis_1min_from_datetime(
                                         print(f"텔레그램 발송 실패: {te}")
 
                             else:
+                                breakdown_wait.update({
+                                    "active": True,
+                                    "tenmin_key": current_10min_key,
+                                    "tenmin_low": None,
+                                    "tenmin_vol_ok": None,
+                                    "reason": f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%]",
+                                    "signal_type": "FIXED_STOP",
+                                    "effective_stop": fixed_stop,
+                                    "order_price": 0,
+                                })                                
                                 # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
                                 if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
@@ -1734,7 +1760,18 @@ def get_kis_1min_from_datetime(
                 "tenmin_vol": 0,             # 이탈 발생 10분봉 거래량
                 "tenmin_avg_vol": 0,         # 직전 20개 10분봉 평균 거래량
                 "sell_label": "",            # 매도 사유 ('손절매도' / '이탈매도')
+                "sell_on_candle_close": False,  # True: 10분봉 완성 시점에 즉시 매도 (_short_market_down 케이스)
                 "last_alert_tenmin_key": _cached_alert_key_1,  # 스케줄러 재호출 간 유지 (10분 중복 방지)
+            }
+
+            # trail_tp='2' 분봉 단위 이탈가 감지 → 해당 10분봉 완성 시 sell_trigger 활성
+            _cached_alert_key_2 = _alert_keys.get("2")
+            breakdown_wait_2 = {
+                "active": False,             # 이탈가 이탈 감지 여부
+                "breach_price": 0,           # 이탈된 가격 (stop_price 또는 exit_price)
+                "breach_type": "",           # "exit" or "stop"
+                "tenmin_key": None,          # 이탈 발생 10분봉 키 (같은 봉 완성 시점에 sell_trigger)
+                "last_alert_tenmin_key": _cached_alert_key_2,
             }
 
         # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
@@ -1766,7 +1803,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 상한가 도달 시 절반 매도 (trail_tp='1','2' 공통)
                     # ===============================
-                    if high_price >= upper_limit:
+                    if not pre_market and high_price >= upper_limit:
                         i_trail_plan = "50"
                         trail_qty = max(1, int(basic_qty * 0.5))
                         order_price = upper_limit
@@ -1801,7 +1838,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성 (09:10 또는 10:10 이전에도 수행)
                     # ===============================
-                    if pre_market is None: 
+                    if not pre_market:
                         if tenmin_state["base_low"] is None:
                             chk_vol = volumn if volumn else 0
                             if trail_tp == '1':
@@ -1809,6 +1846,42 @@ def get_kis_1min_from_datetime(
                                 if breakdown_wait_1["active"]:
                                     current_10min_key_1 = get_10min_key(row["dt"])
                                     if current_10min_key_1 != breakdown_wait_1["tenmin_key"]:
+                                        # sell_on_candle_close: _short_market_down 이탈가 이탈 → 해당 10분봉 완성 시 즉시 매도
+                                        # (tenmin_low 이탈 대기 없이 봉 완성 시점에 현재가로 매도)
+                                        if breakdown_wait_1.get("sell_on_candle_close"):
+                                            order_price = close_price  # 시장 약세 → 현재가
+                                            trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
+                                            i_trail_plan = trail_plan if trail_plan else "100"
+                                            trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
+                                            trail_amt = order_price * trail_qty
+                                            u_basic_qty = basic_qty - trail_qty
+                                            u_basic_amt = basic_price * u_basic_qty
+                                            sell_label = breakdown_wait_1["sell_label"]
+                                            try:
+                                                result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', sell_label, conn, bot, chat_id)
+                                                if result and verbose:
+                                                    try:
+                                                        message = (
+                                                            f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                                            f" [시장 약세] 이탈가 이탈 10분봉 완성 → {sell_label}"
+                                                            f" (매도가:{order_price:,})"
+                                                        )
+                                                        print(message)
+                                                        bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    except Exception as te:
+                                                        print(f"텔레그램 발송 실패: {te}")
+                                            except Exception as e:
+                                                print(f"상위 호출부: 매도 함수 호출 중 예외 발생(무시됨): {e}")
+                                            signals.append({
+                                                "signal_type": "BREAKDOWN_BEFORE_BREAKOUT",
+                                                "종목명": stock_name,
+                                                "종목코드": stock_code,
+                                                "발생일자": row["일자"],
+                                                "발생시간": row["시간"],
+                                                "이탈가격": breakdown_check
+                                            })
+                                            return signals
+
                                         # 이탈 발생 10분봉 완성 → 저가·거래량 확정
                                         if breakdown_wait_1["tenmin_low"] is None:
                                             trigger_key_1 = breakdown_wait_1["tenmin_key"]
@@ -1832,8 +1905,8 @@ def get_kis_1min_from_datetime(
                                                         "sell_label": "",
                                                     })
 
-                                    # 이탈가 < 10분봉 저가
-                                    if breakdown_wait_1["tenmin_low"] is not None and stop_price < breakdown_wait_1["tenmin_low"]:
+                                    # 현재 분봉 저가가 이탈 10분봉 저가 이탈 시 매도
+                                    if breakdown_wait_1["tenmin_low"] is not None and low_price < breakdown_wait_1["tenmin_low"]:
                                         # 해당 종목의 시장이 단기 하락인 경우 : 매도주문가 = 현재가
                                         if _short_market_down:
                                             order_price = close_price
@@ -1885,20 +1958,41 @@ def get_kis_1min_from_datetime(
                                             "tenmin_vol_ok": None,
                                             "sell_label": "최종이탈가 매도",
                                         })
-                                        # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                        # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
-                                        _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                        if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
-                                            breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
-                                            _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
-                                            try:
-                                                message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 대기"
-                                                )
-                                                print(message)
-                                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
-                                            except Exception as te:
-                                                print(f"텔레그램 발송 실패: {te}")
+
+                                        # 시장 단기 하락인 경우 10분봉 완성 후 매도 대기
+                                        if _short_market_down:
+                                            breakdown_wait_1["sell_on_candle_close"] = True
+
+                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                                breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
+                                                _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
+                                                try:
+                                                    message = (
+                                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
+                                                    )
+                                                    print(message)
+                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                except Exception as te:
+                                                    print(f"텔레그램 발송 실패: {te}")
+
+                                        else:
+                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                                breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
+                                                _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
+                                                try:
+                                                    message = (
+                                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 대기"
+                                                    )
+                                                    print(message)
+                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                except Exception as te:
+                                                    print(f"텔레그램 발송 실패: {te}")            
 
                                     # 이탈가(stop_price) 이탈
                                     elif breakdown_check <= stop_price and acml_vol > chk_vol:
@@ -1910,20 +2004,41 @@ def get_kis_1min_from_datetime(
                                             "tenmin_vol_ok": None,
                                             "sell_label": "이탈가 매도",
                                         })
-                                        # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                        # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
-                                        _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                        if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
-                                            breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
-                                            _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
-                                            try:
-                                                message = (
-                                                    f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 대기"
-                                                )
-                                                print(message)
-                                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
-                                            except Exception as te:
-                                                print(f"텔레그램 발송 실패: {te}")
+
+                                        # 시장 단기 하락인 경우 10분봉 완성 후 매도 대기
+                                        if _short_market_down:
+                                            breakdown_wait_1["sell_on_candle_close"] = True
+
+                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                                breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
+                                                _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
+                                                try:
+                                                    message = (
+                                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
+                                                    )
+                                                    print(message)
+                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                except Exception as te:
+                                                    print(f"텔레그램 발송 실패: {te}")
+
+                                        else:    
+                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
+                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                                breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
+                                                _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
+                                                try:
+                                                    message = (
+                                                        f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 대기"
+                                                    )
+                                                    print(message)
+                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                except Exception as te:
+                                                    print(f"텔레그램 발송 실패: {te}")
 
                                 # 목표가 돌파
                                 if breakout_check >= target_price:
@@ -1978,6 +2093,36 @@ def get_kis_1min_from_datetime(
                             completed_key = get_completed_10min_key(row["dt"])
                             tenmin_df = df[df["dt"].apply(get_completed_10min_key) == completed_key]
 
+                            # ── breakdown_wait_2: 분봉 저가 기준 이탈가 감지 → 해당 10분봉 완성 시 매도 ──
+                            # 이탈가 이탈이 발생한 10분봉의 마지막 분봉 처리 시 조건 D에서 sell_trigger 활성화
+                            if not breakdown_wait_2["active"]:
+                                _bw2_10min_key = get_10min_key(row["dt"])
+                                _bw2_is_exit = exit_price and low_price <= int(exit_price)
+                                _bw2_is_stop = low_price <= int(stop_price)
+                                if _bw2_is_exit or _bw2_is_stop:
+                                    _bw2_breach_price = int(exit_price) if _bw2_is_exit else int(stop_price)
+                                    _bw2_breach_type = "exit" if _bw2_is_exit else "stop"
+                                    _bw2_label = "최종이탈가" if _bw2_is_exit else "이탈가"
+                                    breakdown_wait_2.update({
+                                        "active": True,
+                                        "breach_price": _bw2_breach_price,
+                                        "breach_type": _bw2_breach_type,
+                                        "tenmin_key": _bw2_10min_key,
+                                    })
+                                    _bw2_key_str = _bw2_10min_key.strftime("%Y%m%d%H%M")
+                                    if breakdown_wait_2["last_alert_tenmin_key"] is None or _bw2_key_str > breakdown_wait_2["last_alert_tenmin_key"]:
+                                        breakdown_wait_2["last_alert_tenmin_key"] = _bw2_key_str
+                                        _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "2", _bw2_key_str)
+                                        try:
+                                            message = (
+                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
+                                                f" {_bw2_label}({_bw2_breach_price:,})원 분봉 저가 이탈 → 10분봉 완성 후 매도 대기"
+                                            )
+                                            print(message)
+                                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                        except Exception as te:
+                                            print(f"텔레그램 발송 실패: {te}")
+
                             # 10분봉의 마지막 1분봉일 때만 처리 (10분봉 완성 시점)
                             # 돌파 발생 10분봉 자체는 스킵 → 다음 완성 10분봉부터 매도/갱신 체크
                             if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
@@ -2004,6 +2149,16 @@ def get_kis_1min_from_datetime(
                                     prev_close = int(prev_tenmin_df.loc[prev_tenmin_df["dt"].idxmax(), "종가"])
                                 else:
                                     prev_close = safety_margin + 1  # 직전봉 없으면 정상 간주
+
+                                # 조건 D: breakdown_wait_2 활성 → 분봉 저가 이탈가 이탈 확인된 10분봉 완성 시 매도
+                                # 이탈가 이탈이 발생한 10분봉(tenmin_key)과 현재 완성 중인 봉(completed_key)이
+                                # 같거나 이후이면 sell_trigger 활성 (이탈가 이탈 분봉이 속한 봉이 완성되는 시점)
+                                if not sell_trigger and breakdown_wait_2["active"] and breakdown_wait_2["tenmin_key"] is not None:
+                                    if completed_key >= breakdown_wait_2["tenmin_key"]:
+                                        _bw2_label = "최종이탈가" if breakdown_wait_2["breach_type"] == "exit" else "이탈가"
+                                        sell_trigger = True
+                                        sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
+                                        sell_reason = f"{_bw2_label}({breakdown_wait_2['breach_price']:,})원 분봉 저가 이탈 10분봉 완성 매도 (매도가:{sell_price:,})"
 
                                 # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 이탈 폭·연속 이탈 여부로 매도가 분기
                                 if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
@@ -2037,7 +2192,18 @@ def get_kis_1min_from_datetime(
                                         sell_price = get_valid_sell_price(max(tenmin_close, peak_sell_threshold))
                                         sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈 (매도가:{sell_price:,})"
 
-                                # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
+                                # 조건 C-1: 이탈가/최종이탈가 이탈 → 즉시 매도
+                                # 기준봉 저가 이탈 여부 무관, 거래량·연속이탈 조건 없이 이탈가 기준으로 즉시 매도 처리
+                                # (stop_price >= base_low 인 경우에도 이탈가 이탈 시 매도 보장)
+                                if not sell_trigger and tenmin_close > safety_margin:
+                                    is_exit_breach = exit_price and tenmin_close <= int(exit_price)
+                                    is_stop_breach = tenmin_close <= int(stop_price)
+                                    if is_exit_breach or is_stop_breach:
+                                        sell_trigger = True
+                                        sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
+                                        sell_reason = f"이탈가({stop_price:,})원 이탈 (매도가:{sell_price:,})"
+
+                                # 조건 C-2: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                                 # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                                 # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
                                 # 매도가 하한: safety_margin (안전마진 이상), 호가단위 내림
