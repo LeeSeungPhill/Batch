@@ -1103,7 +1103,7 @@ def get_kis_1min_from_datetime(
         _short_val         = _mkt_trend_pre.get(_short_key, '')
         _short_market_down = (_short_val == '02')
         if verbose and _short_market_down:
-            print(f"[시뮬] {stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
+            print(f"{stock_name}[{stock_code}] {_stk_mkt_pre} 단기하락({_short_val}) → 이탈감지 강화")
 
     if trail_tp == 'L':
         _start_time = "163000" if trade_date.endswith("1119") else "153000"
@@ -1792,7 +1792,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 상한가 도달 시 절반 매도 (trail_tp='1','2' 공통)
                     # ===============================
-                    if high_price >= upper_limit:
+                    if not pre_market and high_price >= upper_limit:
                         i_trail_plan = "50"
                         trail_qty = max(1, int(basic_qty * 0.5))
                         order_price = upper_limit
@@ -1827,7 +1827,7 @@ def get_kis_1min_from_datetime(
                     # ===============================
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성 (09:10 또는 10:10 이전에도 수행)
                     # ===============================
-                    if pre_market is None: 
+                    if not pre_market:
                         if tenmin_state["base_low"] is None:
                             chk_vol = volumn if volumn else 0
                             if trail_tp == '1':
@@ -1858,8 +1858,8 @@ def get_kis_1min_from_datetime(
                                                         "sell_label": "",
                                                     })
 
-                                    # 이탈가 < 10분봉 저가
-                                    if breakdown_wait_1["tenmin_low"] is not None and stop_price < breakdown_wait_1["tenmin_low"]:
+                                    # 현재 분봉 저가가 이탈 10분봉 저가 이탈 시 매도
+                                    if breakdown_wait_1["tenmin_low"] is not None and low_price < breakdown_wait_1["tenmin_low"]:
                                         # 해당 종목의 시장이 단기 하락인 경우 : 매도주문가 = 현재가
                                         if _short_market_down:
                                             order_price = close_price
@@ -1903,6 +1903,11 @@ def get_kis_1min_from_datetime(
                                 else:
                                     # 최종이탈가(exit_price) 이탈
                                     if breakdown_check <= exit_price and acml_vol > chk_vol:
+                                        # 시장 단기 하락인 경우 매도 진행
+                                        if _short_market_down:
+                                            sell_trigger = True
+                                            sell_reason = f"시장 단기 하락 최종이탈가({exit_price:,})원) 이탈 매도 진행"
+
                                         current_10min_key_1 = get_10min_key(row["dt"])
                                         breakdown_wait_1.update({
                                             "active": True,
@@ -1928,6 +1933,11 @@ def get_kis_1min_from_datetime(
 
                                     # 이탈가(stop_price) 이탈
                                     elif breakdown_check <= stop_price and acml_vol > chk_vol:
+                                        # 시장 단기 하락인 경우 매도 진행
+                                        if _short_market_down:
+                                            sell_trigger = True
+                                            sell_reason = f"시장 단기 하락 이탈가({stop_price:,})원) 이탈 매도 진행"
+
                                         current_10min_key_1 = get_10min_key(row["dt"])
                                         breakdown_wait_1.update({
                                             "active": True,
@@ -2063,7 +2073,17 @@ def get_kis_1min_from_datetime(
                                         sell_price = get_valid_sell_price(max(tenmin_close, peak_sell_threshold))
                                         sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈 (매도가:{sell_price:,})"
 
-                                # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
+                                # 조건 C-1: 기준봉 저가 이탈 + 안전마진 초과 + 이탈가/최종이탈가 이탈 → 즉시 매도
+                                # 거래량·연속이탈 조건 없이 이탈가 기준으로 즉시 매도 처리
+                                if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin:
+                                    is_exit_breach = exit_price and tenmin_close <= int(exit_price)
+                                    is_stop_breach = tenmin_close <= int(stop_price)
+                                    if is_exit_breach or is_stop_breach:
+                                        sell_trigger = True
+                                        sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
+                                        sell_reason = f"이탈가({stop_price:,})원 이탈 기준봉 저가({tenmin_state['base_low']:,})원 이탈 (매도가:{sell_price:,})"
+
+                                # 조건 C-2: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                                 # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                                 # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
                                 # 매도가 하한: safety_margin (안전마진 이상), 호가단위 내림
