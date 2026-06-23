@@ -1596,7 +1596,7 @@ def callback_get(update, context) :
                 pass
             def _hfmt(v):
                 return format(int(v), ',d') if v is not None else '-'
-            plan_btn_text = "매매계획(투자)" if h_tp == 'i' else "매매계획(일반)"
+            plan_btn_text = "매매계획(투자)" if h_tp == 'i' else ("매매계획(홀딩)" if h_tp == 'h' else "매매계획(일반)")
             field_buttons = [
                 InlineKeyboardButton(f"목표가({_hfmt(h_target)})",      callback_data=f"menu,holding_edit_field_목표가"),
                 InlineKeyboardButton(f"이탈가({_hfmt(h_loss)})",        callback_data=f"menu,holding_edit_field_이탈가"),
@@ -1652,7 +1652,12 @@ def callback_get(update, context) :
                 )
                 tp_row = cur_tp.fetchone()
                 cur_tp_val = tp_row[0] if tp_row else None
-            new_tp = None if cur_tp_val == 'i' else 'i'
+            if cur_tp_val == 'i':
+                new_tp = 'h'
+            elif cur_tp_val == 'h':
+                new_tp = None
+            else:
+                new_tp = 'i'
             with get_conn().cursor() as cur_upd:
                 if new_tp is None:
                     cur_upd.execute(
@@ -1666,7 +1671,7 @@ def callback_get(update, context) :
                     )
                 get_conn().commit()
                 updated = cur_upd.rowcount
-            plan_label = "투자" if new_tp == 'i' else "일반"
+            plan_label = "투자" if new_tp == 'i' else ("홀딩" if new_tp == 'h' else "일반")
             query.edit_message_text(
                 text=f"[{g_holding_edit_name}(<code>{g_holding_edit_code}</code>)] 매매계획 → {plan_label} ({updated}건 업데이트)",
                 parse_mode='HTML'
