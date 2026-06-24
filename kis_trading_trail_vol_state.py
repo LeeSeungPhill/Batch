@@ -2306,7 +2306,7 @@ def get_kis_1min_from_datetime(
 
 def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
     """
-    15:20 미체결 매도주문 정리
+    15:20 이전 미체결 매도주문 정리
     trail_tp IN ('3','4'), order_no IS NOT NULL 인 주문 중
     sll_buy_dvsn_cd_name 이 매도정정/매도취소가 아닌 잔량(rmn_qty) 존재 시
     → 기존 주문 취소 후 시장가 재매도 주문
@@ -2319,23 +2319,24 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
     try:
         cur = conn.cursor()
         cur.execute("""
-            SELECT code, name, trail_day, trail_dtm, order_no
+            SELECT code, name, trail_day, trail_dtm, order_no, COALESCE(basic_price, 0)
             FROM public.trading_trail
             WHERE acct_no = %s
               AND trail_day = %s
+              AND proc_min < '152000'
               AND trail_tp IN ('3', '4')
               AND order_no IS NOT NULL
         """, (acct_no, today))
         rows = cur.fetchall()
         cur.close()
     except Exception as e:
-        print(f"[{nick}] 15:20 미체결 정리 DB 조회 오류: {e}")
+        print(f"[{nick}] 15:20 이전 미체결 정리 DB 조회 오류: {e}")
         return
 
     if not rows:
         return
 
-    for stock_code, stock_name, trail_day, trail_dtm, order_no in rows:
+    for stock_code, stock_name, trail_day, trail_dtm, order_no, basic_price in rows:
         try:
             # 주문체결내역 조회
             output1 = get_my_complete(access_token, app_key, app_secret, acct_no, stock_code, str(order_no))
@@ -2354,9 +2355,24 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                 excg_id      = df.loc[i, 'excg_id_dvsn_cd']            if 'excg_id_dvsn_cd'      in df.columns else None
 
                 # 매도정정/매도취소 행 제외, 이미 취소된 주문 제외, 잔량 없는 건 제외
-                if sll_buy_name in ('매도정정*', '매도취소*'):
+                if sll_buy_name.startswith(('매도정정', '매도취소')):
                     continue
                 if rmn_qty <= 0 or cncl_yn == 'Y':
+                    continue
+
+                # ── 현재가 조회 (지정가 매도 기준가) ──
+                _now_time = datetime.now().strftime('%H%M%S')
+                try:
+                    price_df = get_kis_1min_dailychart(
+                        stock_code, today, _now_time,
+                        access_token, app_key, app_secret, verbose=False
+                    )
+                    current_price = get_valid_sell_price(int(price_df.iloc[-1]["종가"])) if not price_df.empty else 0
+                except Exception:
+                    current_price = 0
+
+                if current_price <= 0:
+                    print(f"[{nick}] {stock_name}({stock_code}) 현재가 조회 실패 → 처리 건너뜀")
                     continue
 
                 # ── 1. 기존 매도주문 취소 ──
@@ -2379,17 +2395,20 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
 
                 time.sleep(0.5)
 
-                # ── 2. 시장가 재매도 주문 ──
+                # ── 2. 현재가 지정가 재매도 주문 ──
                 sell_result = order_cash(
                     False, access_token, app_key, app_secret,
-                    acct_no, stock_code, "01", str(rmn_qty), "0"
+                    acct_no, stock_code, "00", str(rmn_qty), str(current_price)
                 )
 
                 if sell_result is not None:
                     new_order_no = sell_result.get('ODNO', '')
+                    _trail_rate  = round((current_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0
+                    _trail_amt   = current_price * rmn_qty
+                    _proc_min    = datetime.now().strftime('%H%M%S')
                     msg = (
                         f"-{nick}- {stock_name}[<code>{stock_code}</code>]"
-                        f" 15:20 미체결 잔량({rmn_qty}주) 취소 후 시장가 매도"
+                        f" 15:20 미체결 잔량({rmn_qty}주) 취소 후 현재가({current_price:,}원) 지정가 매도"
                         f" (신규주문:{new_order_no})"
                     )
                     print(msg)
@@ -2398,17 +2417,34 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
 
-                    # DB order_no 갱신
+                    # DB 갱신: order_no · 현재가 기준 주문 필드 업데이트
                     if new_order_no:
                         try:
                             cur_upd = conn.cursor()
                             cur_upd.execute("""
                                 UPDATE public.trading_trail
-                                SET order_no = %s, mod_dt = %s
-                                WHERE acct_no = %s AND code = %s
+                                SET order_no    = %s
+                                  , order_price = %s
+                                  , order_tmd   = %s
+                                  , trail_price = %s
+                                  , trail_rate  = %s
+                                  , trail_amt   = %s
+                                  , proc_min    = %s
+                                  , mod_dt      = %s
+                                WHERE acct_no   = %s AND code      = %s
                                   AND trail_day = %s AND trail_dtm = %s
                                   AND trail_tp IN ('3', '4')
-                            """, (new_order_no, datetime.now(), acct_no, stock_code, trail_day, trail_dtm))
+                            """, (
+                                new_order_no,
+                                current_price,
+                                _proc_min,
+                                current_price,
+                                _trail_rate,
+                                _trail_amt,
+                                _proc_min,
+                                datetime.now(),
+                                acct_no, stock_code, trail_day, trail_dtm
+                            ))
                             conn.commit()
                             cur_upd.close()
                         except Exception as de:
@@ -2416,7 +2452,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                 else:
                     msg = (
                         f"-{nick}- {stock_name}[<code>{stock_code}</code>]"
-                        f" 15:20 시장가 재매도 실패 (잔량:{rmn_qty}주)"
+                        f" 15:20 현재가({current_price:,}원) 재매도 실패 (잔량:{rmn_qty}주)"
                     )
                     print(msg)
                     try:
@@ -2588,10 +2624,15 @@ def process_account(nick):
         result_two00 = cur200.fetchall()
         cur200.close()
 
-        # 15:20~15:24 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
         _now_hhmm = datetime.now().strftime('%H%M')
-        if '1520' <= _now_hhmm <= '1524':
-            cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
+        if trade_date.endswith("1119"): 
+            # 수능일인 경우, 16:20~16:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
+            if '1620' <= _now_hhmm < '1623':
+                cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
+        else:
+            # 15:20~15:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
+            if '1520' <= _now_hhmm < '1523':
+                cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
 
         if result_two00:
             # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)
