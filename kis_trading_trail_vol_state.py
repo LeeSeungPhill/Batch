@@ -1369,9 +1369,9 @@ def get_kis_1min_from_datetime(
                                         sell_signal_type = "FIXED_STOP"
                                         order_price = close_price
 
-                                        # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
+                                        # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                        if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
+                                        if verbose and breakdown_notify_last_key is None:
                                             breakdown_notify_last_key = _cur_key_str
                                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                             try:
@@ -1395,9 +1395,9 @@ def get_kis_1min_from_datetime(
                                             "effective_stop": fixed_stop,
                                             "order_price": 0,
                                         })
-                                        # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
+                                        # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                        if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
+                                        if verbose and breakdown_notify_last_key is None:
                                             breakdown_notify_last_key = _cur_key_str
                                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                             try:
@@ -1436,9 +1436,9 @@ def get_kis_1min_from_datetime(
                                 sell_signal_type = "FIXED_STOP"
                                 order_price = close_price
 
-                                # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
+                                # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
+                                if verbose and breakdown_notify_last_key is None:
                                     breakdown_notify_last_key = _cur_key_str
                                     _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                     try:
@@ -1462,9 +1462,9 @@ def get_kis_1min_from_datetime(
                                     "effective_stop": fixed_stop,
                                     "order_price": 0,
                                 })                                
-                                # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
+                                # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
+                                if verbose and breakdown_notify_last_key is None:
                                     breakdown_notify_last_key = _cur_key_str
                                     _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                     try:
@@ -1489,7 +1489,7 @@ def get_kis_1min_from_datetime(
                     and int(prev_volume/2) < acml_vol):
                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                        if prevlow_warn_last_key is None and current_time < dt_time(15, 0):
+                        if prevlow_warn_last_key is None:
                             prevlow_warn_last_key = _cur_key_str
                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
                             # 시장 흐름 기반 분석
@@ -1965,7 +1965,7 @@ def get_kis_1min_from_datetime(
 
                                             # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None:
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -1980,7 +1980,7 @@ def get_kis_1min_from_datetime(
                                         else:
                                             # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None:
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -2009,7 +2009,7 @@ def get_kis_1min_from_datetime(
 
                                             # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None:
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -2024,7 +2024,7 @@ def get_kis_1min_from_datetime(
                                         else:    
                                             # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None:
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
