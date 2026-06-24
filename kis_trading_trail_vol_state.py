@@ -1369,9 +1369,9 @@ def get_kis_1min_from_datetime(
                                         sell_signal_type = "FIXED_STOP"
                                         order_price = close_price
 
-                                        # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                                        # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                        if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                        if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
                                             breakdown_notify_last_key = _cur_key_str
                                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                             try:
@@ -1395,9 +1395,9 @@ def get_kis_1min_from_datetime(
                                             "effective_stop": fixed_stop,
                                             "order_price": 0,
                                         })
-                                        # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                                        # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                        if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                        if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
                                             breakdown_notify_last_key = _cur_key_str
                                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                             try:
@@ -1436,9 +1436,9 @@ def get_kis_1min_from_datetime(
                                 sell_signal_type = "FIXED_STOP"
                                 order_price = close_price
 
-                                # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                                # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
                                     breakdown_notify_last_key = _cur_key_str
                                     _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                     try:
@@ -1462,9 +1462,9 @@ def get_kis_1min_from_datetime(
                                     "effective_stop": fixed_stop,
                                     "order_price": 0,
                                 })                                
-                                # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
+                                # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                                if verbose and (breakdown_notify_last_key is None or _cur_key_str > breakdown_notify_last_key):
+                                if verbose and breakdown_notify_last_key is None and current_time < dt_time(15, 0):
                                     breakdown_notify_last_key = _cur_key_str
                                     _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "L", breakdown_notify_last_key)
                                     try:
@@ -1489,7 +1489,7 @@ def get_kis_1min_from_datetime(
                     and int(prev_volume/2) < acml_vol):
                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
-                        if prevlow_warn_last_key is None or _cur_key_str > prevlow_warn_last_key:
+                        if prevlow_warn_last_key is None and current_time < dt_time(15, 0):
                             prevlow_warn_last_key = _cur_key_str
                             _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "prevlow_warn", prevlow_warn_last_key)
                             # 시장 흐름 기반 분석
@@ -1963,10 +1963,9 @@ def get_kis_1min_from_datetime(
                                         if _short_market_down:
                                             breakdown_wait_1["sell_on_candle_close"] = True
 
-                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -1979,10 +1978,9 @@ def get_kis_1min_from_datetime(
                                                     print(f"텔레그램 발송 실패: {te}")
 
                                         else:
-                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -2009,10 +2007,9 @@ def get_kis_1min_from_datetime(
                                         if _short_market_down:
                                             breakdown_wait_1["sell_on_candle_close"] = True
 
-                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -2025,10 +2022,9 @@ def get_kis_1min_from_datetime(
                                                     print(f"텔레그램 발송 실패: {te}")
 
                                         else:    
-                                            # 동일 10분봉 내 중복 알림 방지: 마지막 알림 키보다 새 10분봉일 때만 전송
-                                            # (매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지)
+                                            # 15시 이전까지 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                             _cur_key_str = current_10min_key_1.strftime("%Y%m%d%H%M")
-                                            if breakdown_wait_1["last_alert_tenmin_key"] is None or _cur_key_str > breakdown_wait_1["last_alert_tenmin_key"]:
+                                            if breakdown_wait_1["last_alert_tenmin_key"] is None and current_time < dt_time(15, 0):
                                                 breakdown_wait_1["last_alert_tenmin_key"] = _cur_key_str
                                                 _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "1", breakdown_wait_1["last_alert_tenmin_key"])
                                                 try:
@@ -2308,6 +2304,132 @@ def get_kis_1min_from_datetime(
     return signals
 
 
+def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
+    """
+    15:20 미체결 매도주문 정리
+    trail_tp IN ('3','4'), order_no IS NOT NULL 인 주문 중
+    sll_buy_dvsn_cd_name 이 매도정정/매도취소가 아닌 잔량(rmn_qty) 존재 시
+    → 기존 주문 취소 후 시장가 재매도 주문
+    """
+    acct_no      = ac['acct_no']
+    access_token = ac['access_token']
+    app_key      = ac['app_key']
+    app_secret   = ac['app_secret']
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT code, name, trail_day, trail_dtm, order_no
+            FROM public.trading_trail
+            WHERE acct_no = %s
+              AND trail_day = %s
+              AND trail_tp IN ('3', '4')
+              AND order_no IS NOT NULL
+        """, (acct_no, today))
+        rows = cur.fetchall()
+        cur.close()
+    except Exception as e:
+        print(f"[{nick}] 15:20 미체결 정리 DB 조회 오류: {e}")
+        return
+
+    if not rows:
+        return
+
+    for stock_code, stock_name, trail_day, trail_dtm, order_no in rows:
+        try:
+            # 주문체결내역 조회
+            output1 = get_my_complete(access_token, app_key, app_secret, acct_no, stock_code, str(order_no))
+            if not output1:
+                continue
+
+            df = pd.DataFrame(output1)
+            target_cols = ['odno', 'sll_buy_dvsn_cd_name', 'rmn_qty', 'cncl_yn', 'excg_id_dvsn_cd']
+            df = df[[c for c in target_cols if c in df.columns]]
+
+            for i in df.index:
+                sll_buy_name = str(df.loc[i, 'sll_buy_dvsn_cd_name']) if 'sll_buy_dvsn_cd_name' in df.columns else ''
+                rmn_qty      = int(df.loc[i, 'rmn_qty'])               if 'rmn_qty'              in df.columns else 0
+                cncl_yn      = str(df.loc[i, 'cncl_yn'])               if 'cncl_yn'              in df.columns else ''
+                odno         = str(df.loc[i, 'odno'])                  if 'odno'                 in df.columns else str(order_no)
+                excg_id      = df.loc[i, 'excg_id_dvsn_cd']            if 'excg_id_dvsn_cd'      in df.columns else None
+
+                # 매도정정/매도취소 행 제외, 이미 취소된 주문 제외, 잔량 없는 건 제외
+                if sll_buy_name in ('매도정정*', '매도취소*'):
+                    continue
+                if rmn_qty <= 0 or cncl_yn == 'Y':
+                    continue
+
+                # ── 1. 기존 매도주문 취소 ──
+                cancel_result = order_cancel_revice(
+                    access_token, app_key, app_secret, acct_no,
+                    "02", odno, "0", "0", excg_id
+                )
+
+                if cancel_result is None or cancel_result.get('ODNO', '') == '':
+                    msg = (
+                        f"-{nick}- {stock_name}[<code>{stock_code}</code>]"
+                        f" 15:20 매도주문 취소 실패 (주문번호:{odno}, 잔량:{rmn_qty}주)"
+                    )
+                    print(msg)
+                    try:
+                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                    except Exception as te:
+                        print(f"텔레그램 발송 실패: {te}")
+                    continue
+
+                time.sleep(0.5)
+
+                # ── 2. 시장가 재매도 주문 ──
+                sell_result = order_cash(
+                    False, access_token, app_key, app_secret,
+                    acct_no, stock_code, "01", str(rmn_qty), "0"
+                )
+
+                if sell_result is not None:
+                    new_order_no = sell_result.get('ODNO', '')
+                    msg = (
+                        f"-{nick}- {stock_name}[<code>{stock_code}</code>]"
+                        f" 15:20 미체결 잔량({rmn_qty}주) 취소 후 시장가 매도"
+                        f" (신규주문:{new_order_no})"
+                    )
+                    print(msg)
+                    try:
+                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                    except Exception as te:
+                        print(f"텔레그램 발송 실패: {te}")
+
+                    # DB order_no 갱신
+                    if new_order_no:
+                        try:
+                            cur_upd = conn.cursor()
+                            cur_upd.execute("""
+                                UPDATE public.trading_trail
+                                SET order_no = %s, mod_dt = %s
+                                WHERE acct_no = %s AND code = %s
+                                  AND trail_day = %s AND trail_dtm = %s
+                                  AND trail_tp IN ('3', '4')
+                            """, (new_order_no, datetime.now(), acct_no, stock_code, trail_day, trail_dtm))
+                            conn.commit()
+                            cur_upd.close()
+                        except Exception as de:
+                            print(f"[{nick}] {stock_code} order_no 갱신 오류: {de}")
+                else:
+                    msg = (
+                        f"-{nick}- {stock_name}[<code>{stock_code}</code>]"
+                        f" 15:20 시장가 재매도 실패 (잔량:{rmn_qty}주)"
+                    )
+                    print(msg)
+                    try:
+                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                    except Exception as te:
+                        print(f"텔레그램 발송 실패: {te}")
+
+            time.sleep(0.3)
+
+        except Exception as e:
+            print(f"[{nick}] {stock_name}({stock_code}) 15:20 미체결 정리 오류: {e}")
+
+
 def process_stock(stock_info, nick, ac, bot, chat_id):
     """종목별 독립 DB 연결로 병렬 처리"""
     conn_stock = db.connect(conn_string)
@@ -2465,6 +2587,11 @@ def process_account(nick):
         # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and basic_qty > 0 order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
+
+        # 15:20~15:24 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
+        _now_hhmm = datetime.now().strftime('%H%M')
+        if '1520' <= _now_hhmm <= '1524':
+            cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
 
         if result_two00:
             # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)
