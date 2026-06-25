@@ -82,6 +82,19 @@ def normalize_code(code):
 
 stock_code['code'] = stock_code['code'].apply(normalize_code)
 
+# ETF 목록 추가 (KRX ETF 상장 종목 — 일반 상장법인 목록에 미포함)
+try:
+    etf_url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&marketType=etk'
+    etf_res = requests.get(etf_url, timeout=10)
+    etf_res.encoding = 'EUC-KR'
+    etf_df = pd.read_html(etf_res.text, header=0)[0]
+    etf_df = etf_df[['회사명', '종목코드']].rename(columns={'회사명': 'company', '종목코드': 'code'})
+    etf_df = etf_df[etf_df['code'].apply(filter_code)]
+    etf_df['code'] = etf_df['code'].apply(normalize_code)
+    stock_code = pd.concat([stock_code, etf_df], ignore_index=True).drop_duplicates('code')
+except Exception as e:
+    print(f"ETF 목록 로드 실패 (무시됨): {e}")
+
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
 dispatcher = updater.dispatcher
