@@ -5481,9 +5481,19 @@ def echo(update, context):
                 code = stock_code[stock_code.code == user_text[:6]].code.values[0].strip()  ## strip() : 공백제거
                 company = stock_code[stock_code.code == user_text[:6]].company.values[0].strip()  ## strip() : 공백제거
             else:
-                code = ""
-                ext = user_text[:6] + " : 미존재 종목"
-                context.bot.send_message(chat_id=user_id, text=ext)
+                # KRX 목록 미존재 → KIS API로 직접 확인 (ETN/특수ETF 등 알파벳 포함 비표준 코드 대응)
+                try:
+                    _ac_chk = account(arguments[1])
+                    _ap_chk = inquire_price(_ac_chk['access_token'], _ac_chk['app_key'], _ac_chk['app_secret'], user_text[:6])
+                    if _ap_chk and int(_ap_chk.get('stck_prpr', 0)) > 0:
+                        code = user_text[:6]
+                        company = (_ap_chk.get('hts_kor_isnm') or '').strip() or code
+                    else:
+                        code = ""
+                        context.bot.send_message(chat_id=user_id, text=user_text[:6] + " : 미존재 종목")
+                except Exception:
+                    code = ""
+                    context.bot.send_message(chat_id=user_id, text=user_text[:6] + " : 미존재 종목")
         else:
             if not ',' in user_text:
                 # 입력메시지가 종목명에 존재하는 경우
