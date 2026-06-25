@@ -2625,7 +2625,7 @@ def process_account(nick):
         cur200.close()
 
         _now_hhmm = datetime.now().strftime('%H%M')
-        if trade_date.endswith("1119"): 
+        if today.endswith("1119"): 
             # 수능일인 경우, 16:20~16:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
             if '1620' <= _now_hhmm < '1623':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
@@ -2634,10 +2634,10 @@ def process_account(nick):
             if '1520' <= _now_hhmm < '1523':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
 
+        trade_date = today
         if result_two00:
             # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)
             unique_codes = list(set(row[0] for row in result_two00))
-            trade_date = today
             for code in unique_codes:
                 get_prev_day_info(code, trade_date, ac['access_token'], ac['app_key'], ac['app_secret'], conn_acct)
                 time.sleep(0.1)
