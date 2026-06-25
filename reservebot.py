@@ -5482,18 +5482,36 @@ def echo(update, context):
                 company = stock_code[stock_code.code == user_text[:6]].company.values[0].strip()  ## strip() : 공백제거
             else:
                 # KRX 목록 미존재 → KIS API로 직접 확인 (ETN/특수ETF 등 알파벳 포함 비표준 코드 대응)
+                _candidate_code = user_text[:6]
+                _code_found = False
                 try:
                     _ac_chk = account(arguments[1])
-                    _ap_chk = inquire_price(_ac_chk['access_token'], _ac_chk['app_key'], _ac_chk['app_secret'], user_text[:6])
-                    if _ap_chk and int(_ap_chk.get('stck_prpr', 0)) > 0:
-                        code = user_text[:6]
-                        company = (_ap_chk.get('hts_kor_isnm') or '').strip() or code
-                    else:
-                        code = ""
-                        context.bot.send_message(chat_id=user_id, text=user_text[:6] + " : 미존재 종목")
-                except Exception:
+                    # inquire_price는 장외시간에 NX 마켓코드 사용 → 비표준코드 조회 실패
+                    # 항상 J(KRX)로 직접 조회 후, 실패시 UN(통합)으로 재시도
+                    _headers_chk = {
+                        "Content-Type": "application/json",
+                        "authorization": f"Bearer {_ac_chk['access_token']}",
+                        "appKey": _ac_chk['app_key'],
+                        "appSecret": _ac_chk['app_secret'],
+                        "tr_id": "FHKST01010100"
+                    }
+                    _price_url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-price"
+                    for _mrkt_cd in ["J", "UN"]:
+                        _params_chk = {'FID_COND_MRKT_DIV_CODE': _mrkt_cd, 'FID_INPUT_ISCD': _candidate_code}
+                        _res_chk = requests.get(_price_url, headers=_headers_chk, params=_params_chk, verify=False, timeout=10)
+                        _ar_chk = resp.APIResp(_res_chk)
+                        _out_chk = getattr(_ar_chk.getBody(), 'output', None)
+                        print(f"[코드조회] {_candidate_code} mrkt={_mrkt_cd} rt_cd={_ar_chk.getErrorCode()} msg={_ar_chk.getErrorMessage()} prpr={_out_chk.get('stck_prpr') if _out_chk else None}")
+                        if _out_chk and int(_out_chk.get('stck_prpr', 0)) > 0:
+                            code = _candidate_code
+                            company = (_out_chk.get('hts_kor_isnm') or '').strip() or _candidate_code
+                            _code_found = True
+                            break
+                except Exception as _e_chk:
+                    print(f"[코드조회] {_candidate_code} KIS API 오류: {_e_chk}")
+                if not _code_found:
                     code = ""
-                    context.bot.send_message(chat_id=user_id, text=user_text[:6] + " : 미존재 종목")
+                    context.bot.send_message(chat_id=user_id, text=_candidate_code + " : 미존재 종목")
         else:
             if not ',' in user_text:
                 # 입력메시지가 종목명에 존재하는 경우
