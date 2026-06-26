@@ -5559,9 +5559,28 @@ def echo(update, context):
         a = ""
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
-        # KIS API에서 실제 종목명으로 보완 (DataFrame 미존재 종목 등 code값이 company에 들어온 경우 대비)
-        if a and a.get('hts_kor_isnm', '').strip():
-            company = a['hts_kor_isnm'].strip()
+        # 종목명 보완: inquire_price가 NX 마켓코드 사용시 ETF 등 hts_kor_isnm이 빈값으로 오는 경우 대비
+        # → J(KRX) 마켓코드로 직접 재조회
+        _isnm = (a.get('hts_kor_isnm') or '').strip() if a else ''
+        if _isnm:
+            company = _isnm
+        elif company == code:
+            try:
+                _r_name = requests.get(
+                    f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-price",
+                    headers={"Content-Type": "application/json",
+                             "authorization": f"Bearer {access_token}",
+                             "appKey": app_key, "appSecret": app_secret,
+                             "tr_id": "FHKST01010100"},
+                    params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
+                    verify=False, timeout=10
+                )
+                _o_name = getattr(resp.APIResp(_r_name).getBody(), 'output', None)
+                _isnm_j = (_o_name.get('hts_kor_isnm') or '').strip() if _o_name else ''
+                if _isnm_j:
+                    company = _isnm_j
+            except Exception:
+                pass
         stck_prpr = a['stck_prpr']                      # 현재가
         stck_hgpr = a['stck_hgpr']                      # 고가
         stck_lwpr = a['stck_lwpr']                      # 저가
