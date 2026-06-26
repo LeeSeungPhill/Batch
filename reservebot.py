@@ -82,19 +82,6 @@ def normalize_code(code):
 
 stock_code['code'] = stock_code['code'].apply(normalize_code)
 
-# ETF 목록 추가 (KRX ETF 상장 종목 — 일반 상장법인 목록에 미포함)
-try:
-    etf_url = 'http://kind.krx.co.kr/corpgeneral/corpList.do?method=download&marketType=etk'
-    etf_res = requests.get(etf_url, timeout=10)
-    etf_res.encoding = 'EUC-KR'
-    etf_df = pd.read_html(etf_res.text, header=0)[0]
-    etf_df = etf_df[['회사명', '종목코드']].rename(columns={'회사명': 'company', '종목코드': 'code'})
-    etf_df = etf_df[etf_df['code'].apply(filter_code)]
-    etf_df['code'] = etf_df['code'].apply(normalize_code)
-    stock_code = pd.concat([stock_code, etf_df], ignore_index=True).drop_duplicates('code')
-except Exception as e:
-    print(f"ETF 목록 로드 실패 (무시됨): {e}")
-
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
 dispatcher = updater.dispatcher
@@ -5486,34 +5473,36 @@ def echo(update, context):
                 code = stock_code[stock_code.code == user_text[:6]].code.values[0].strip()  ## strip() : 공백제거
                 company = stock_code[stock_code.code == user_text[:6]].company.values[0].strip()  ## strip() : 공백제거
             else:
-                # KRX 목록 미존재 → KIS API로 직접 확인 (ETN/특수ETF 등 알파벳 포함 비표준 코드 대응)
+                # KRX 목록 미존재 → search-stock-info API로 종목명·유효성 확인
+                # (ETF/ETN/리츠 등 상장법인 목록 미포함 종목 대응)
                 _candidate_code = user_text[:6]
                 _code_found = False
                 try:
                     _ac_chk = account(arguments[1])
-                    # inquire_price는 장외시간에 NX 마켓코드 사용 → 비표준코드 조회 실패
-                    # 항상 J(KRX)로 직접 조회 후, 실패시 UN(통합)으로 재시도
-                    _headers_chk = {
+                    _headers_si = {
                         "Content-Type": "application/json",
                         "authorization": f"Bearer {_ac_chk['access_token']}",
                         "appKey": _ac_chk['app_key'],
                         "appSecret": _ac_chk['app_secret'],
-                        "tr_id": "FHKST01010100"
+                        "tr_id": "CTPF1604R"
                     }
-                    _price_url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-price"
-                    for _mrkt_cd in ["J", "UN"]:
-                        _params_chk = {'FID_COND_MRKT_DIV_CODE': _mrkt_cd, 'FID_INPUT_ISCD': _candidate_code}
-                        _res_chk = requests.get(_price_url, headers=_headers_chk, params=_params_chk, verify=False, timeout=10)
-                        _ar_chk = resp.APIResp(_res_chk)
-                        _out_chk = getattr(_ar_chk.getBody(), 'output', None)
-                        print(f"[코드조회] {_candidate_code} mrkt={_mrkt_cd} rt_cd={_ar_chk.getErrorCode()} msg={_ar_chk.getErrorMessage()} prpr={_out_chk.get('stck_prpr') if _out_chk else None}")
-                        if _out_chk and int(_out_chk.get('stck_prpr', 0)) > 0:
+                    _si_url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/search-stock-info"
+                    # 주식(300) → ETF(301) → ETN(302) → 리츠(306) 순으로 시도
+                    for _prdt_type in ["300", "301", "302", "306"]:
+                        _res_si = requests.get(_si_url, headers=_headers_si,
+                                               params={"PRDT_TYPE_CD": _prdt_type, "PDNO": _candidate_code},
+                                               verify=False, timeout=10)
+                        _ar_si = resp.APIResp(_res_si)
+                        _out_si = getattr(_ar_si.getBody(), 'output', None)
+                        _prdt_name = (_out_si.get('prdt_abrv_name') or '').strip() if _out_si else ''
+                        print(f"[종목조회] {_candidate_code} type={_prdt_type} rt_cd={_ar_si.getErrorCode()} prdt_name={_prdt_name}")
+                        if _prdt_name:
                             code = _candidate_code
-                            company = (_out_chk.get('hts_kor_isnm') or '').strip() or _candidate_code
+                            company = _prdt_name
                             _code_found = True
                             break
                 except Exception as _e_chk:
-                    print(f"[코드조회] {_candidate_code} KIS API 오류: {_e_chk}")
+                    print(f"[종목조회] {_candidate_code} 오류: {_e_chk}")
                 if not _code_found:
                     code = ""
                     context.bot.send_message(chat_id=user_id, text=_candidate_code + " : 미존재 종목")
@@ -5559,28 +5548,6 @@ def echo(update, context):
         a = ""
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
-        # 종목명 보완: inquire_price가 NX 마켓코드 사용시 ETF 등 hts_kor_isnm이 빈값으로 오는 경우 대비
-        # → J(KRX) 마켓코드로 직접 재조회
-        _isnm = (a.get('hts_kor_isnm') or '').strip() if a else ''
-        if _isnm:
-            company = _isnm
-        elif company == code:
-            try:
-                _r_name = requests.get(
-                    f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-price",
-                    headers={"Content-Type": "application/json",
-                             "authorization": f"Bearer {access_token}",
-                             "appKey": app_key, "appSecret": app_secret,
-                             "tr_id": "FHKST01010100"},
-                    params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code},
-                    verify=False, timeout=10
-                )
-                _o_name = getattr(resp.APIResp(_r_name).getBody(), 'output', None)
-                _isnm_j = (_o_name.get('hts_kor_isnm') or '').strip() if _o_name else ''
-                if _isnm_j:
-                    company = _isnm_j
-            except Exception:
-                pass
         stck_prpr = a['stck_prpr']                      # 현재가
         stck_hgpr = a['stck_hgpr']                      # 고가
         stck_lwpr = a['stck_lwpr']                      # 저가
