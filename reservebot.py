@@ -707,6 +707,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "tr_id": tr_id,
                "custtype": "P"
     }
+    _excg = excg_id if excg_id is not None else get_excg_id()
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
@@ -714,7 +715,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": _excg         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -724,7 +725,11 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     URL = f"{URL_BASE}/{PATH}"
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
-    #ar.printAll()
+    # NXT 미상장 종목(APBK3026)이면 KRX로 자동 재시도
+    if not ar.isOK() and _excg == "NXT" and getattr(ar.getBody(), 'msg_cd', '') == "APBK3026":
+        params["EXCG_ID_DVSN_CD"] = "KRX"
+        res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
+        ar = resp.APIResp(res)
     if not ar.isOK():
         raise Exception(f"[{ar.getBody().msg_cd}] {ar.getBody().msg1}")
     return ar.getBody().output
@@ -5554,6 +5559,9 @@ def echo(update, context):
         a = ""
         # 입력 종목코드 현재가 시세
         a = inquire_price(access_token, app_key, app_secret, code)
+        # KIS API에서 실제 종목명으로 보완 (DataFrame 미존재 종목 등 code값이 company에 들어온 경우 대비)
+        if a and a.get('hts_kor_isnm', '').strip():
+            company = a['hts_kor_isnm'].strip()
         stck_prpr = a['stck_prpr']                      # 현재가
         stck_hgpr = a['stck_hgpr']                      # 고가
         stck_lwpr = a['stck_lwpr']                      # 저가
