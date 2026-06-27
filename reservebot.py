@@ -694,6 +694,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "tr_id": tr_id,
                "custtype": "P"
     }
+    _excg = excg_id if excg_id is not None else get_excg_id()
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
@@ -701,7 +702,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": _excg         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -711,7 +712,11 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     URL = f"{URL_BASE}/{PATH}"
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
-    #ar.printAll()
+    # NXT 미상장 종목(APBK3026)이면 KRX로 자동 재시도
+    if not ar.isOK() and _excg == "NXT" and getattr(ar.getBody(), 'msg_cd', '') == "APBK3026":
+        params["EXCG_ID_DVSN_CD"] = "KRX"
+        res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
+        ar = resp.APIResp(res)
     if not ar.isOK():
         raise Exception(f"[{ar.getBody().msg_cd}] {ar.getBody().msg1}")
     return ar.getBody().output
@@ -5468,9 +5473,39 @@ def echo(update, context):
                 code = stock_code[stock_code.code == user_text[:6]].code.values[0].strip()  ## strip() : 공백제거
                 company = stock_code[stock_code.code == user_text[:6]].company.values[0].strip()  ## strip() : 공백제거
             else:
-                code = ""
-                ext = user_text[:6] + " : 미존재 종목"
-                context.bot.send_message(chat_id=user_id, text=ext)
+                # KRX 목록 미존재 → search-stock-info API로 종목명·유효성 확인
+                # (ETF/ETN/리츠 등 상장법인 목록 미포함 종목 대응)
+                _candidate_code = user_text[:6]
+                _code_found = False
+                try:
+                    _ac_chk = account(arguments[1])
+                    _headers_si = {
+                        "Content-Type": "application/json",
+                        "authorization": f"Bearer {_ac_chk['access_token']}",
+                        "appKey": _ac_chk['app_key'],
+                        "appSecret": _ac_chk['app_secret'],
+                        "tr_id": "CTPF1604R"
+                    }
+                    _si_url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/search-stock-info"
+                    # 주식(300) → ETF(301) → ETN(302) → 리츠(306) 순으로 시도
+                    for _prdt_type in ["300", "301", "302", "306"]:
+                        _res_si = requests.get(_si_url, headers=_headers_si,
+                                               params={"PRDT_TYPE_CD": _prdt_type, "PDNO": _candidate_code},
+                                               verify=False, timeout=10)
+                        _ar_si = resp.APIResp(_res_si)
+                        _out_si = getattr(_ar_si.getBody(), 'output', None)
+                        _prdt_name = (_out_si.get('prdt_abrv_name') or '').strip() if _out_si else ''
+                        print(f"[종목조회] {_candidate_code} type={_prdt_type} rt_cd={_ar_si.getErrorCode()} prdt_name={_prdt_name}")
+                        if _prdt_name:
+                            code = _candidate_code
+                            company = _prdt_name
+                            _code_found = True
+                            break
+                except Exception as _e_chk:
+                    print(f"[종목조회] {_candidate_code} 오류: {_e_chk}")
+                if not _code_found:
+                    code = ""
+                    context.bot.send_message(chat_id=user_id, text=_candidate_code + " : 미존재 종목")
         else:
             if not ',' in user_text:
                 # 입력메시지가 종목명에 존재하는 경우
