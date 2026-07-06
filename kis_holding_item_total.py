@@ -428,7 +428,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no, conn):
             '현재가': e_current_price,
         })
 
-        if sell_plan_amt > 0 and u_tot_evlu_amt > 0:
+        if sell_plan_amt > 0 and u_tot_evlu_amt > 0 and e_current_price > 0:
             item_eval_gravity = e_eval_sum / u_tot_evlu_amt * 100
             e_sell_plan_sum = sell_plan_amt * item_eval_gravity * 0.01
             e_sell_plan_amount = e_sell_plan_sum / e_current_price
