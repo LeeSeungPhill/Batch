@@ -502,7 +502,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
         })
 
         # 자산번호의 매도예정자금이 존재하는 경우, 보유종목 비중별 매도가능금액 및 매도가능수량 계산
-        if sell_plan_amt > 0:
+        if sell_plan_amt > 0 and u_tot_evlu_amt > 0 and e_current_price > 0:
             # 종목 매입금액 비중 = 평가금액 / 총평가금액(예수금총금액 + 유저평가금액) * 100
             item_eval_gravity = e_eval_sum / u_tot_evlu_amt * 100
             # print("종목 매입금액 비중 : " + format(int(item_eval_gravity), ',d'))
