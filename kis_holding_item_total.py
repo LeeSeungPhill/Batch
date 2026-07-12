@@ -728,7 +728,7 @@ def process_account(nick):
                 (SELECT COALESCE(SUM(S.eval_sum), 0)
                  FROM "stockBalance_stock_balance" S
                  WHERE S.acct_no = A.acct_no AND S.proc_yn = 'Y'
-                   AND (S.trading_plan IS NULL OR S.trading_plan NOT IN ('i', 'h'))
+                   AND (S.trading_plan IS NULL OR S.trading_plan NOT IN ('i'))
                 ) AS filtered_scts_evlu
             FROM "stockBalance_stock_balance" A
             LEFT JOIN "stockFundMng_stock_fund_mng" F ON F.acct_no = A.acct_no
