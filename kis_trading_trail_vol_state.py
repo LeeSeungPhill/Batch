@@ -1764,15 +1764,16 @@ def get_kis_1min_from_datetime(
                 "last_alert_tenmin_key": _cached_alert_key_1,  # 스케줄러 재호출 간 유지 (10분 중복 방지)
             }
 
-            # trail_tp='2' 분봉 단위 이탈가 감지 → 해당 10분봉 완성 시 sell_trigger 활성
-            _cached_alert_key_2 = _alert_keys.get("2")
-            breakdown_wait_2 = {
-                "active": False,             # 이탈가 이탈 감지 여부
-                "breach_price": 0,           # 이탈된 가격 (stop_price 또는 exit_price)
-                "breach_type": "",           # "exit" or "stop"
-                "tenmin_key": None,          # 이탈 발생 10분봉 키 (같은 봉 완성 시점에 sell_trigger)
-                "last_alert_tenmin_key": _cached_alert_key_2,
-            }
+        # trail_tp='2' 분봉 단위 이탈가 감지 → 해당 10분봉 완성 시 sell_trigger 활성
+        # (trail_tp='1'/'2' 양쪽 경로에서 참조되므로 trail_tp 분기 밖에서 초기화)
+        _cached_alert_key_2 = _alert_keys.get("2")
+        breakdown_wait_2 = {
+            "active": False,             # 이탈가 이탈 감지 여부
+            "breach_price": 0,           # 이탈된 가격 (stop_price 또는 exit_price)
+            "breach_type": "",           # "exit" or "stop"
+            "tenmin_key": None,          # 이탈 발생 10분봉 키 (같은 봉 완성 시점에 sell_trigger)
+            "last_alert_tenmin_key": _cached_alert_key_2,
+        }
 
         # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
         current_10min_key = get_completed_10min_key(datetime.now())
