@@ -1482,11 +1482,12 @@ def get_kis_1min_from_datetime(
                 # ===============================
                 _prevlow_start  = "101000" if (trade_date.endswith("0102") or trade_date.endswith("1119")) else "091000"
                 _prevlow_warn_end = "161000" if trade_date.endswith("1119") else "151000"
-                if (current_time >= _prevlow_start 
-                    and current_time < _prevlow_warn_end 
+                if (current_time >= _prevlow_start
+                    and current_time < _prevlow_warn_end
                     and prev_low is not None
                     and close_price < prev_low
-                    and int(prev_volume/2) < acml_vol):
+                    and int(prev_volume/2) < acml_vol
+                    and row["dt"] == df["dt"].max()):
                         # 매분 재순회 시 과거 10분봉 재방문으로 인한 중복 알림 방지
                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
                         if prevlow_warn_last_key is None:
@@ -1513,7 +1514,7 @@ def get_kis_1min_from_datetime(
                                     try:
                                         msg_warn = (
                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                            f" [사전경고] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                            f" [사전경고] 종가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
                                             f" 시장흐름[{_w_stk_mkt}] 중기:{_w_mid_str}/장기:{_w_long_str}"
                                             f" 시장허용:{_w_allow_ratio}%({_w_allowed_invest:,}원)"
                                             f" 현재진행:{_w_invest_pct}%({_w_total_invested:,}원)"
@@ -1540,7 +1541,8 @@ def get_kis_1min_from_datetime(
                         and prev_low is not None
                         and close_price < prev_low
                         and prev_volume < acml_vol
-                        and not _market_sell_checked):
+                        and not _market_sell_checked
+                        and row["dt"] == df["dt"].max()):
                     _market_sell_checked = True
                     _mkt_data = _mkt_trend_pre
                     if _mkt_data:
@@ -1569,7 +1571,7 @@ def get_kis_1min_from_datetime(
                                           f" 현재진행:{_invest_pct}%({_total_invested:,}원)"
                                           f" 초과:{_excess_invest:,}원→{_trail_plan}% 매도 진행")
                             print(f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}]"
-                                  f" [장종료전] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                  f" [장종료전] 종가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
                                   f" {_mkt_reason}")
                             try:
                                 update_trading_daily_close(
@@ -1583,7 +1585,7 @@ def get_kis_1min_from_datetime(
                                     _msg_mkt = (
                                         f"-{nick}-[{row['일자']}-{row['시간']}]"
                                         f"{stock_name}[<code>{stock_code}</code>]"
-                                        f" [장종료전 매도] 현재가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
+                                        f" [장종료전 매도] 종가:{close_price:,}원 전일저가:{prev_low:,}원 이탈"
                                         f" {_mkt_reason}"
                                     )
                                     print(_msg_mkt)
