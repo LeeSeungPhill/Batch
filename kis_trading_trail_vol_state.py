@@ -638,7 +638,7 @@ def _get_stock_market_type(stock_code: str, access_token: str,
             mkt_upper = mkt_name.upper()
             # 영문: KOSPI, KOSPI200 → KOSPI / KSQ150, KOSDAQ → KOSDAQ
             # 한글: 코스피, 코스피200 → KOSPI / 코스닥, KSQ150 → KOSDAQ
-            mkt = 'KOSPI' if ('KOSPI' in mkt_upper or '코스피' in mkt_name) else 'KOSDAQ'
+            mkt = 'KOSPI' if ('ETF' in mkt_upper or 'KOSPI' in mkt_upper or '코스피' in mkt_name) else 'KOSDAQ'
             with _stock_market_cache_lock:
                 _stock_market_cache[stock_code] = mkt
             return mkt
