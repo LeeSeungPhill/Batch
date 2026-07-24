@@ -400,10 +400,10 @@ for nick in nickname_list:
                         sig = sb_sig_map.get(code, (None, None))
                         sig_resist = float(sig[0]) if sig[0] else 0
                         sig_support = float(sig[1]) if sig[1] else 0
-                        if sig_resist > 0 and sig_resist > float(target_price or 0):
+                        if trail_tp in ('L', 'P') and sig_resist > 0 and sig_resist > float(target_price or 0):
                             print(f"[{nick}] {code} target_price({target_price}) → 신호가({sig_resist})로 대체")
                             target_price = sig_resist
-                        if sig_support > 0 and (float(stop_price or 0) == 0 or sig_support < float(stop_price or 0)):
+                        if trail_tp in ('L', 'P') and sig_support > 0 and (float(stop_price or 0) == 0 or sig_support < float(stop_price or 0)):
                             print(f"[{nick}] {code} stop_price({stop_price}) → 신호이탈가({sig_support})로 대체")
                             stop_price = sig_support
 
