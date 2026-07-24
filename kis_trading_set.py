@@ -375,14 +375,14 @@ for nick in nickname_list:
                     ON CONFLICT (acct_no, code, trail_day, trail_dtm, trail_tp) DO NOTHING
                 """
                 
-                # stockBalance_stock_balance 신호가(목표가/이탈가) 사전 조회
+                # stockBalance_stock_balance 신호가(목표가/이탈가/최종이탈가) 사전 조회
                 cur_sig = conn.cursor()
                 cur_sig.execute("""
-                    SELECT code, sign_resist_price, sign_support_price
+                    SELECT code, sign_resist_price, sign_support_price, end_loss_price
                     FROM public."stockBalance_stock_balance"
                     WHERE acct_no = %s AND proc_yn = 'Y'
                 """, (str(acct_no),))
-                sb_sig_map = {row[0]: (row[1], row[2]) for row in cur_sig.fetchall()}
+                sb_sig_map = {row[0]: (row[1], row[2], row[3]) for row in cur_sig.fetchall()}
                 cur_sig.close()
 
                 cur201 = conn.cursor()
@@ -395,17 +395,24 @@ for nick in nickname_list:
                         if current_price > 0 and stop_price > current_price and prev_day_low > 0:
                             print(f"[{nick}] {code} stop_price({stop_price}) > 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
                             stop_price = prev_day_low
+                        if current_price > 0 and exit_price > current_price and prev_day_low > 0:
+                            print(f"[{nick}] {code} exit_price({exit_price}) > 현재가({current_price}) → 전일저가({prev_day_low})로 설정")
+                            exit_price = prev_day_low    
 
-                        # stockBalance 신호가로 목표가/이탈가 대체
-                        sig = sb_sig_map.get(code, (None, None))
+                        # stockBalance 신호가로 목표가/이탈가/최종이탈가 대체
+                        sig = sb_sig_map.get(code, (None, None, None))
                         sig_resist = float(sig[0]) if sig[0] else 0
                         sig_support = float(sig[1]) if sig[1] else 0
+                        sig_exit = float(sig[2]) if sig[2] else 0
                         if trail_tp in ('L', 'P') and sig_resist > 0 and sig_resist > float(target_price or 0):
-                            print(f"[{nick}] {code} target_price({target_price}) → 신호가({sig_resist})로 대체")
+                            print(f"[{nick}] {code} target_price({target_price}) → 신호 목표가({sig_resist})로 대체")
                             target_price = sig_resist
                         if trail_tp in ('L', 'P') and sig_support > 0 and (float(stop_price or 0) == 0 or sig_support < float(stop_price or 0)):
-                            print(f"[{nick}] {code} stop_price({stop_price}) → 신호이탈가({sig_support})로 대체")
+                            print(f"[{nick}] {code} stop_price({stop_price}) → 신호 이탈가({sig_support})로 대체")
                             stop_price = sig_support
+                        if trail_tp in ('L', 'P') and sig_exit > 0 and (float(exit_price or 0) == 0 or sig_exit < float(exit_price or 0)):
+                            print(f"[{nick}] {code} exit_price({exit_price}) → 신호 최종이탈가({sig_exit})로 대체")
+                            exit_price = sig_exit    
 
                         cur201.execute(insert_query1, (
                             acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
