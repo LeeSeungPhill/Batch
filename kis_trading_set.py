@@ -414,8 +414,12 @@ for nick in nickname_list:
                             print(f"[{nick}] {code} exit_price({exit_price}) → 신호 최종이탈가({sig_exit})로 대체")
                             exit_price = sig_exit    
 
+                        # Decimal/float/int 혼합 방지 — 산술 연산 전 float로 통일
+                        _bp = float(basic_price) if basic_price is not None else 0.0
+                        _ep = float(exit_price) if exit_price is not None else 0.0
+                        _bq = 0 if basic_qty is None else int(basic_qty)
                         cur201.execute(insert_query1, (
-                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, 0 if basic_qty is None else basic_qty, 0 if basic_qty is None else basic_price*basic_qty, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (basic_price-exit_price)*basic_qty, crt_dt, mod_dt
+                            acct_no, name, code, trail_day, trail_dtm, trail_tp, basic_price, _bq, _bp*_bq, volumn, stop_price, target_price, proc_min, trade_tp, exit_price, (_bp-_ep)*_bq, crt_dt, mod_dt
                         ))
                         if cur201.rowcount > 0:
                             inserted_rows_info.append({
@@ -641,7 +645,7 @@ for nick in nickname_list:
                 tp_buttons = [
                     [InlineKeyboardButton(
                         f"{c['name']}{c['display_plain']}",
-                        callback_data=f"tp:{c['acct_no']}:{c['name']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
+                        callback_data=f"tp:{c['acct_no']}:{c['code']}:{c['trail_day']}:{c['trail_dtm']}:{c['trail_tp']}"
                     )]
                     for c in replace_candidates
                 ]
