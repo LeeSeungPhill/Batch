@@ -17,6 +17,162 @@ conn_string = "dbname='fund_risk_mng' host='192.168.50.81' port='5432' user='pos
 
 today = datetime.now().strftime("%Y%m%d")
 
+# 시장비율 리밸런싱 매도 cap 기준 (kis_market_ratio_rebalance.py 복제 — import 시 배치 자동실행 부작용 방지)
+TOP_CUT      = 70     # sell_priority(100-strength) 이 값 이상이면 종목당 전량 매도 허용, 아니면 일 최대 50%
+PER_NAME_CAP = 0.5     # 종목당 1일 최대 매도 비중 (평가금액 대비)
+
+def total_excess(cash, total_eval, market_ratio):
+    """base = 현금 + 전체 평가금액, target = base*market_ratio/100, excess = 평가금액-target(>0 이면 매도).
+    KOSPI/KOSDAQ 구분 없이 트레이딩풀 전체를 대상으로 한 단일 초과분(원)."""
+    if market_ratio is None or total_eval <= 0:
+        return 0
+    base = total_eval + cash
+    return int(max(0, total_eval - base * market_ratio / 100))
+
+def allocate(bucket, excess, cur_price_key="current_price", avail_key="avail_qty"):
+    """bucket: sell_priority 계산된 holding dict 리스트. excess 만큼 순위 충전식 배분.
+    각 holding dict 는 'sell_priority','eval_sum',cur_price_key,avail_key 를 가진다.
+    반환: [(holding, qty), ...]"""
+    ranked = sorted(bucket, key=lambda h: -h["sell_priority"])
+    orders, filled = [], 0
+    for h in ranked:
+        if filled >= excess:
+            break
+        cur = h[cur_price_key]
+        avail = int(h.get(avail_key, 0) or 0)
+        if cur <= 0 or avail <= 0:
+            continue
+        # 매도 할당 금액 : 수급 또는 차트 strength > 70 이면 전체 물량, 아니면 절반 물량
+        cap_amt = h["eval_sum"] if h["sell_priority"] >= TOP_CUT else h["eval_sum"] * PER_NAME_CAP
+        # 시장비율 초과하여 감축할 금액(cap_amt 와 초과한 물량에서 차감한 물량 중 최소 금액)
+        amt = min(cap_amt, excess - filled)
+        qty = int(amt // cur)
+        qty = min(qty, avail)
+        if qty > 0:
+            orders.append((h, qty))
+            filled += qty * cur
+    return orders
+
+# 차트점수 기반 sell_priority 산정 (kis_market_ratio_rebalance.py _make_strength_fn / _calc_chart_score / _adx 복제)
+W_CHART = 0.5   # strength = W_CHART * 차트점수(0~100)
+
+def _fetch_daily_ohlcv(access_token, app_key, app_secret, code):
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "FHKST01010400",
+               "custtype": "P"}
+    params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code,
+              "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "1"}
+    try:
+        r = requests.get(f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-daily-price",
+                         headers=headers, params=params, verify=False, timeout=10)
+        rows = r.json().get("output") or []
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
+
+def _adx(highs, lows, closes, period=14):
+    n = len(closes)
+    if n < period * 2:
+        return None, None, None
+    trs, plus_dm, minus_dm = [], [], []
+    for i in range(1, n):
+        up, dn = highs[i] - highs[i-1], lows[i-1] - lows[i]
+        plus_dm.append(up if (up > dn and up > 0) else 0.0)
+        minus_dm.append(dn if (dn > up and dn > 0) else 0.0)
+        trs.append(max(highs[i]-lows[i], abs(highs[i]-closes[i-1]), abs(lows[i]-closes[i-1])))
+
+    def _smooth(x):
+        s = [sum(x[:period])]
+        for v in x[period:]:
+            s.append(s[-1] - s[-1]/period + v)
+        return s
+    tr_s, pdm_s, mdm_s = _smooth(trs), _smooth(plus_dm), _smooth(minus_dm)
+    dxs = []
+    for tr, pdm, mdm in zip(tr_s, pdm_s, mdm_s):
+        if tr == 0:
+            continue
+        pdi, mdi = 100*pdm/tr, 100*mdm/tr
+        if pdi + mdi == 0:
+            continue
+        dxs.append(100*abs(pdi-mdi)/(pdi+mdi))
+    if len(dxs) < period:
+        return None, None, None
+    adx = sum(dxs[-period:]) / period
+    pdi = 100*pdm_s[-1]/tr_s[-1] if tr_s[-1] else 0.0
+    mdi = 100*mdm_s[-1]/tr_s[-1] if tr_s[-1] else 0.0
+    return adx, pdi, mdi
+
+def _calc_chart_score(rows):
+    if not rows or len(rows) < 25:
+        return None
+    def _f(v):
+        try: return float(v)
+        except: return 0.0
+    closes  = [_f(r.get("stck_clpr", 0)) for r in rows]
+    highs   = [_f(r.get("stck_hgpr", 0)) for r in rows]
+    lows    = [_f(r.get("stck_lwpr", 0)) for r in rows]
+    volumes = [_f(r.get("acml_vol",  0)) for r in rows]
+    cur = closes[0]
+    ma5  = sum(closes[:5]) / 5
+    ma20 = sum(closes[:20]) / 20
+    ma60 = sum(closes[:60]) / 60 if len(closes) >= 60 else None
+
+    if ma60:
+        if   ma5 > ma20 > ma60:               trend_sc = 30
+        elif ma5 > ma20 and ma20 < ma60:      trend_sc = 22
+        elif ma5 > ma60 and ma5 <= ma20:      trend_sc = 16
+        elif abs(ma5-ma20)/ma20 < 0.01:       trend_sc = 10
+        elif ma5 < ma20 and ma20 > ma60:      trend_sc = 5
+        else:                                 trend_sc = 0
+    else:
+        if   ma5 > ma20*1.02: trend_sc = 22
+        elif ma5 > ma20:      trend_sc = 16
+        elif ma5 > ma20*0.99: trend_sc = 10
+        else:                 trend_sc = 0
+
+    adx, pdi, mdi = _adx(list(reversed(highs)), list(reversed(lows)), list(reversed(closes)))
+    if adx is None:                            adx_sc = 8
+    elif adx >= 40 and pdi > mdi:              adx_sc = 25
+    elif adx >= 25 and pdi > mdi:              adx_sc = 20
+    elif adx >= 25 and pdi <= mdi:             adx_sc = 5
+    elif adx >= 20:                            adx_sc = 12
+    else:                                      adx_sc = 8
+
+    d = (cur - ma20)/ma20*100 if ma20 else 0.0
+    if   -3 <= d <= 5:    dev_sc = 20
+    elif  5 <  d <= 10:   dev_sc = 15
+    elif -8 <= d < -3:    dev_sc = 15
+    elif -15 <= d < -8:   dev_sc = 12
+    elif 10 <  d <= 15:   dev_sc = 10
+    elif d < -15:         dev_sc = 8
+    else:                 dev_sc = 5
+
+    va5, va20 = sum(volumes[:5])/5, sum(volumes[:20])/20
+    v = va5/va20*100 if va20 else 100
+    vol_sc = 15 if v > 150 else 12 if v > 120 else 9 if v > 90 else 6 if v > 70 else 3
+
+    vod = volumes[0]/volumes[1]*100 if len(volumes) >= 2 and volumes[1] > 0 else 100
+    vod_sc = 10 if vod > 150 else 8 if vod > 120 else 6 if vod > 80 else 4 if vod > 50 else 2
+
+    return trend_sc + adx_sc + dev_sc + vol_sc + vod_sc
+
+def _make_strength_fn(access_token, app_key, app_secret, cache):
+    """종목별 차트점수 기반 strength(0~100 근사) 계산 함수 생성. sell_priority = 100 - strength 로 사용."""
+    def fn(code):
+        if code in cache:
+            return cache[code]
+        time.sleep(0.25)
+        ohlcv = _fetch_daily_ohlcv(access_token, app_key, app_secret, code)
+        chart = _calc_chart_score(ohlcv)
+        chart = 50 if chart is None else chart
+        st = W_CHART * chart
+        cache[code] = st
+        return st
+    return fn
+
 # 인증처리
 def auth(APP_KEY, APP_SECRET):
 
@@ -707,6 +863,10 @@ def process_account(nick):
 
         cur_time = datetime.now().strftime("%H%M")
 
+        # 시장비율 초과(excess) 매도수량 배분 시 sell_priority 산정용 차트점수 strength 함수 (계좌당 캐시 1회 생성)
+        _strength_cache = {}
+        _strength_fn = _make_strength_fn(access_token, app_key, app_secret, _strength_cache)
+
         balance_proc(access_token, app_key, app_secret, acct_no, conn)
 
         # 보유정보 조회
@@ -739,7 +899,8 @@ def process_account(nick):
                  FROM "stockBalance_stock_balance" S
                  WHERE S.acct_no = A.acct_no AND S.proc_yn = 'Y'
                    AND (S.trading_plan IS NULL OR S.trading_plan NOT IN ('i'))
-                ) AS filtered_scts_evlu
+                ) AS filtered_scts_evlu,
+                A.eval_sum
             FROM "stockBalance_stock_balance" A
             LEFT JOIN "stockFundMng_stock_fund_mng" F ON F.acct_no = A.acct_no
             WHERE A.acct_no = %s AND A.proc_yn = 'Y' AND (A.trading_plan IS NULL OR A.trading_plan NOT IN ('i'))
@@ -751,15 +912,18 @@ def process_account(nick):
         kospi_short_v = None
         kosdak_short_v = None
         u_prvs_rcdl_excc_amt = 0
-        filtered_tot_evlu = 0
+        filtered_scts_evlu = 0
+        market_ratio_excess = 0
         if result_three:
             _r0 = result_three[0]
             u_prvs_rcdl_excc_amt = int(_r0[16])   if _r0[16] is not None else 0
             market_ratio_v       = float(_r0[17]) if _r0[17] is not None else None
             kospi_short_v        = _r0[18]
             kosdak_short_v       = _r0[19]
-            _fsv                 = int(_r0[20])   if _r0[20] is not None else 0
-            filtered_tot_evlu    = u_prvs_rcdl_excc_amt + _fsv
+            filtered_scts_evlu   = int(_r0[20])   if _r0[20] is not None else 0
+            # 시장비율(market_ratio) 허용 금액 대비 트레이딩 매입금액(평가금액) 초과분
+            # base=현금+평가금액, target=base*market_ratio/100
+            market_ratio_excess  = total_excess(u_prvs_rcdl_excc_amt, filtered_scts_evlu, market_ratio_v)
 
         for i in result_three:
             a = ""
@@ -841,8 +1005,12 @@ def process_account(nick):
                 if len(result_four) > 0:
                     continue
 
-                # trading_plan ='h' 대상의 단기시장 하락의 이탈가 이탈 또는 최종이탈가 이탈 신호 발생 시 trading_trail 레코드 생성
-                if i[12] == 'h' and short_market_signal == 'D' and trail_signal_code in ('08', '10'):
+                # trading_plan ='h' 대상 trading_trail 레코드 생성
+                #  - 이탈가(08) : 시장비율 허용금액 초과(market_ratio_excess) 시 → 초과금액 기준 매도수량(allocate)
+                #  - 최종이탈가(10) : 해당 종목 시장(코스피/코스닥)의 단기 하락(short_market_signal=='D') 시 → 전량 매도수량
+                _trigger_excess = i[12] == 'h' and trail_signal_code == '08' and market_ratio_excess > 0
+                _trigger_short  = i[12] == 'h' and trail_signal_code == '10' and short_market_signal == 'D'
+                if _trigger_excess or _trigger_short:
                     _base_qty   = int(i[6])          if i[6]  is not None else 0
                     _base_price = int(float(i[14]))  if i[14] is not None else 0
                     _base_amt   = int(i[15])         if i[15] is not None else 0
@@ -854,6 +1022,31 @@ def process_account(nick):
                         _hms_dtm  = (_now - timedelta(minutes=10)).strftime('%H%M%S') # trail_dtm: 10분 소급 → loop_start_dt를 현재 10분봉 구간으로 당김
                         _cur = int(a['stck_prpr'])
 
+                        if _trigger_excess:
+                            # 시장비율 초과분(market_ratio_excess)을 allocate() 로 배분해 실제 매도 가능 수량 산출
+                            # sell_priority = 100 - strength(차트점수 기반, _make_strength_fn 참조)
+                            _eval_sum  = int(i[21]) if i[21] is not None else 0
+                            _strength  = _strength_fn(i[0])
+                            _alloc_bucket = [{
+                                "code": i[0], "name": i[1],
+                                "current_price": _cur,
+                                "eval_sum": _eval_sum,
+                                "avail_qty": _base_qty,
+                                "sell_priority": 100 - _strength,
+                            }]
+                            _alloc_orders = allocate(_alloc_bucket, market_ratio_excess)
+                            alloc_qty = _alloc_orders[0][1] if _alloc_orders else 0
+                        else:
+                            # 최종이탈가 이탈 → 전량 매도수량
+                            alloc_qty = _base_qty
+
+                        if alloc_qty > 0:
+                            n_sell_amount    = alloc_qty
+                            n_sell_sum       = _cur * alloc_qty
+                            sell_plan_amount = format(int(n_sell_amount), ',d')
+                            sig["sell_amount"] = n_sell_amount
+                            sig["sell_sum"]    = n_sell_sum
+
                         _resist  = int(i[2]) if i[2] else 0
                         _support = int(i[3]) if i[3] else 0
                         _etgt    = int(i[4]) if i[4] else 0
@@ -862,17 +1055,7 @@ def process_account(nick):
                         if trail_signal_code == '10':                                               # 최종이탈가 이탈시
                             _tt_plan = '100'                                                        # 매도비율 100% 설정
                         else:                                                                       # 이탈가 이탈시 
-                            # _tt_plan = None
-                            # if market_ratio_v is not None and filtered_tot_evlu > 0 and _cur > 0:
-                            #     _req_cash = int(filtered_tot_evlu * (100 - market_ratio_v) / 100)
-                            #     if u_prvs_rcdl_excc_amt < _req_cash:                                # 시장비율의 현금액이 현재 현금액보다 클 경우
-                            #         _shortage = _req_cash - u_prvs_rcdl_excc_amt
-                            #         _pv = min(100, round(_shortage / (_cur * _base_qty) * 100))     # 매도비율 최대 100% 설정(매도 대상 금액이 시장비율의 현금액과 현재 현금액의 차액보다 작을 경우)
-                            #         if _pv > 0:
-                            #             _tt_plan = str(_pv)
-                            #     else:                                                               # 시장비율의 현금액이 현재 현금액보다 작을 경우
-                            #         _tt_plan = '50'                                                 # 매도비율 50% 설정
-                            _tt_plan = '50'                                                         # 매도비율 50% 설정
+                            _tt_plan = str(max(1, min(100, round(100 - _strength))))                # 매도비율 100 - strength(차트점수 기반) 설정
 
                         if _tt_plan is not None:
                             if trail_signal_code == '08':   # 지지가 이탈 : stop_price = 지지가, target_price = 지지가 + 지지가 * 0.5%, exit_price = 지지가
