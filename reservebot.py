@@ -4051,21 +4051,35 @@ def callback_get(update, context) :
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 이탈가(stop_price), 목표가(target_price), 최종이탈가(exit_price), 매도비율(trail_plan) 입력 처리
         parts = data_selected.split(':')
-        if len(parts) == 7:
+        if len(parts) == 6:
             global g_tp_pending
+            # 종목명은 DB에서 조회 (callback_data 64바이트 제한 회피)
+            _tp_code = parts[2]
+            _tp_name = _tp_code
+            try:
+                with get_conn().cursor() as cur_tp:
+                    cur_tp.execute(
+                        "SELECT name FROM trading_trail WHERE code = %s ORDER BY trail_dtm DESC LIMIT 1",
+                        (_tp_code,)
+                    )
+                    _row = cur_tp.fetchone()
+                    if _row:
+                        _tp_name = _row[0]
+            except Exception:
+                pass
             g_tp_pending[query.message.chat_id] = {
                 'acct_no':   parts[1],
-                'name':      parts[2],
-                'code':      parts[3],
-                'trail_day': parts[4],
-                'trail_dtm': parts[5],
-                'trail_tp':  parts[6],
+                'name':      _tp_name,
+                'code':      _tp_code,
+                'trail_day': parts[3],
+                'trail_dtm': parts[4],
+                'trail_tp':  parts[5],
             }
             menuNum = 'tp'
             # 버튼 메시지는 그대로 유지 — 새 메시지로 입력 요청
             context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"[{parts[2]}] 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요."
+                text=f"[{_tp_name}] 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요."
             )
 
 get_handler = CommandHandler('reserve', get_command)
