@@ -3029,11 +3029,11 @@ def callback_get(update, context) :
                 )
                 AND NOT EXISTS (
                     SELECT 1
-                    FROM public.dly_stock_balance DSB
-                    WHERE DSB.acct::int = BAL.acct_no
-                    AND DSB.code = BAL.code
-                    AND DSB.dt = %s
-                    AND DSB.trading_plan IN ('i', 'h')
+                    FROM public."stockBalance_stock_balance" SB
+                    WHERE SB.acct_no = BAL.acct_no
+                    AND SB.code = BAL.code
+                    AND SB.proc_yn = 'Y'
+                    AND SB.trading_plan IN ('i', 'h')
                 );
                 """
 
@@ -3041,7 +3041,7 @@ def callback_get(update, context) :
                 cur200 = conn200.cursor()
                 full_query = cur200.mogrify(
                     balance_sql_tmpl + insert_query_tmpl,
-                    (int(acct_no), prev_date, trail_day, trail_day, trail_day, prev_date)
+                    (int(acct_no), prev_date, trail_day, trail_day, trail_day)
                 ).decode()
 
                 execute_values(
