@@ -357,6 +357,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
         FROM "interestItem_interest_item"
         WHERE acct_no = %s
+        AND proc_yn = 'Y'
     """, (str(acct_no),))
     result = cur21.fetchall()
     cur21.close()

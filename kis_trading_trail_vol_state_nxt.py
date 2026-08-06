@@ -770,37 +770,27 @@ def get_valid_sell_price(price: int) -> int:
         tick = 1000
     return (price // tick) * tick
 
-def _read_alert_keys_db(conn, acct_no, stock_code, trail_day, trail_dtm, table="public.trading_trail_nxt"):
+def _get_current_price_quick(stock_code: str, access_token: str,
+                              app_key: str, app_secret: str) -> int:
+    """종목코드의 현재가 즉시 조회 (단일 quote API). 실패 시 0."""
     try:
-        cur = conn.cursor()
-        cur.execute(f"""
-            SELECT COALESCE(last_alert_keys, '{{}}')
-            FROM {table}
-            WHERE acct_no = %s AND code = %s
-              AND trail_day = %s AND trail_dtm = %s
-            LIMIT 1
-        """, (acct_no, stock_code, trail_day, trail_dtm))
-        row = cur.fetchone()
-        cur.close()
-        return row[0] if row else {}
-    except Exception as e:
-        print(f"알림 상태 조회 실패: {e}")
-        return {}
-
-def _write_alert_key_db(conn, acct_no, stock_code, trail_day, trail_dtm, key_name, key_value, table="public.trading_trail_nxt"):
-    try:
-        cur = conn.cursor()
-        cur.execute(f"""
-            UPDATE {table}
-            SET last_alert_keys = COALESCE(last_alert_keys, '{{}}') || %s::jsonb
-            WHERE acct_no = %s AND code = %s
-              AND trail_day = %s AND trail_dtm = %s
-        """, (json.dumps({key_name: key_value}),
-              acct_no, stock_code, trail_day, trail_dtm))
-        conn.commit()
-        cur.close()
-    except Exception as e:
-        print(f"알림 상태 저장 실패: {e}")
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
+            headers={
+                "Content-Type": "application/json",
+                "authorization": f"Bearer {access_token}",
+                "appkey": app_key, "appsecret": app_secret,
+                "tr_id": "FHKST01010100", "custtype": "P",
+            },
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output'):
+            return int(d['output'].get('stck_prpr') or 0)
+    except Exception:
+        pass
+    return 0
 
 def get_kis_1min_from_datetime(
     nick: str,
@@ -1291,6 +1281,20 @@ def process_account(nick):
         cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), trail_tp, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail_nxt where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
+
+        # 현재가 조회 실패(0원) 종목 제외
+        if result_two00:
+            _filtered_two00 = []
+            for stock_info in result_two00:
+                _chk_code = stock_info[0]
+                _chk_name = stock_info[1]
+                _chk_price = _get_current_price_quick(_chk_code, ac['access_token'], ac['app_key'], ac['app_secret'])
+                time.sleep(0.1)
+                if _chk_price == 0:
+                    print(f"[{nick}] {_chk_name}({_chk_code}) 현재가 조회 실패(0원) → 건너뜀")
+                    continue
+                _filtered_two00.append(stock_info)
+            result_two00 = _filtered_two00
 
         if result_two00:
             # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)

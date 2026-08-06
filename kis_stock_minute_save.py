@@ -208,7 +208,7 @@ if result_one == None:
             cur100.execute("""
                 SELECT code, name FROM "stockBalance_stock_balance" WHERE acct_no = %s AND proc_yn = 'Y'
                 UNION ALL
-                SELECT code, name FROM "interestItem_interest_item" WHERE acct_no = %s AND length(code) > 4
+                SELECT code, name FROM "interestItem_interest_item" WHERE acct_no = %s AND length(code) > 4 AND proc_yn = 'Y'
             """, (str(acct_no), str(acct_no)))
             result_one00 = cur100.fetchall()
             cur100.close()

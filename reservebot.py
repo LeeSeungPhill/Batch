@@ -3785,7 +3785,8 @@ def callback_get(update, context) :
             with get_conn().cursor() as cur_kk:
                 cur_kk.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
-                    'FROM public."interestItem_interest_item" WHERE code = %s',
+                    'FROM public."interestItem_interest_item" '
+                    "WHERE code = %s AND proc_yn = 'Y'",
                     (g_kk_code,)
                 )
                 kk_row = cur_kk.fetchone()
@@ -4572,7 +4573,7 @@ def echo(update, context):
                 cur06.execute(
                     f'UPDATE public."interestItem_interest_item" '
                     f'SET last_chg_date = now(), {col06} = %s '
-                    f"WHERE code = %s",
+                    f"WHERE code = %s AND proc_yn = 'Y'",
                     (new_val06, g_kk_code)
                 )
                 updated06 = cur06.rowcount
