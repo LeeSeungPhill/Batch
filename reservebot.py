@@ -1684,8 +1684,8 @@ def callback_get(update, context) :
         except Exception as e:
             query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
 
-    elif command.startswith("prevlow_sell:"):
-        # kis_trading_trail_vol_state.py 에서 전송한 전일저가 이탈 전량매도 대상 매도가 입력 처리
+    elif command.startswith("downtrend_sell:"):
+        # kis_trading_trail_vol_state.py 에서 전송한 하락추세 이탈 매도 대상 매도가 입력 처리
         parts = command.split(":")
         p_name  = parts[1]
         p_code  = parts[2]

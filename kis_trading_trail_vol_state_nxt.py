@@ -1154,7 +1154,7 @@ def process_stock(stock_info, nick, ac, bot, chat_id):
             proc_min=stock_info[10],
             volumn=stock_info[11],
             trade_tp=stock_info[12],
-            exit_price=int(stock_info[13]),
+            exit_price=int(stock_info[13]) if stock_info[13] is not None else 0,
             access_token=ac['access_token'],
             app_key=ac['app_key'],
             app_secret=ac['app_secret'],

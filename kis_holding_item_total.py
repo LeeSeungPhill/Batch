@@ -1058,8 +1058,8 @@ def process_account(nick):
                             _tt_plan = str(max(1, min(100, round(100 - _strength))))                # 매도비율 100 - strength(차트점수 기반) 설정
 
                         if _tt_plan is not None:
-                            if trail_signal_code == '08':   # 지지가 이탈 : stop_price = 지지가, target_price = 지지가 + 지지가 * 0.5%, exit_price = 지지가
-                                _tt_stop, _tt_tgt, _tt_exit = _support,  int(_support * 1.05), _support
+                            if trail_signal_code == '08':   # 지지가 이탈 : stop_price = 지지가, target_price = 지지가 + 지지가 * 0.5%, exit_price = 최종이탈가(별도 유지)
+                                _tt_stop, _tt_tgt, _tt_exit = _support,  int(_support * 1.05), _eloss
                             else:                           # 최종이탈가 이탈 : stop_price = 최종이탈가, target_price = 최종이탈가 + 최종이탈가 * 0.5%, exit_price = 최종이탈가
                                 _tt_stop, _tt_tgt, _tt_exit = _eloss,    int(_eloss   * 1.05), _eloss
 
