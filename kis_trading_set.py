@@ -327,11 +327,11 @@ for nick in nickname_list:
             )
             AND NOT EXISTS (
                 SELECT 1
-                FROM public.dly_stock_balance DSB
-                WHERE DSB.acct::int = BAL.acct_no
-                AND DSB.code = BAL.code
-                AND DSB.dt = '{prev_date}'
-                AND DSB.trading_plan IN ('i', 'h')
+                FROM public."stockBalance_stock_balance" SB
+                WHERE SB.acct_no = BAL.acct_no
+                AND SB.code = BAL.code
+                AND SB.proc_yn = 'Y'
+                AND SB.trading_plan IN ('i', 'h')
             );
             """
             cur200 = conn.cursor()
