@@ -3009,11 +3009,11 @@ def callback_get(update, context) :
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                     CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price*BAL.purchase_qty ELSE S.basic_price*S.basic_qty END AS basic_amt,
                     COALESCE(S.volumn, 0) AS volumn,
-                    COALESCE(S.stop_price, 0) AS stop_price,
-                    COALESCE(S.target_price, 0) AS target_price,
+                    COALESCE(S.stop_price, (SELECT sign_support_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS stop_price,
+                    COALESCE(S.target_price, (SELECT sign_resist_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS target_price,
                     '090000' AS proc_min,
                     COALESCE(S.trade_tp, 'M') AS trade_tp,
-                    COALESCE(S.exit_price, 0) AS exit_price,
+                    COALESCE(S.exit_price, (SELECT end_loss_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS exit_price,
                     COALESCE(S.loss_amt, 0) AS loss_amt,
                     now(),
                     now()
@@ -3785,7 +3785,8 @@ def callback_get(update, context) :
             with get_conn().cursor() as cur_kk:
                 cur_kk.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
-                    'FROM public."interestItem_interest_item" WHERE code = %s',
+                    'FROM public."interestItem_interest_item" '
+                    "WHERE code = %s AND proc_yn = 'Y'",
                     (g_kk_code,)
                 )
                 kk_row = cur_kk.fetchone()
@@ -4572,7 +4573,7 @@ def echo(update, context):
                 cur06.execute(
                     f'UPDATE public."interestItem_interest_item" '
                     f'SET last_chg_date = now(), {col06} = %s '
-                    f"WHERE code = %s",
+                    f"WHERE code = %s AND proc_yn = 'Y'",
                     (new_val06, g_kk_code)
                 )
                 updated06 = cur06.rowcount
@@ -5843,7 +5844,8 @@ def echo(update, context):
                                                  FROM public."stockBalance_stock_balance" sb
                                                  WHERE sb.acct_no = sfm.acct_no
                                                    AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
-                                                   AND sb.proc_yn = 'Y'), 0)
+                                                   AND sb.proc_yn = 'Y'
+                                                   AND COALESCE(eval_sum, 0) > 0), 0)
                                 FROM public."stockFundMng_stock_fund_mng" sfm
                                 WHERE sfm.acct_no = %s
                             """, (str(acct_no),))
