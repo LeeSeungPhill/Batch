@@ -646,6 +646,28 @@ def _get_stock_market_type(stock_code: str, access_token: str,
         pass
     return 'KOSPI'
 
+def _get_current_price_quick(stock_code: str, access_token: str,
+                              app_key: str, app_secret: str) -> int:
+    """종목코드의 현재가 즉시 조회 (단일 quote API). 실패 시 0."""
+    try:
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
+            headers={
+                "Content-Type": "application/json",
+                "authorization": f"Bearer {access_token}",
+                "appkey": app_key, "appsecret": app_secret,
+                "tr_id": "FHKST01010100", "custtype": "P",
+            },
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output'):
+            return int(d['output'].get('stck_prpr') or 0)
+    except Exception:
+        pass
+    return 0
+
 def _calc_peak_trough_trend(highs: list, closes: list, lows: list, dates: list) -> dict | None:
     """일봉 고가/저가 리스트(날짜 오름차순) 기준 지그재그 고점/저점으로 현재 추세와 그 시작일 계산.
     고점: 전일 대비 상승 + 익일 대비 하락. 저점: 전일 대비 하락 + 익일 대비 상승.
@@ -2710,6 +2732,20 @@ def process_account(nick):
         # cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and basic_qty > 0 order by code, proc_min, mod_dt")
         result_two00 = cur200.fetchall()
         cur200.close()
+
+        # 현재가 조회 실패(0원) 종목 제외
+        if result_two00:
+            _filtered_two00 = []
+            for stock_info in result_two00:
+                _chk_code = stock_info[0]
+                _chk_name = stock_info[1]
+                _chk_price = _get_current_price_quick(_chk_code, ac['access_token'], ac['app_key'], ac['app_secret'])
+                time.sleep(0.1)
+                if _chk_price == 0:
+                    print(f"[{nick}] {_chk_name}({_chk_code}) 현재가 조회 실패(0원) → 건너뜀")
+                    continue
+                _filtered_two00.append(stock_info)
+            result_two00 = _filtered_two00
 
         _now_hhmm = datetime.now().strftime('%H%M')
         if today.endswith("1119"): 

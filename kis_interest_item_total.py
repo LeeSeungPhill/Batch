@@ -712,6 +712,9 @@ def process_account(nick):
 
                 signals = []
 
+                if int(a['stck_hgpr']) < 1 or int(a['stck_lwpr']) < 1:
+                    continue
+
                 if int(a['stck_hgpr']) > i[2]:
                     ba = round(2000000 / int(a['stck_prpr']))
                     signals.append({'code': '01',
@@ -853,6 +856,9 @@ def process_account(nick):
 
                 signals = []
                 cur_prpr = math.ceil(float(b['bstp_nmix_prpr']))
+
+                if int(cur_prpr) < 1:
+                    continue
 
                 if cur_prpr > i[2]:
                     mln, rr, inum = "", 0, 0

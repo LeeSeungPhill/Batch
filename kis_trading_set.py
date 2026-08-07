@@ -308,11 +308,11 @@ for nick in nickname_list:
                 CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_price ELSE S.basic_price END AS basic_price,
                 CASE WHEN COALESCE(BAL.purchase_qty, 0) > 0 THEN BAL.purchase_qty ELSE S.basic_qty END AS basic_qty,
                 COALESCE(S.volumn, 0) AS volumn,
-                COALESCE(S.stop_price, 0) AS stop_price,
-                COALESCE(S.target_price, 0) AS target_price,
+                COALESCE(S.stop_price, (SELECT sign_support_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS stop_price,
+                COALESCE(S.target_price, (SELECT sign_resist_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS target_price,
                 '090000' AS proc_min,
                 COALESCE(S.trade_tp, 'M') AS trade_tp,
-                COALESCE(S.exit_price, 0) AS exit_price,
+                COALESCE(S.exit_price, (SELECT end_loss_price FROM public."stockBalance_stock_balance" WHERE acct_no = BAL.acct_no AND code = BAL.code AND proc_yn = 'Y')) AS exit_price,
                 now(),
                 now()
             FROM balance BAL
