@@ -5844,7 +5844,8 @@ def echo(update, context):
                                                  FROM public."stockBalance_stock_balance" sb
                                                  WHERE sb.acct_no = sfm.acct_no
                                                    AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
-                                                   AND sb.proc_yn = 'Y'), 0)
+                                                   AND sb.proc_yn = 'Y'
+                                                   AND COALESCE(eval_sum, 0) > 0), 0)
                                 FROM public."stockFundMng_stock_fund_mng" sfm
                                 WHERE sfm.acct_no = %s
                             """, (str(acct_no),))
