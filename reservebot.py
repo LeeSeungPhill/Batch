@@ -5337,7 +5337,7 @@ def echo(update, context):
                             cur_rsv_61s.execute("""
                                 INSERT INTO "stockBalance_stock_balance" (acct_no, code, reserve_price, reserve_qty, reserve_date)
                                 VALUES (%s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code) DO UPDATE
+                                ON CONFLICT (acct_no, code, asset_num) DO UPDATE
                                 SET reserve_price = EXCLUDED.reserve_price,
                                     reserve_qty = EXCLUDED.reserve_qty,
                                     reserve_date = EXCLUDED.reserve_date
