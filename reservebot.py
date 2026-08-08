@@ -2751,6 +2751,22 @@ def callback_get(update, context) :
                                 rsvn_end_dt_63n, rsvn_seq_63n
                             )
                             if rsv_cncl_result and rsv_cncl_result.get('NRML_PRCS_YN', '') == 'Y':
+                                if sll_buy_cd_63n == '01':
+                                    thread_conn_63n = db.connect(conn_string)
+                                    try:
+                                        with thread_conn_63n.cursor() as cur_rsv_63n:
+                                            cur_rsv_63n.execute("""
+                                                UPDATE "stockAccount_stock_account"
+                                                SET reserve_price = NULL, reserve_qty = NULL, reserve_date = NULL
+                                                WHERE acct_no = %s AND code = %s
+                                            """, (t_acct_no, cn63_code))
+                                        thread_conn_63n.commit()
+                                    except Exception as e:
+                                        thread_conn_63n.rollback()
+                                        context.bot.send_message(chat_id=query.message.chat_id,
+                                            text=f"-{t_nick_label}- 예약정보 초기화 오류: {str(e)}")
+                                    finally:
+                                        thread_conn_63n.close()
                                 context.bot.send_message(
                                     chat_id=query.message.chat_id,
                                     text=(f"-{t_nick_label}-[{cn63_name}(<code>{cn63_code}</code>)] "
@@ -5315,6 +5331,23 @@ def echo(update, context):
                     "01", dvsn_cd_61s, ord_end_dt_61s
                 )
                 if rsv_result_61s and rsv_result_61s.get('RSVN_ORD_SEQ', '') != '':
+                    thread_conn_61s = db.connect(conn_string)
+                    try:
+                        with thread_conn_61s.cursor() as cur_rsv_61s:
+                            cur_rsv_61s.execute("""
+                                INSERT INTO "stockAccount_stock_account" (acct_no, code, reserve_price, reserve_qty, reserve_date)
+                                VALUES (%s, %s, %s, %s, %s)
+                                ON CONFLICT (acct_no, code) DO UPDATE
+                                SET reserve_price = EXCLUDED.reserve_price,
+                                    reserve_qty = EXCLUDED.reserve_qty,
+                                    reserve_date = EXCLUDED.reserve_date
+                            """, (t_acct_no, rs_code, ord_price_61s, ord_qty_61s, ord_end_dt_61s))
+                        thread_conn_61s.commit()
+                    except Exception as e:
+                        thread_conn_61s.rollback()
+                        context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}- 예약정보 저장 오류: {str(e)}")
+                    finally:
+                        thread_conn_61s.close()
                     context.bot.send_message(
                         chat_id=user_id,
                         text=(f"-{t_nick_label}-[{rs_name}(<code>{rs_code}</code>)] "
@@ -5428,6 +5461,21 @@ def echo(update, context):
                             sll_buy_cd, "00", ord_end_dt_62n, rsvn_seq
                         )
                         if rsv_corr_result and rsv_corr_result.get('NRML_PRCS_YN', '') == 'Y':
+                            if sll_buy_cd == '01':
+                                thread_conn_62n = db.connect(conn_string)
+                                try:
+                                    with thread_conn_62n.cursor() as cur_rsv_62n:
+                                        cur_rsv_62n.execute("""
+                                            UPDATE "stockAccount_stock_account"
+                                            SET reserve_price = %s, reserve_date = %s
+                                            WHERE acct_no = %s AND code = %s
+                                        """, (ord_price_62n, ord_end_dt_62n, t_acct_no, rc_code))
+                                    thread_conn_62n.commit()
+                                except Exception as e:
+                                    thread_conn_62n.rollback()
+                                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}- 예약정보 저장 오류: {str(e)}")
+                                finally:
+                                    thread_conn_62n.close()
                             context.bot.send_message(
                                 chat_id=user_id,
                                 text=(f"-{t_nick_label}-[{rc_name}(<code>{rc_code}</code>)] "

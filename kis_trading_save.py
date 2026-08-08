@@ -305,7 +305,9 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
             SELECT COALESCE(sign_resist_price, 0), COALESCE(sign_support_price, 0),
                    COALESCE(end_target_price, 0), COALESCE(end_loss_price, 0),
                    COALESCE(trading_plan, ''), COALESCE(limit_price, 0),
-                   COALESCE(limit_amt, 0), COALESCE(safe_margin_sum, 0)
+                   COALESCE(limit_amt, 0), COALESCE(safe_margin_sum, 0),
+                   COALESCE(reserve_price, 0), COALESCE(reserve_qty, 0),
+                   reserve_date
             FROM "stockBalance_stock_balance"
             WHERE acct_no = %s AND proc_yn = 'Y' AND code = %s
         """, (str(acct_no), e_code[:6]))
@@ -321,7 +323,8 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
                     volumn=%s, volumn_rate=%s, eval_sum=%s, earnings_rate=%s, valuation_sum=%s,
                     last_chg_date=%s,
                     sign_resist_price=%s, sign_support_price=%s, end_target_price=%s,
-                    end_loss_price=%s, trading_plan=%s, limit_price=%s, limit_amt=%s, safe_margin_sum=%s
+                    end_loss_price=%s, trading_plan=%s, limit_price=%s, limit_amt=%s, safe_margin_sum=%s,
+                    reserve_price=%s, reserve_qty=%s, reserve_date=%s
                 WHERE dt=%s AND code=%s AND acct=%s RETURNING *
             )
             INSERT INTO dly_stock_balance(
@@ -329,9 +332,9 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
                 current_price, open_price, high_price, low_price, volumn, volumn_rate,
                 eval_sum, earnings_rate, valuation_sum, last_chg_date,
                 sign_resist_price, sign_support_price, end_target_price, end_loss_price,
-                trading_plan, limit_price, limit_amt, safe_margin_sum
+                trading_plan, limit_price, limit_amt, safe_margin_sum, reserve_price, reserve_qty, reserve_date
             )
-            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             WHERE NOT EXISTS (SELECT * FROM upsert)
         """
         # insert 인자값 설정
@@ -339,13 +342,13 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
             e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt,
             e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate),
             e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now(),
-            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7],
+            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7], sb[8], sb[9], sb[10],
             today, e_code[:6], str(acct_no),
             str(acct_no), today, e_name, e_code[:6],
             e_buy_qty, e_sell_qty, round(float(e_purchase_price)), e_purchase_qty, e_purchase_amt,
             e_current_price, f_open_price, f_high_price, f_low_price, f_volumn, float(f_volumn_rate),
             e_eval_amt, float(e_earnings_rate), e_valuation_amt, datetime.now(),
-            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7]
+            sb[0], sb[1], sb[2], sb[3], sb[4], sb[5], sb[6], sb[7], sb[8], sb[9], sb[10]
         )
         # DB 연결된 커서의 쿼리 수행
         cur2.execute(insert_query2, record_to_insert2)
@@ -357,7 +360,6 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
         FROM "interestItem_interest_item"
         WHERE acct_no = %s
-        AND proc_yn = 'Y'
     """, (str(acct_no),))
     result = cur21.fetchall()
     cur21.close()
