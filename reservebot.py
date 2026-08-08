@@ -2756,7 +2756,7 @@ def callback_get(update, context) :
                                     try:
                                         with thread_conn_63n.cursor() as cur_rsv_63n:
                                             cur_rsv_63n.execute("""
-                                                UPDATE "stockAccount_stock_account"
+                                                UPDATE "stockBalance_stock_balance"
                                                 SET reserve_price = NULL, reserve_qty = NULL, reserve_date = NULL
                                                 WHERE acct_no = %s AND code = %s
                                             """, (t_acct_no, cn63_code))
@@ -5335,7 +5335,7 @@ def echo(update, context):
                     try:
                         with thread_conn_61s.cursor() as cur_rsv_61s:
                             cur_rsv_61s.execute("""
-                                INSERT INTO "stockAccount_stock_account" (acct_no, code, reserve_price, reserve_qty, reserve_date)
+                                INSERT INTO "stockBalance_stock_balance" (acct_no, code, reserve_price, reserve_qty, reserve_date)
                                 VALUES (%s, %s, %s, %s, %s)
                                 ON CONFLICT (acct_no, code) DO UPDATE
                                 SET reserve_price = EXCLUDED.reserve_price,
@@ -5466,7 +5466,7 @@ def echo(update, context):
                                 try:
                                     with thread_conn_62n.cursor() as cur_rsv_62n:
                                         cur_rsv_62n.execute("""
-                                            UPDATE "stockAccount_stock_account"
+                                            UPDATE "stockBalance_stock_balance"
                                             SET reserve_price = %s, reserve_date = %s
                                             WHERE acct_no = %s AND code = %s
                                         """, (ord_price_62n, ord_end_dt_62n, t_acct_no, rc_code))
