@@ -5335,13 +5335,10 @@ def echo(update, context):
                     try:
                         with thread_conn_61s.cursor() as cur_rsv_61s:
                             cur_rsv_61s.execute("""
-                                INSERT INTO "stockBalance_stock_balance" (acct_no, code, reserve_price, reserve_qty, reserve_date)
-                                VALUES (%s, %s, %s, %s, %s)
-                                ON CONFLICT (acct_no, code, asset_num) DO UPDATE
-                                SET reserve_price = EXCLUDED.reserve_price,
-                                    reserve_qty = EXCLUDED.reserve_qty,
-                                    reserve_date = EXCLUDED.reserve_date
-                            """, (t_acct_no, rs_code, ord_price_61s, ord_qty_61s, ord_end_dt_61s))
+                                UPDATE "stockBalance_stock_balance"
+                                SET reserve_price = %s, reserve_qty = %s, reserve_date = %s
+                                WHERE acct_no = %s AND code = %s
+                            """, (ord_price_61s, ord_qty_61s, ord_end_dt_61s, t_acct_no, rs_code))
                         thread_conn_61s.commit()
                     except Exception as e:
                         thread_conn_61s.rollback()
