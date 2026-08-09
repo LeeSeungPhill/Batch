@@ -313,7 +313,7 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
         """, (str(acct_no), e_code[:6]))
         sb_row = cur_sb.fetchone()
         cur_sb.close()
-        sb = sb_row if sb_row else (0, 0, 0, 0, '', 0, 0, 0)
+        sb = sb_row if sb_row else (0, 0, 0, 0, '', 0, 0, 0, 0, 0, None)
 
         insert_query2 = """
             WITH upsert AS (
