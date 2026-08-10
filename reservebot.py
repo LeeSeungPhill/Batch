@@ -1175,6 +1175,8 @@ def callback_get(update, context) :
             InlineKeyboardButton("보유종목 수정", callback_data="menu,보유종목_수정"),
             InlineKeyboardButton("관심종목 조회", callback_data="menu,관심종목_조회"),
             InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
+            InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
+            InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
             InlineKeyboardButton("취소",          callback_data="menu,취소"),
         ]
         query.edit_message_text(
@@ -1683,6 +1685,10 @@ def callback_get(update, context) :
             )
         except Exception as e:
             query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
+
+    elif command == "트레이딩_전체":
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "TA")
 
     elif command.startswith("downtrend_sell:"):
         # kis_trading_trail_vol_state.py 에서 전송한 하락추세 이탈 매도 대상 매도가 입력 처리
@@ -2815,6 +2821,105 @@ def callback_get(update, context) :
                 t.start()
                 time.sleep(0.5)
             for t in threads_63n:
+                t.join()
+            menuNum = "0"
+            return
+
+        elif menu_num == "TA":
+            # 트레이딩 전체 — 입력 불필요, 즉시 실행
+            query.edit_message_text(text="[트레이딩 전체] 매도 처리 중...")
+            target_nicks_ta = g_selected_accounts[:] if g_selected_accounts else [None]
+
+            def process_nick_ta(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                t_nick_label = nick if nick else arguments[1]
+                try:
+                    with get_conn().cursor() as cur_ta:
+                        cur_ta.execute(
+                            """SELECT code FROM public."stockBalance_stock_balance"
+                               WHERE proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
+                               AND acct_no = %s""",
+                            (str(t_acct_no),)
+                        )
+                        ta_codes = [row[0] for row in cur_ta.fetchall()]
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 전체] 대상종목 조회 오류: {str(e)}")
+                    return
+
+                if not ta_codes:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 전체] 매도 대상 종목이 없습니다.")
+                    return
+
+                try:
+                    e_ta = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 전체] 잔고 조회 오류: {str(e)}")
+                    return
+
+                for ta_code in ta_codes:
+                    ta_qty = 0
+                    ta_name = ta_code
+                    for j, _ in enumerate(e_ta.index):
+                        if e_ta['pdno'][j] == ta_code:
+                            ta_qty = int(e_ta['ord_psbl_qty'][j])
+                            ta_name = e_ta['prdt_name'][j]
+                            break
+                    if ta_qty <= 0:
+                        continue
+                    try:
+                        time.sleep(0.3)  # 초당 3건 이하로 제한
+                        ap_ta = inquire_price(t_access_token, t_app_key, t_app_secret, ta_code)
+                        ta_price = int(ap_ta['stck_prpr'])
+                        ta_price = round_to_valid_price(ta_price, get_tick_size(ta_price))
+                        c_ord_ta = order_cash(False, t_access_token, t_app_key, t_app_secret,
+                                              str(t_acct_no), ta_code, "00", str(ta_qty), str(ta_price))
+                        if c_ord_ta is not None and c_ord_ta['ODNO'] != "":
+                            context.bot.send_message(
+                                chat_id=query.message.chat_id,
+                                text=(f"-{t_nick_label}-[트레이딩 전체][{ta_name}(<code>{ta_code}</code>)] "
+                                      f"현재가매도 주문 완료 | 가격: {format(ta_price, ',d')}원 | "
+                                      f"수량: {format(ta_qty, ',d')}주 | 주문번호: <code>{str(int(c_ord_ta['ODNO']))}</code>"),
+                                parse_mode='HTML'
+                            )
+                        else:
+                            context.bot.send_message(chat_id=query.message.chat_id,
+                                text=f"-{t_nick_label}-[트레이딩 전체][{ta_name}({ta_code})] 매도 주문 실패")
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{t_nick_label}-[트레이딩 전체][{ta_name}({ta_code})] 매도 오류: {str(e)}")
+
+            threads_ta = []
+            for nick in target_nicks_ta:
+                if nick is not None:
+                    try:
+                        ac_ta = account(nick)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_ta = ac_ta['acct_no']
+                    t_tok_ta  = ac_ta['access_token']
+                    t_key_ta  = ac_ta['app_key']
+                    t_sec_ta  = ac_ta['app_secret']
+                else:
+                    try:
+                        ac_ta_def = account(arguments[1])
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_ta = ac_ta_def['acct_no']
+                    t_tok_ta  = ac_ta_def['access_token']
+                    t_key_ta  = ac_ta_def['app_key']
+                    t_sec_ta  = ac_ta_def['app_secret']
+                t = threading.Thread(target=process_nick_ta,
+                                     args=(nick, t_acct_ta, t_tok_ta, t_key_ta, t_sec_ta))
+                threads_ta.append(t)
+                t.start()
+                time.sleep(0.5)
+            for t in threads_ta:
                 t.join()
             menuNum = "0"
             return
