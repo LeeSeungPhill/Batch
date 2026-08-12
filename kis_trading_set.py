@@ -607,7 +607,7 @@ for nick in nickname_list:
                     if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i', 'h')
                 )
 
-                trading_cash = 20,000,000 - filtered_scts_evlu if (20,000,000 - filtered_scts_evlu) < u_prvs_rcdl_excc_amt else u_prvs_rcdl_excc_amt
+                trading_cash = 20000000 - filtered_scts_evlu if (20000000 - filtered_scts_evlu) < u_prvs_rcdl_excc_amt else u_prvs_rcdl_excc_amt
                 filtered_tot_evlu = trading_cash + filtered_scts_evlu
 
                 mr_str = ""
