@@ -576,7 +576,7 @@ for nick in nickname_list:
             if replace_candidates:
                 message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
 
-            # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산
+            # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산 : 트레이딩현금 = LEAST((20,000,000 - filtered_scts_evlu), u_prvs_rcdl_excc_amt)
             try:
                 b_all = stock_balance(access_token, app_key, app_secret, acct_no, "all")
                 u_prvs_rcdl_excc_amt = 0
@@ -585,7 +585,7 @@ for nick in nickname_list:
 
                 with conn.cursor() as cur_sbm:
                     cur_sbm.execute(
-                        """SELECT code, trading_plan FROM public."stockBalance_stock_balance"
+                        """SELECT code, COALESCE(trading_plan, 't') FROM public."stockBalance_stock_balance"
                            WHERE acct_no = %s AND proc_yn = 'Y'""",
                         (str(acct_no),)
                     )
@@ -606,19 +606,21 @@ for nick in nickname_list:
                     for i, _ in enumerate(c.index)
                     if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i', 'h')
                 )
-                filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
+
+                trading_cash = 20,000,000 - filtered_scts_evlu if (20,000,000 - filtered_scts_evlu) < u_prvs_rcdl_excc_amt else u_prvs_rcdl_excc_amt
+                filtered_tot_evlu = trading_cash + filtered_scts_evlu
 
                 mr_str = ""
                 if market_ratio_v is not None and filtered_tot_evlu > 0:
-                    current_ratio_v = 100 - (u_prvs_rcdl_excc_amt / filtered_tot_evlu * 100)
-                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - int(filtered_tot_evlu * current_ratio_v / 100)
+                    current_ratio_v = 100 - (trading_cash / filtered_tot_evlu * 100)
+                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - int(trading_cash)
                     mr_str = (
                         f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
-                        f"전환현금:{format(convert_cash, ',d')}원"
+                        f"트레이딩 현금전환:{format(convert_cash, ',d')}원"
                     )
                 message += (
-                    f"\n\n* 총평가금액:{format(filtered_tot_evlu, ',d')}원, 잔고금액:{format(filtered_scts_evlu, ',d')}원, "
-                    f"가정산금:{format(u_prvs_rcdl_excc_amt, ',d')}원{mr_str}"
+                    f"\n\n* 총 트레이딩 평가:{format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고:{format(filtered_scts_evlu, ',d')}원, "
+                    f"트레이딩 현금:{format(trading_cash, ',d')}원{mr_str}"
                 )
 
                 if replace_candidates and filtered_tot_evlu > 0:
