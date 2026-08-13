@@ -201,6 +201,21 @@ g_trail71_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail71_amt_buy_amt = 0    # 매수금액 기준 매수금액
 _trail71_from_signal = False  # 신호 버튼에서 진입 시 True → acc_71_confirm에서 입력 단계 생략
 
+# 매수자동등록(73) 미리보기 → 진행 콜백 공유 상태
+g_trail73_code = ""
+g_trail73_company = ""
+g_trail73_buy_price = 0
+g_trail73_loss_price = 0
+g_trail73_item_loss_sum = ""
+g_trail73_buy_qty = 0
+g_trail73_buy_amt = 0
+g_trail73_year_day = ""
+g_trail73_hour_minute = ""
+g_trail73_loss_buy_qty = 0   # 손절금액 기준 매수량
+g_trail73_loss_buy_amt = 0   # 손절금액 기준 매수금액
+g_trail73_amt_buy_qty = 0    # 매수금액 기준 매수량
+g_trail73_amt_buy_amt = 0    # 매수금액 기준 매수금액
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 
@@ -1688,7 +1703,50 @@ def callback_get(update, context) :
 
     elif command == "트레이딩_전체":
         g_selected_accounts.clear()
-        show_account_selection_keyboard(query, "TA")
+        show_account_selection_keyboard(query, "TRALL")
+
+    elif command == "트레이딩_시장":
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "TRMAR")
+
+    elif command.startswith("tm_sell:"):
+        # 트레이딩 시장 — 종목 버튼 선택 시 현재가 기준 매도수량으로 즉시 매도
+        parts = command.split(":")
+        tm_nick = parts[1]
+        tm_sell_code = parts[2]
+        tm_sell_qty = int(parts[3])
+        match_tms = stock_code[stock_code.code == tm_sell_code]
+        tms_name = match_tms.company.values[0].strip() if len(match_tms) > 0 else tm_sell_code
+        try:
+            ac_tms = account(tm_nick)
+        except Exception as e:
+            context.bot.send_message(chat_id=query.message.chat_id, text=f"-{tm_nick}- 계좌조회 오류: {str(e)}")
+            return
+        query.edit_message_text(text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] {format(tm_sell_qty, ',d')}주 매도 처리 중...")
+
+        def process_tm_sell():
+            try:
+                ap_tms = inquire_price(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'], tm_sell_code)
+                tms_price = int(ap_tms['stck_prpr'])
+                tms_price = round_to_valid_price(tms_price, get_tick_size(tms_price))
+                c_ord_tms = order_cash(False, ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
+                                       str(ac_tms['acct_no']), tm_sell_code, "00", str(tm_sell_qty), str(tms_price))
+                if c_ord_tms is not None and c_ord_tms['ODNO'] != "":
+                    context.bot.send_message(
+                        chat_id=query.message.chat_id,
+                        text=(f"-{tm_nick}-[트레이딩 시장][{tms_name}(<code>{tm_sell_code}</code>)] "
+                              f"현재가매도 주문 완료 | 가격: {format(tms_price, ',d')}원 | "
+                              f"수량: {format(tm_sell_qty, ',d')}주 | 주문번호: <code>{str(int(c_ord_tms['ODNO']))}</code>"),
+                        parse_mode='HTML'
+                    )
+                else:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 매도 주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=query.message.chat_id,
+                    text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 매도 오류: {str(e)}")
+
+        threading.Thread(target=process_tm_sell).start()
 
     elif command.startswith("downtrend_sell:"):
         # kis_trading_trail_vol_state.py 에서 전송한 하락추세 이탈 매도 대상 매도가 입력 처리
@@ -2375,7 +2433,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "63N")
 
     elif command == "추적등록":
-        button_list = build_button(["매수주문등록", "주문제외등록"], data_selected)
+        button_list = build_button(["매수주문등록", "주문제외등록", "매수자동등록"], data_selected)
         show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
 
         context.bot.edit_message_text(text="추적등록 방식을 선택해 주세요.",
@@ -2390,6 +2448,10 @@ def callback_get(update, context) :
     elif command == "주문제외등록" and "추적등록" in data_selected:
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "72")
+
+    elif command == "매수자동등록" and "추적등록" in data_selected:
+            g_selected_accounts.clear()
+            show_account_selection_keyboard(query, "73")    
 
     elif command in ("손절금액", "매수금액") and "trail71" in data_selected:
         # 손절금액/매수금액 선택에 따라 매수량·매수금액 설정
@@ -2542,6 +2604,157 @@ def callback_get(update, context) :
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.")
 
+    elif command in ("손절금액", "매수금액") and "trail73" in data_selected:
+        # 손절금액/매수금액 선택에 따라 매수량·매수금액 설정
+        if command == "손절금액":
+            g_trail73_buy_qty = g_trail73_loss_buy_qty
+        else:
+            g_trail73_buy_qty = g_trail73_amt_buy_qty
+
+        # 매수자동등록 미리보기 → 실제 주문 + 매매추적 처리
+        cb_user_id = query.message.chat_id
+        cb_bot = context.bot          # 스레드에서 안전하게 사용하기 위해 bot 참조 분리
+        cb_code = g_trail73_code
+        cb_company = g_trail73_company
+        cb_buy_price = g_trail73_buy_price
+        cb_loss_price = g_trail73_loss_price
+        cb_buy_qty = g_trail73_buy_qty
+        cb_year_day = g_trail73_year_day
+        cb_hour_minute = g_trail73_hour_minute
+        target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
+        ac_default = account(arguments[1])
+
+        def process_trail73(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            try:
+                t_buy_price = cb_buy_price
+                t_buy_qty = cb_buy_qty
+
+                c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
+                hold_price = 0
+                hldg_qty = 0
+                hold_amt = 0
+                for i, _ in enumerate(c_bal.index):
+                    if cb_code == c_bal['pdno'][i]:
+                        hold_price = float(c_bal['pchs_avg_pric'][i])
+                        hldg_qty = int(c_bal['hldg_qty'][i])
+                        hold_amt = int(c_bal['pchs_amt'][i])
+
+                buy_expect_sum = t_buy_price * t_buy_qty
+                b = inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no)
+                d_order_no = None
+                d_order_type = None
+                d_order_dt = None
+                d_order_tmd = None
+                d_order_price = 0
+                d_order_amount = 0
+                d_order_complete_qty = 0
+                d_order_remain_qty = 0
+
+                if int(b) > int(buy_expect_sum):
+                    try:
+                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
+                        if c_ord is not None and c_ord['ODNO'] != "":
+                            time.sleep(0.5)
+                            output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
+                            tdf = pd.DataFrame(output1)
+                            d_ord = tdf[['odno', 'prdt_name', 'ord_dt', 'ord_tmd', 'orgn_odno', 'sll_buy_dvsn_cd', 'sll_buy_dvsn_cd_name', 'pdno', 'ord_qty', 'ord_unpr', 'avg_prvs', 'cncl_yn', 'tot_ccld_amt', 'tot_ccld_qty', 'rmn_qty', 'cncl_cfrm_qty', 'excg_id_dvsn_cd']]
+                            for i, _ in enumerate(d_ord.index):
+                                d_order_no = int(d_ord['odno'][i])
+                                d_order_type = d_ord['sll_buy_dvsn_cd_name'][i]
+                                d_order_dt = d_ord['ord_dt'][i]
+                                d_order_tmd = d_ord['ord_tmd'][i]
+                                d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
+                                d_order_amount = d_ord['ord_qty'][i]
+                                d_order_complete_qty = d_ord['tot_ccld_qty'][i]
+                                d_order_remain_qty = d_ord['rmn_qty'][i]
+                                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
+                        else:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(t_buy_price), ',d') + "원, 매수량 : " + format(int(t_buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
+                    except Exception as e:
+                        cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] [매수주문 오류] - " + str(e), parse_mode='HTML')
+                else:
+                    cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매수 가능(현금) : " + format(int(b) - int(buy_expect_sum), ',d') + "원 부족")
+
+                if int(d_order_price) > 0 and int(d_order_amount) > 0:
+                    t_buy_price = int(d_order_price)
+                    t_buy_qty = int(d_order_amount)
+                    t_buy_amt = t_buy_price * t_buy_qty
+                    safe_margin_price = int(t_buy_price + t_buy_price * 0.05)
+                    base_qty = hldg_qty
+                    base_amt = hold_amt
+                    sum_base_qty = base_qty + t_buy_qty
+                    avg_base_price = int(round((base_amt + t_buy_amt) / sum_base_qty))
+                    avg_safe_margin_price = int(avg_base_price + avg_base_price * 0.05)
+                    loss_amt = int((avg_base_price - cb_loss_price) * sum_base_qty) if base_qty > 0 else int((t_buy_price - cb_loss_price) * t_buy_qty)
+
+                    thread_conn = db.connect(conn_string)
+                    try:
+                        cur400 = thread_conn.cursor()
+                        merge_query = """
+                            WITH ins AS (
+                                INSERT INTO trading_trail (
+                                    order_no, order_type, order_dt, order_tmd,
+                                    order_price, order_amount, complete_qty, remain_qty,
+                                    acct_no, code, name, trail_day, trail_dtm, trail_tp,
+                                    stop_price, target_price, basic_price, basic_qty, basic_amt,
+                                    proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt
+                                )
+                                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                                RETURNING 1 AS flag
+                            )
+                            SELECT flag FROM ins;
+                        """
+                        cur400.execute(merge_query, (
+                            str(d_order_no), d_order_type, d_order_dt, d_order_tmd,
+                            int(d_order_price), int(d_order_amount), int(d_order_complete_qty), int(d_order_remain_qty),
+                            t_acct_no, cb_code, cb_company, cb_year_day, cb_hour_minute, "1",
+                            cb_loss_price, avg_safe_margin_price if hold_price > 0 else safe_margin_price,
+                            avg_base_price if hold_price > 0 else t_buy_price,
+                            sum_base_qty if base_qty > 0 else t_buy_qty,
+                            avg_base_price * sum_base_qty if base_qty > 0 else t_buy_amt,
+                            cb_hour_minute, 'S' if command == "손절금액" else 'M', cb_loss_price, loss_amt, datetime.now(), datetime.now()
+                        ))
+                        was_updated = cur400.fetchone() is not None
+                        thread_conn.commit()
+                        cur400.close()
+                        if was_updated:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 평균보유가 : " + format(avg_base_price if hold_price > 0 else t_buy_price, ',d') + "원, 총보유량 : " + format(sum_base_qty if base_qty > 0 else t_buy_qty, ',d') + "주, 이탈가 : " + format(cb_loss_price, ',d') + "원, 안전마진가 : " + format(avg_safe_margin_price if hold_price > 0 else safe_margin_price, ',d') + "원 매매추적 처리", parse_mode='HTML')
+                        else:
+                            cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] 매매추적 미처리")
+                    finally:
+                        thread_conn.close()
+
+            except Exception as top_e:
+                print(f"process_trail73 오류 [{nick}]: {top_e}")
+                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "] [매수자동등록 오류] " + str(top_e))
+
+        query.edit_message_text(text="[" + cb_company + "] 주문 처리 중...")
+        threads_t73 = []
+        for nick in target_nicks:
+            if nick is not None:
+                ac_t = account(nick)
+                t_acct_no = ac_t['acct_no']
+                t_access_token = ac_t['access_token']
+                t_app_key = ac_t['app_key']
+                t_app_secret = ac_t['app_secret']
+                t_nick = nick
+            else:
+                t_acct_no = ac_default['acct_no']
+                t_access_token = ac_default['access_token']
+                t_app_key = ac_default['app_key']
+                t_app_secret = ac_default['app_secret']
+                t_nick = arguments[1]
+            t = threading.Thread(target=process_trail73, args=(t_nick, t_acct_no, t_access_token, t_app_key, t_app_secret))
+            threads_t73.append(t)
+            t.start()
+        for t in threads_t73:
+            t.join()
+
+    elif command == "다시계산" and "trail73" in data_selected:
+        menuNum = "73"
+        selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
+        query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0)를 입력하세요.")
+
     elif command == "추적변경":
         try:
             with get_conn().cursor() as cur_tc:
@@ -2612,6 +2825,7 @@ def callback_get(update, context) :
             "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "71": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "72": "종목코드(종목명), 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
+            "73": "종목코드(종목명), 매수가(현재가:0)를 입력하세요.",
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
@@ -2825,7 +3039,7 @@ def callback_get(update, context) :
             menuNum = "0"
             return
 
-        elif menu_num == "TA":
+        elif menu_num == "TRALL":
             # 트레이딩 전체 — 입력 불필요, 즉시 실행
             query.edit_message_text(text="[트레이딩 전체] 매도 처리 중...")
             target_nicks_ta = g_selected_accounts[:] if g_selected_accounts else [None]
@@ -2920,6 +3134,158 @@ def callback_get(update, context) :
                 t.start()
                 time.sleep(0.5)
             for t in threads_ta:
+                t.join()
+            menuNum = "0"
+            return
+
+        elif menu_num == "TRMAR":
+            # 트레이딩 시장 — 계좌별 현금전환 필요금액 산정 후 매도 종목 선택 버튼 표시
+            query.edit_message_text(text="[트레이딩 시장] 현금전환 필요금액 산정 중...")
+            target_nicks_tm = g_selected_accounts[:] if g_selected_accounts else [None]
+
+            def process_nick_tm(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                t_nick_label = nick if nick else arguments[1]
+                try:
+                    with get_conn().cursor() as cur_tm:
+                        cur_tm.execute("""
+                            SELECT SUM(A.eval_sum) AS total_eval,
+                                   LEAST((20000000 - SUM(A.eval_sum)),
+                                         (SELECT prvs_rcdl_excc_amt FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = MAX(A.acct_no))) AS trading_cash,
+                                   (SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = MAX(A.acct_no)) AS market_ratio
+                            FROM "stockBalance_stock_balance" A
+                            WHERE acct_no = %s
+                              AND proc_yn = 'Y'
+                              AND (trading_plan = 'h' OR trading_plan IS NULL)
+                              AND COALESCE(eval_sum, 0) > 0
+                        """, (str(t_acct_no),))
+                        tm_row = cur_tm.fetchone()
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 필요금액 조회 오류: {str(e)}")
+                    return
+
+                total_eval_tm   = int(tm_row[0]) if tm_row and tm_row[0] is not None else 0
+                trading_cash_tm = int(tm_row[1]) if tm_row and tm_row[1] is not None else None
+                market_ratio_tm = float(tm_row[2]) if tm_row and tm_row[2] is not None else None
+                if market_ratio_tm is None or trading_cash_tm is None:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 시장비율/현금 정보 없음")
+                    return
+
+                need_cash_tm = int(max(0, total_eval_tm - (total_eval_tm + trading_cash_tm) * market_ratio_tm / 100))
+                if need_cash_tm <= 0:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 현금전환 필요금액 없음")
+                    return
+
+                try:
+                    with get_conn().cursor() as cur_tmc:
+                        cur_tmc.execute(
+                            """SELECT code FROM public."stockBalance_stock_balance"
+                               WHERE proc_yn = 'Y' AND (trading_plan IS NULL OR trading_plan NOT IN ('i'))
+                               AND acct_no = %s""",
+                            (str(t_acct_no),)
+                        )
+                        tm_codes = [row[0] for row in cur_tmc.fetchall()]
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 대상종목 조회 오류: {str(e)}")
+                    return
+
+                if not tm_codes:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 매도 대상 종목이 없습니다.")
+                    return
+
+                try:
+                    e_tm = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 잔고 조회 오류: {str(e)}")
+                    return
+
+                tm_candidates = []
+                for tm_code in tm_codes:
+                    tm_avail = 0
+                    tm_name = tm_code
+                    for j, _ in enumerate(e_tm.index):
+                        if e_tm['pdno'][j] == tm_code:
+                            tm_avail = int(e_tm['ord_psbl_qty'][j])
+                            tm_name = e_tm['prdt_name'][j]
+                            break
+                    if tm_avail <= 0:
+                        continue
+                    try:
+                        time.sleep(0.3)  # 초당 3건 이하로 제한
+                        ap_tm = inquire_price(t_access_token, t_app_key, t_app_secret, tm_code)
+                        tm_price = int(ap_tm['stck_prpr'])
+                        tm_mktcap = int(str(ap_tm['hts_avls']).replace(',', ''))
+                    except Exception:
+                        continue
+                    if tm_price <= 0:
+                        continue
+                    tm_candidates.append((tm_code, tm_name, tm_avail, tm_price, tm_mktcap))
+
+                # 시가총액 낮은 종목부터 매도 대상 우선순위 부여
+                tm_candidates.sort(key=lambda c: c[4])
+
+                tm_buttons = []
+                tm_remain = need_cash_tm
+                for tm_code, tm_name, tm_avail, tm_price, tm_mktcap in tm_candidates:
+                    if tm_remain <= 0:
+                        break
+                    tm_qty = min(tm_avail, math.ceil(tm_remain / tm_price))
+                    if tm_qty <= 0:
+                        continue
+                    tm_buttons.append(
+                        InlineKeyboardButton(
+                            f"{tm_name}({tm_price:,}원-{format(tm_qty, ',d')}주)",
+                            callback_data=f"tm_sell:{t_nick_label}:{tm_code}:{tm_qty}"
+                        )
+                    )
+                    tm_remain -= tm_qty * tm_price
+
+                if not tm_buttons:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [트레이딩 시장] 매도 가능 종목이 없습니다. (필요금액:{format(need_cash_tm, ',d')}원)")
+                    return
+
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"-{t_nick_label}- [트레이딩 시장] 현금전환 필요금액: {format(need_cash_tm, ',d')}원\n매도할 종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(tm_buttons, 1))
+                )
+
+            threads_tm = []
+            for nick in target_nicks_tm:
+                if nick is not None:
+                    try:
+                        ac_tm = account(nick)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_tm = ac_tm['acct_no']
+                    t_tok_tm  = ac_tm['access_token']
+                    t_key_tm  = ac_tm['app_key']
+                    t_sec_tm  = ac_tm['app_secret']
+                else:
+                    try:
+                        ac_tm_def = account(arguments[1])
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_tm = ac_tm_def['acct_no']
+                    t_tok_tm  = ac_tm_def['access_token']
+                    t_key_tm  = ac_tm_def['app_key']
+                    t_sec_tm  = ac_tm_def['app_secret']
+                t = threading.Thread(target=process_nick_tm,
+                                     args=(nick, t_acct_tm, t_tok_tm, t_key_tm, t_sec_tm))
+                threads_tm.append(t)
+                t.start()
+                time.sleep(0.5)
+            for t in threads_tm:
                 t.join()
             menuNum = "0"
             return
@@ -6183,6 +6549,73 @@ def echo(update, context):
                     t.start()
                 for t in threads_72:
                     t.join()
+
+        elif menuNum == '73':
+            initMenuNum()
+            parts73 = user_text.split(',', 1)
+            if len(parts73) < 2 or not parts73[1].strip().isdecimal():
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0) 미존재 또는 부적합")
+            else:
+                buy_price_73 = int(stck_prpr) if parts73[1].strip() == '0' else int(parts73[1].strip())
+                buy_price_73 = round_to_valid_price(buy_price_73, get_tick_size(buy_price_73))
+
+                # 이탈가 : 금일 저가, 매수금액/손절금액 : 시장비율 기반 제안값 자동 적용
+                loss_price_73 = int(stck_lwpr)
+                loss_price_73 = round_to_valid_price(loss_price_73, get_tick_size(loss_price_73))
+                input_buy_amt_73 = suggest_buy_amt    # 제안 매수금액
+                item_loss_sum_73 = _suggest_loss      # 제안 손절금액
+
+                if buy_price_73 <= loss_price_73:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(" + format(buy_price_73, ',d') + ")가 이탈가(" + format(loss_price_73, ',d') + ") 이하입니다.")
+                else:
+                    # 공통 손절율
+                    loss_rate_73 = round((100 - (loss_price_73 / buy_price_73) * 100) * -1, 2)
+
+                    # ① 손절금액 기준
+                    loss_buy_qty_73 = int(round(item_loss_sum_73 / (buy_price_73 - loss_price_73)))
+                    loss_buy_amt_73 = buy_price_73 * loss_buy_qty_73
+
+                    # ② 매수금액 기준
+                    amt_buy_qty_73 = int(round(input_buy_amt_73 / buy_price_73))
+                    amt_buy_amt_73 = buy_price_73 * amt_buy_qty_73
+                    amt_item_loss_73 = (buy_price_73 - loss_price_73) * amt_buy_qty_73
+
+                    # 진행 콜백에서 사용할 전역 상태 저장
+                    global g_trail73_code, g_trail73_company, g_trail73_buy_price, g_trail73_loss_price
+                    global g_trail73_item_loss_sum, g_trail73_buy_qty, g_trail73_buy_amt
+                    global g_trail73_year_day, g_trail73_hour_minute
+                    global g_trail73_loss_buy_qty, g_trail73_loss_buy_amt
+                    global g_trail73_amt_buy_qty, g_trail73_amt_buy_amt
+                    g_trail73_code = code
+                    g_trail73_company = company
+                    g_trail73_buy_price = buy_price_73
+                    g_trail73_loss_price = loss_price_73
+                    g_trail73_item_loss_sum = item_loss_sum_73
+                    g_trail73_buy_qty = 0
+                    g_trail73_buy_amt = 0
+                    g_trail73_loss_buy_qty = loss_buy_qty_73
+                    g_trail73_loss_buy_amt = loss_buy_amt_73
+                    g_trail73_amt_buy_qty = amt_buy_qty_73
+                    g_trail73_amt_buy_amt = amt_buy_amt_73
+                    g_trail73_year_day = datetime.now().strftime("%Y%m%d")
+                    g_trail73_hour_minute = datetime.now().strftime('%H%M%S')
+
+                    selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "현재계좌"
+                    preview_text = (
+                        "[선택계좌: " + selected_str + "]\n"
+                        "[" + company + "(<code>" + code + "</code>)]\n"
+                        "매수가: " + format(buy_price_73, ',d') + "원 | 이탈가(금일저가): " + format(loss_price_73, ',d') + "원 | 손절율: " + str(loss_rate_73) + "%\n"
+                        "─────────────────\n"
+                        "  손절금액 기준 (제안: " + format(item_loss_sum_73, ',d') + "원)\n"
+                        "  매수금액: " + format(loss_buy_amt_73, ',d') + "원 | 매수량: " + format(loss_buy_qty_73, ',d') + "주 | 손실금액: " + format(item_loss_sum_73, ',d') + "원\n"
+                        "─────────────────\n"
+                        "  매수금액 기준 (제안: " + format(input_buy_amt_73, ',d') + "원)\n"
+                        "  매수금액: " + format(amt_buy_amt_73, ',d') + "원 | 매수량: " + format(amt_buy_qty_73, ',d') + "주 | 손실금액: " + format(amt_item_loss_73, ',d') + "원"
+                        + stock_info_str
+                    )
+                    button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail73")
+                    show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
+                    context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
 
         elif menuNum == '91':
             initMenuNum()
