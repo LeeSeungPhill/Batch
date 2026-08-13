@@ -1255,11 +1255,11 @@ def callback_get(update, context) :
             except Exception as sb_e:
                 print(f"신호가 조회 오류: {sb_e}")
 
-            # i/h 제외한 종목 평가금액 합산 (총평가금액, 잔고금액 기준)
+            # i 제외한 종목 평가금액 합산 (총평가금액, 잔고금액 기준)
             filtered_scts_evlu = sum(
                 int(c['evlu_amt'][i])
                 for i, _ in enumerate(c.index)
-                if int(c['hldg_qty'][i]) > 0 and sb_map.get(c['pdno'][i], (None,)*5)[4] not in ('i', 'h')
+                if int(c['hldg_qty'][i]) > 0 and sb_map.get(c['pdno'][i], (None,)*5)[4] not in ('i')
             )
             filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
 
@@ -1271,7 +1271,7 @@ def callback_get(update, context) :
                 sell_pct = (current_ratio / 100 - market_ratio / 100) * filtered_tot_evlu / filtered_scts_evlu * 100
                 need_sell = True
 
-            # 요약 메시지 (i/h 제외 기준)
+            # 요약 메시지 (i 제외 기준)
             mr_str = ""
             if market_ratio is not None:
                 mr_str = f", 시장비율:{market_ratio:.0f}%, 현재비율:{current_ratio:.1f}%"
@@ -1305,7 +1305,7 @@ def callback_get(update, context) :
                     name = f"(홀딩) {name}"
 
                 sell_qty_str = ""
-                if need_sell and sb_map.get(code, (None,)*5)[4] not in ('i', 'h'):
+                if need_sell and sb_map.get(code, (None,)*5)[4] not in ('i'):
                     sell_qty = min(round(purchase_amount * sell_pct / 100), ord_psbl_qty)
                     if sell_qty > 0:
                         sell_qty_str = f"(매도:{format(sell_qty, ',d')}주)"
@@ -1348,7 +1348,7 @@ def callback_get(update, context) :
                         h_qty = int(c['hldg_qty'][i])
                         if h_qty > 0:
                             sb = sb_map.get(h_code, (None, None, None, None, None))
-                            is_invest = sb[4] in ('i', 'h')
+                            is_invest = sb[4] in ('i')
                             btn_label = f"{h_name}"
                             if need_sell and not is_invest:
                                 btn_label += f" [{sell_pct:.0f}%]"
@@ -6359,7 +6359,7 @@ def echo(update, context):
                                        COALESCE((SELECT SUM(sb.eval_sum)
                                                  FROM public."stockBalance_stock_balance" sb
                                                  WHERE sb.acct_no = sfm.acct_no
-                                                   AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
+                                                   AND (sb.trading_plan NOT IN ('i') OR sb.trading_plan IS NULL)
                                                    AND sb.proc_yn = 'Y'
                                                    AND COALESCE(eval_sum, 0) > 0), 0)
                                 FROM public."stockFundMng_stock_fund_mng" sfm
