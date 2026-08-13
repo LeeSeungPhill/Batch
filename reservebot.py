@@ -3239,7 +3239,7 @@ def callback_get(update, context) :
                         continue
                     tm_buttons.append(
                         InlineKeyboardButton(
-                            f"{tm_name}({tm_price:,}원-{format(tm_qty, ',d')}주)",
+                            f"{tm_name}({tm_price:,}원 * {format(tm_qty, ',d')}주 = {tm_price*tm_qty:,}원)",
                             callback_data=f"tm_sell:{t_nick_label}:{tm_code}:{tm_qty}"
                         )
                     )
