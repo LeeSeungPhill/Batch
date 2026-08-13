@@ -755,17 +755,17 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                         d_total_complete_amt = d['tot_ccld_amt'][k]
 
                         print("매도주문 완료")
-                        msg = f"-{nick}-[전일 저가 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
+                        msg = f"-{nick}-[추세 이탈 매도-{d_name}] 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                         result_msgs.append(msg)
 
                 else:
                     print("매도주문 실패")
-                    msg = f"-{nick}-[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
+                    msg = f"-{nick}-[추세 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 매도주문 실패"
                     result_msgs.append(msg)
 
             except Exception as e:
                 print('매도주문 오류.', e)
-                msg = f"-{nick}-[전일 저가 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
+                msg = f"-{nick}-[추세 이탈 매도-{name}] 매도가 : {int(trail_price):,}원, 매도량 : {int(trail_qty):,}주 [매도주문 오류] - {str(e)}"
                 result_msgs.append(msg)
 
             try:
@@ -1198,9 +1198,12 @@ def get_kis_1min_from_datetime(
             return signals
 
         _stock_trend_pre  = get_stock_trend(stock_code, access_token, app_key, app_secret)
+        _trend_up         = bool(_stock_trend_pre and _stock_trend_pre.get('trend') == 'Uptrend')
         _trend_down       = bool(_stock_trend_pre and _stock_trend_pre.get('trend') == 'Downtrend')
         _trend_ref_price  = (_stock_trend_pre.get('ref_price') or 0) if _stock_trend_pre else 0
-        if verbose and _trend_down:
+        if verbose and _trend_up:
+            print(f"{stock_name}[{stock_code}] 현재 상승추세({_stock_trend_pre.get('start_date')}~, 기준가:{_trend_ref_price:,}) → 추세기준 감지")
+        elif verbose and _trend_down:
             print(f"{stock_name}[{stock_code}] 현재 하락추세({_stock_trend_pre.get('start_date')}~, 기준가:{_trend_ref_price:,}) → 추세기준 감지")
 
         # 10분봉 거래량 집계 (전체 당일 데이터 기준 — 이전 20봉 평균 계산용)
@@ -1306,9 +1309,9 @@ def get_kis_1min_from_datetime(
                         print(f"  [{stock_name}-{stock_code}] 당일 15%+ 상승 달성({row['시간']})")
 
                 # ===============================
-                # [최우선] 추세이탈가(exit_price) 이탈 → 즉시 매도 (breakdown_wait 무관)
+                # [최우선] 상승추세 아닌 추세이탈가(exit_price) 이탈 → 즉시 매도 (breakdown_wait 무관)
                 # ===============================
-                if exit_price and int(exit_price) > 0 and close_price <= int(exit_price):
+                if not _trend_up and exit_price and int(exit_price) > 0 and close_price <= int(exit_price):
                     _ep = int(exit_price)
                     i_trail_plan = trail_plan if trail_plan else "100"
                     trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
@@ -1373,8 +1376,8 @@ def get_kis_1min_from_datetime(
                                     })
 
                     if breakdown_wait["active"] and breakdown_wait["tenmin_low"] is not None:
-                        # 거래량 조건 충족 확정 + 현재 저가가 이탈 발생 10분봉 저가 이탈 시 매도
-                        if low_price < breakdown_wait["tenmin_low"]:
+                        # 상승추세 아닌 거래량 조건 충족 확정 + 현재 저가가 이탈 발생 10분봉 저가 이탈 시 매도
+                        if not _trend_up and low_price < breakdown_wait["tenmin_low"]:
                             sell_trigger = True
                             sell_reason = breakdown_wait["reason"] + f" → 10분봉저가({breakdown_wait['tenmin_low']:,}) 이탈 확정 (이탈봉:{breakdown_wait['tenmin_vol']:,}주/직전20봉평균:{breakdown_wait['tenmin_avg_vol']:,}주)"
                             sell_signal_type = breakdown_wait["signal_type"]
@@ -1414,7 +1417,7 @@ def get_kis_1min_from_datetime(
                             peak_to_safety_L = peak_high_tenmin - safety_margin_L
                             effective_retracement_rate_L = 0.3 if row["dt"].time() >= dt_time(14, 30) else 0.5
 
-                            if peak_high_tenmin > safety_margin_L and peak_to_safety_L >= int(safety_margin_L * 0.05):
+                            if not _trend_up and peak_high_tenmin > safety_margin_L and peak_to_safety_L >= int(safety_margin_L * 0.05):
                                 peak_sell_threshold_L = peak_high_tenmin - int(peak_to_safety_L * effective_retracement_rate_L)
                                 if tenmin_close_b < peak_sell_threshold_L:
                                     sell_trigger = True
@@ -1428,8 +1431,8 @@ def get_kis_1min_from_datetime(
                             _safety_m = int(basic_price * 1.10)
                             _p2s = peak_high_tenmin - _safety_m
                             _cond_b_capable = peak_high_tenmin > _safety_m and _p2s >= int(_safety_m * 0.05)
-                            # 매수가 대비 15% 이상 상승에서 이탈가(stop_price) 이탈하고 현재시간 기준 거래량 비율 초과인 경우
-                            if not _cond_b_capable:
+                            # 상승추세 아닌 매수가 대비 15% 이상 상승에서 이탈가(stop_price) 이탈하고 현재시간 기준 거래량 비율 초과인 경우
+                            if not _trend_up and not _cond_b_capable:
                                 fixed_stop = int(stop_price) if stop_price else 0
                                 if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
 
@@ -1497,8 +1500,8 @@ def get_kis_1min_from_datetime(
                         # ===============================
                         fixed_stop = int(stop_price) if stop_price else 0
 
-                        # 이탈가(stop_price) 이탈하고, 현재시간 기준 거래량 비율 초과한 경우
-                        if fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
+                        # 상승추세 아닌 이탈가(stop_price) 이탈하고, 현재시간 기준 거래량 비율 초과한 경우
+                        if not _trend_up and fixed_stop > 0 and close_price <= fixed_stop and volume_rate_chk(current_time, vol_ratio, trade_date):
 
                             # 시장 단기 하락인 경우 매도 진행
                             if _short_market_down:
