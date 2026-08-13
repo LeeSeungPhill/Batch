@@ -604,7 +604,7 @@ for nick in nickname_list:
                 filtered_scts_evlu = sum(
                     int(c['evlu_amt'][i])
                     for i, _ in enumerate(c.index)
-                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i', 'h')
+                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) != 'i'
                 )
 
                 trading_cash = 20000000 - filtered_scts_evlu if (20000000 - filtered_scts_evlu) < u_prvs_rcdl_excc_amt else u_prvs_rcdl_excc_amt
@@ -613,7 +613,7 @@ for nick in nickname_list:
                 mr_str = ""
                 if market_ratio_v is not None and filtered_tot_evlu > 0:
                     current_ratio_v = 100 - (trading_cash / filtered_tot_evlu * 100)
-                    convert_cash = int(filtered_tot_evlu * market_ratio_v / 100) - int(trading_cash)
+                    convert_cash = int(filtered_tot_evlu * (current_ratio_v - market_ratio_v) / 100) if current_ratio_v - market_ratio_v > 0 else 0
                     mr_str = (
                         f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
                         f"트레이딩 현금전환:{format(convert_cash, ',d')}원"
