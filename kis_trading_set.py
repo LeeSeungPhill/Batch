@@ -604,7 +604,7 @@ for nick in nickname_list:
                 filtered_scts_evlu = sum(
                     int(c['evlu_amt'][i])
                     for i, _ in enumerate(c.index)
-                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) not in ('i')
+                    if int(c['hldg_qty'][i]) > 0 and sb_tp_map.get(c['pdno'][i]) != 'i'
                 )
 
                 trading_cash = 20000000 - filtered_scts_evlu if (20000000 - filtered_scts_evlu) < u_prvs_rcdl_excc_amt else u_prvs_rcdl_excc_amt

@@ -1259,7 +1259,7 @@ def callback_get(update, context) :
             filtered_scts_evlu = sum(
                 int(c['evlu_amt'][i])
                 for i, _ in enumerate(c.index)
-                if int(c['hldg_qty'][i]) > 0 and sb_map.get(c['pdno'][i], (None,)*5)[4] not in ('i')
+                if int(c['hldg_qty'][i]) > 0 and sb_map.get(c['pdno'][i], (None,)*5)[4] != 'i'
             )
             filtered_tot_evlu = u_prvs_rcdl_excc_amt + filtered_scts_evlu
 
@@ -1305,7 +1305,7 @@ def callback_get(update, context) :
                     name = f"(홀딩) {name}"
 
                 sell_qty_str = ""
-                if need_sell and sb_map.get(code, (None,)*5)[4] not in ('i'):
+                if need_sell and sb_map.get(code, (None,)*5)[4] != 'i':
                     sell_qty = min(round(purchase_amount * sell_pct / 100), ord_psbl_qty)
                     if sell_qty > 0:
                         sell_qty_str = f"(매도:{format(sell_qty, ',d')}주)"
@@ -1348,7 +1348,7 @@ def callback_get(update, context) :
                         h_qty = int(c['hldg_qty'][i])
                         if h_qty > 0:
                             sb = sb_map.get(h_code, (None, None, None, None, None))
-                            is_invest = sb[4] in ('i')
+                            is_invest = sb[4] == 'i'
                             btn_label = f"{h_name}"
                             if need_sell and not is_invest:
                                 btn_label += f" [{sell_pct:.0f}%]"
