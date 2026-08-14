@@ -1,5 +1,6 @@
 import re
 import json
+import time
 import pandas as pd
 from telegram.ext import Updater
 from telegram.ext import MessageHandler, Filters, CallbackQueryHandler
@@ -172,75 +173,84 @@ def get_period_high_low(access_token, app_key, app_secret, code, period="D", cou
 
 # 일봉 OHLCV 최근 100거래일 조회 (최신→과거 내림차순)
 def get_daily_ohlcv(access_token, app_key, app_secret, code):
-    headers = {
-        "Content-Type": "application/json",
-        "authorization": f"Bearer {access_token}",
-        "appKey": app_key,
-        "appSecret": app_secret,
-        "tr_id": "FHKST01010400",
-        "custtype": "P",
-    }
-    params = {
-        "FID_COND_MRKT_DIV_CODE": "J",
-        "FID_INPUT_ISCD": code,
-        "FID_PERIOD_DIV_CODE": "D",
-        "FID_ORG_ADJ_PRC": "1",
-    }
-    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
-    URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    data = res.json()
-    rows = data.get("output") or []
-    return rows if isinstance(rows, list) else []
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "appKey": app_key,
+            "appSecret": app_secret,
+            "tr_id": "FHKST01010400",
+            "custtype": "P",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": code,
+            "FID_PERIOD_DIV_CODE": "D",
+            "FID_ORG_ADJ_PRC": "1",
+        }
+        PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
+        URL = f"{URL_BASE}/{PATH}"
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        data = res.json()
+        rows = data.get("output") or []
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
 
 # 일별 공매도 추이 최근 60일 조회 (최신→과거)
 def get_short_selling(access_token, app_key, app_secret, code):
-    today  = datetime.now().strftime('%Y%m%d')
-    d60ago = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
-    headers = {
-        "Content-Type": "application/json",
-        "authorization": f"Bearer {access_token}",
-        "appKey": app_key,
-        "appSecret": app_secret,
-        "tr_id": "FHPST04830000",
-        "custtype": "P",
-    }
-    params = {
-        "FID_COND_MRKT_DIV_CODE": "J",
-        "FID_INPUT_ISCD": code,
-        "FID_INPUT_DATE_1": d60ago,
-        "FID_INPUT_DATE_2": today,
-    }
-    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-short-over"
-    URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    data = res.json()
-    if data.get('rt_cd') == '0':
-        rows = data.get('output2') or []
-        return rows if isinstance(rows, list) else []
-    return []
+    try:
+        today  = datetime.now().strftime('%Y%m%d')
+        d60ago = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "appKey": app_key,
+            "appSecret": app_secret,
+            "tr_id": "FHPST04830000",
+            "custtype": "P",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": code,
+            "FID_INPUT_DATE_1": d60ago,
+            "FID_INPUT_DATE_2": today,
+        }
+        PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-short-over"
+        URL = f"{URL_BASE}/{PATH}"
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        data = res.json()
+        if data.get('rt_cd') == '0':
+            rows = data.get('output2') or []
+            return rows if isinstance(rows, list) else []
+        return []
+    except Exception:
+        return []
 
 # 최근 투자자별(외국인/기관) 순매수 거래대금 조회 (최신→과거)
 def get_investor_trend(access_token, app_key, app_secret, code):
-    headers = {
-        "Content-Type": "application/json",
-        "authorization": f"Bearer {access_token}",
-        "appKey": app_key,
-        "appSecret": app_secret,
-        "tr_id": "FHKST01010900",
-        "custtype": "P",
-    }
-    params = {
-        "FID_COND_MRKT_DIV_CODE": "J",
-        "FID_INPUT_ISCD": code,
-    }
-    PATH = "uapi/domestic-stock/v1/quotations/inquire-investor"
-    URL = f"{URL_BASE}/{PATH}"
-    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
-    data = res.json()
-    if data.get('rt_cd') == '0' and isinstance(data.get('output'), list):
-        return data['output']
-    return []
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "appKey": app_key,
+            "appSecret": app_secret,
+            "tr_id": "FHKST01010900",
+            "custtype": "P",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": code,
+        }
+        PATH = "uapi/domestic-stock/v1/quotations/inquire-investor"
+        URL = f"{URL_BASE}/{PATH}"
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        data = res.json()
+        if data.get('rt_cd') == '0' and isinstance(data.get('output'), list):
+            return data['output']
+        return []
+    except Exception:
+        return []
 
 def _adx(highs, lows, closes, period=14):
     """Wilder's ADX. 입력은 오름차순(과거→최신). (adx, +DI, -DI) 반환."""
@@ -641,8 +651,11 @@ def echo(update, context):
         try:
             ac_sum = get_phills2_account()
             price_out = inquire_price(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            time.sleep(0.3)
             ohlcv_rows = get_daily_ohlcv(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            time.sleep(0.3)
             ssts_rows = get_short_selling(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            time.sleep(0.3)
             inv_rows = get_investor_trend(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
 
             chart_score = calc_chart_score(ohlcv_rows).get('score')
