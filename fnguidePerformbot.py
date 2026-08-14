@@ -126,6 +126,22 @@ def get_phills2_account():
         cur2.close()
     return {'acct_no': acct_no, 'access_token': access_token, 'app_key': app_key, 'app_secret': app_secret}
 
+# 계좌의 market_ratio 조회 (제안매수금액/제안손절금액 계산에 사용)
+def get_market_ratio(acct_no):
+    try:
+        c = get_conn()
+        with c.cursor() as cur:
+            cur.execute(
+                'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                (str(acct_no),)
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                return float(row[0])
+    except Exception:
+        pass
+    return 0.0
+
 def inquire_price(access_token, app_key, app_secret, code):
     t = datetime.now().strftime('%H%M')
     headers = {
@@ -369,7 +385,21 @@ def calc_chart_score(rows):
     elif vod >  50:  vod_sc =  4
     else:            vod_sc =  2
 
-    return {'score': trend_sc + adx_sc + dev_sc + vol_sc + vod_sc, 'detail': {}}
+    return {
+        'score': trend_sc + adx_sc + dev_sc + vol_sc + vod_sc,
+        'detail': {
+            'ma5': round(ma5), 'ma20': round(ma20),
+            'ma60': round(ma60) if ma60 else None,
+            'trend_score': trend_sc,
+            'adx': round(adx, 1) if adx else None,
+            'plus_di': round(plus_di, 1) if plus_di else None,
+            'minus_di': round(minus_di, 1) if minus_di else None,
+            'adx_score': adx_sc,
+            'deviation': round(deviation, 2), 'deviation_score': dev_sc,
+            'vol_ratio_5_20': round(vol_ratio, 1), 'vol_score': vol_sc,
+            'vod_ratio': round(vod, 1), 'vod_score': vod_sc,
+        }
+    }
 
 def calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=None):
     """ohlcv_rows: FHKST01010400 output (OHLCV, OBV용)
@@ -453,7 +483,16 @@ def calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=None):
     elif obv_chg > -3:  obv_sc =  5
     else:               obv_sc =  2
 
-    return {'score': frgn_sc + orgn_sc + ssts_sc + loan_sc + obv_sc, 'detail': {}}
+    return {
+        'score': frgn_sc + orgn_sc + ssts_sc + loan_sc + obv_sc,
+        'detail': {
+            'frgn_5d_eok':  round(frgn_5d, 1),  'frgn_score': frgn_sc,
+            'orgn_5d_eok':  round(orgn_5d, 1),  'orgn_score': orgn_sc,
+            'ssts_5d_avg':  round(ssts_avg, 2),  'ssts_score': ssts_sc,
+            'loan_rate':    loan_rate,            'loan_score': loan_sc,
+            'obv_chg_pct':  round(obv_chg, 2),   'obv_score':  obv_sc,
+        }
+    }
 
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
@@ -658,8 +697,10 @@ def echo(update, context):
             time.sleep(0.3)
             inv_rows = get_investor_trend(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
 
-            chart_score = calc_chart_score(ohlcv_rows).get('score')
-            supply_score = calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=ssts_rows).get('score')
+            chart = calc_chart_score(ohlcv_rows)
+            supply = calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=ssts_rows)
+            chart_score, chart_d = chart.get('score'), chart.get('detail') or {}
+            supply_score, supply_d = supply.get('score'), supply.get('detail') or {}
 
             market = (price_out or {}).get('rprs_mrkt_kor_name', '') or '-'
             industry = (price_out or {}).get('bstp_kor_isnm', '') or '-'
@@ -668,9 +709,45 @@ def echo(update, context):
             except Exception:
                 mktcap = 0
 
+            if   mktcap >= 10000: size = '대형주'
+            elif mktcap >= 3000:  size = '중형주'
+            else:                 size = '소형주'
+
+            if size == '대형주':
+                amt_min, amt_max, amt_desc = 2000000, 10000000, '유동성 높음, 안정적'
+            elif size == '중형주':
+                amt_min, amt_max, amt_desc = 1000000, 5000000, '유동성 보통, 중간 변동성'
+            else:
+                amt_min, amt_max, amt_desc = 500000, 2000000, '변동성 높음, 소액 분산 권장'
+
+            # 제안매수금액/제안손절금액: 계좌 market_ratio 기준 amt_min~amt_max, 5만~25만원 사이 선형보간
+            market_ratio_v = get_market_ratio(ac_sum['acct_no'])
+            if market_ratio_v > 0:
+                suggest_loss_amt = int(max(50_000, min(250_000, 50_000 + (market_ratio_v / 100) * 200_000)))
+                suggest_buy_amt  = int(max(amt_min, min(amt_max, amt_min + (market_ratio_v / 100) * (amt_max - amt_min))))
+            else:
+                suggest_loss_amt = 50_000
+                suggest_buy_amt  = amt_min
+
+            def _v(x, suffix=''):
+                return f"{x}{suffix}" if x is not None else '-'
+
             text = (
-                f"{market} - {industry}, 시가총액: {format(mktcap, ',d')}억원\n"
-                f"수급점수: {supply_score if supply_score is not None else '-'}점, 차트점수: {chart_score if chart_score is not None else '-'}점"
+                f"{market}[{size}] {industry}(시가총액 {format(mktcap, ',d')}억원)\n"
+                f"제안매수금액: {format(suggest_buy_amt, ',d')}원 (권장범위 {format(amt_min, ',d')}~{format(amt_max, ',d')}원, {amt_desc})\n"
+                f"제안손절금액: {format(suggest_loss_amt, ',d')}원\n\n"
+                f"[차트점수] {chart_score if chart_score is not None else '-'}점\n"
+                f"  · 추세(MA5/20/60): {_v(chart_d.get('ma5'))}/{_v(chart_d.get('ma20'))}/{_v(chart_d.get('ma60'))} → {_v(chart_d.get('trend_score'))}점\n"
+                f"  · ADX: {_v(chart_d.get('adx'))}(+DI {_v(chart_d.get('plus_di'))}/-DI {_v(chart_d.get('minus_di'))}) → {_v(chart_d.get('adx_score'))}점\n"
+                f"  · 이격도(MA20): {_v(chart_d.get('deviation'), '%')} → {_v(chart_d.get('deviation_score'))}점\n"
+                f"  · 거래량비율(5/20일): {_v(chart_d.get('vol_ratio_5_20'), '%')} → {_v(chart_d.get('vol_score'))}점\n"
+                f"  · 전일대비거래량: {_v(chart_d.get('vod_ratio'), '%')} → {_v(chart_d.get('vod_score'))}점\n\n"
+                f"[수급점수] {supply_score if supply_score is not None else '-'}점\n"
+                f"  · 외국인 5일: {_v(supply_d.get('frgn_5d_eok'), '억원')} → {_v(supply_d.get('frgn_score'))}점\n"
+                f"  · 기관 5일: {_v(supply_d.get('orgn_5d_eok'), '억원')} → {_v(supply_d.get('orgn_score'))}점\n"
+                f"  · 공매도 5일평균: {_v(supply_d.get('ssts_5d_avg'), '%')} → {_v(supply_d.get('ssts_score'))}점\n"
+                f"  · 대차잔고비율: {_v(supply_d.get('loan_rate'), '%')} → {_v(supply_d.get('loan_score'))}점\n"
+                f"  · OBV 5일변화: {_v(supply_d.get('obv_chg_pct'), '%')} → {_v(supply_d.get('obv_score'))}점"
             )
             context.bot.send_message(chat_id=user_id, text=text)
         except Exception as e:
