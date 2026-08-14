@@ -170,6 +170,281 @@ def get_period_high_low(access_token, app_key, app_secret, code, period="D", cou
     low  = int(df["stck_lwpr"].astype(int).min())
     return high, low
 
+# 일봉 OHLCV 최근 100거래일 조회 (최신→과거 내림차순)
+def get_daily_ohlcv(access_token, app_key, app_secret, code):
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010400",
+        "custtype": "P",
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": code,
+        "FID_PERIOD_DIV_CODE": "D",
+        "FID_ORG_ADJ_PRC": "1",
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-price"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    rows = data.get("output") or []
+    return rows if isinstance(rows, list) else []
+
+# 일별 공매도 추이 최근 60일 조회 (최신→과거)
+def get_short_selling(access_token, app_key, app_secret, code):
+    today  = datetime.now().strftime('%Y%m%d')
+    d60ago = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHPST04830000",
+        "custtype": "P",
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": code,
+        "FID_INPUT_DATE_1": d60ago,
+        "FID_INPUT_DATE_2": today,
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-daily-short-over"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    if data.get('rt_cd') == '0':
+        rows = data.get('output2') or []
+        return rows if isinstance(rows, list) else []
+    return []
+
+# 최근 투자자별(외국인/기관) 순매수 거래대금 조회 (최신→과거)
+def get_investor_trend(access_token, app_key, app_secret, code):
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010900",
+        "custtype": "P",
+    }
+    params = {
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": code,
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-investor"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    if data.get('rt_cd') == '0' and isinstance(data.get('output'), list):
+        return data['output']
+    return []
+
+def _adx(highs, lows, closes, period=14):
+    """Wilder's ADX. 입력은 오름차순(과거→최신). (adx, +DI, -DI) 반환."""
+    n = len(highs)
+    if n < period * 2 + 1:
+        return None, None, None
+    trs, pDMs, mDMs = [], [], []
+    for i in range(1, n):
+        h, l, pc = highs[i], lows[i], closes[i-1]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+        up, dn = highs[i] - highs[i-1], lows[i-1] - lows[i]
+        pDMs.append(up if up > dn and up > 0 else 0.0)
+        mDMs.append(dn if dn > up and dn > 0 else 0.0)
+    def ws(arr, p):
+        s = sum(arr[:p]); res = [s]
+        for x in arr[p:]:
+            s = s - s / p + x; res.append(s)
+        return res
+    def ws_avg(arr, p):
+        s = sum(arr[:p]) / p; res = [s]
+        for x in arr[p:]:
+            s = s + (x - s) / p; res.append(s)
+        return res
+    atr_s = ws(trs, period); pdi_s = ws(pDMs, period); mdi_s = ws(mDMs, period)
+    dxs = []
+    for a, p, m in zip(atr_s, pdi_s, mdi_s):
+        pd_ = p / a * 100 if a else 0; md_ = m / a * 100 if a else 0
+        dxs.append(abs(pd_ - md_) / (pd_ + md_) * 100 if (pd_ + md_) else 0)
+    adx_s    = ws_avg(dxs, period)
+    a_last   = atr_s[-1]
+    plus_di  = pdi_s[-1] / a_last * 100 if a_last else 0
+    minus_di = mdi_s[-1] / a_last * 100 if a_last else 0
+    return adx_s[-1], plus_di, minus_di
+
+def _obv_trend(closes, volumes, n=5):
+    """최근 n일 OBV 변화율(%). closes/volumes는 최신→과거(내림차순)."""
+    cls  = list(reversed(closes))
+    vols = list(reversed(volumes))
+    obv  = 0; obs = [0]
+    for i in range(1, len(cls)):
+        if   cls[i] > cls[i-1]: obv += vols[i]
+        elif cls[i] < cls[i-1]: obv -= vols[i]
+        obs.append(obv)
+    if len(obs) < n + 1: return 0.0
+    prev = obs[-(n+1)]
+    return (obs[-1] - prev) / abs(prev) * 100 if abs(prev) > 1 else 0.0
+
+def calc_chart_score(rows):
+    """rows: FHKST01010400 output (최신→과거 내림차순)."""
+    if not rows or len(rows) < 25:
+        return {'score': None, 'detail': {}}
+    def _f(v):
+        try: return float(v)
+        except: return 0.0
+    closes  = [_f(r.get('stck_clpr', 0)) for r in rows]
+    highs   = [_f(r.get('stck_hgpr', 0)) for r in rows]
+    lows    = [_f(r.get('stck_lwpr', 0)) for r in rows]
+    volumes = [_f(r.get('acml_vol',  0)) for r in rows]
+    cur = closes[0]
+    ma5  = sum(closes[:5])  / 5
+    ma20 = sum(closes[:20]) / 20
+    ma60 = sum(closes[:60]) / 60 if len(closes) >= 60 else None
+
+    # ── 추세강도 MA5/20/60 (30점) ──────────────────────────────
+    if ma60:
+        if   ma5 > ma20 > ma60:                          trend_sc = 30
+        elif ma5 > ma20 and ma20 < ma60:                 trend_sc = 22
+        elif ma5 > ma60 and ma5 <= ma20:                 trend_sc = 16
+        elif abs(ma5 - ma20) / ma20 < 0.01:             trend_sc = 10
+        elif ma5 < ma20 and ma20 > ma60:                 trend_sc =  5
+        else:                                            trend_sc =  0
+    else:
+        if   ma5 > ma20 * 1.02:  trend_sc = 22
+        elif ma5 > ma20:         trend_sc = 16
+        elif ma5 > ma20 * 0.99:  trend_sc = 10
+        else:                    trend_sc =  0
+
+    # ── ADX (25점) ──────────────────────────────────────────────
+    asc_h = list(reversed(highs)); asc_l = list(reversed(lows)); asc_c = list(reversed(closes))
+    adx, plus_di, minus_di = _adx(asc_h, asc_l, asc_c)
+    if adx is None:
+        adx_sc = 8
+    elif adx >= 40 and plus_di > minus_di:   adx_sc = 25
+    elif adx >= 25 and plus_di > minus_di:   adx_sc = 20
+    elif adx >= 25 and plus_di <= minus_di:  adx_sc =  5
+    elif adx >= 20:                          adx_sc = 12
+    else:                                    adx_sc =  8
+
+    # ── 이격도 MA20 (20점) ───────────────────────────────────────
+    deviation = (cur - ma20) / ma20 * 100 if ma20 else 0.0
+    d = deviation
+    if   -3  <= d <=  5:   dev_sc = 20
+    elif  5  <  d <= 10:   dev_sc = 15
+    elif -8  <= d <  -3:   dev_sc = 15
+    elif -15 <= d <  -8:   dev_sc = 12
+    elif 10  <  d <= 15:   dev_sc = 10
+    elif  d < -15:         dev_sc =  8
+    else:                  dev_sc =  5   # d > 15
+
+    # ── 거래량비율 5일/20일 (15점) ────────────────────────────────
+    vol_avg5  = sum(volumes[:5])  / 5
+    vol_avg20 = sum(volumes[:20]) / 20
+    vol_ratio = vol_avg5 / vol_avg20 * 100 if vol_avg20 else 100
+    v = vol_ratio
+    if   v > 150:  vol_sc = 15
+    elif v > 120:  vol_sc = 12
+    elif v >  90:  vol_sc =  9
+    elif v >  70:  vol_sc =  6
+    else:          vol_sc =  3
+
+    # ── 전일대비거래량 (10점) ─────────────────────────────────────
+    vod = volumes[0] / volumes[1] * 100 if len(volumes) >= 2 and volumes[1] > 0 else 100
+    if   vod > 150:  vod_sc = 10
+    elif vod > 120:  vod_sc =  8
+    elif vod >  80:  vod_sc =  6
+    elif vod >  50:  vod_sc =  4
+    else:            vod_sc =  2
+
+    return {'score': trend_sc + adx_sc + dev_sc + vol_sc + vod_sc, 'detail': {}}
+
+def calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=None):
+    """ohlcv_rows: FHKST01010400 output (OHLCV, OBV용)
+       inv_rows:   inquire-investor output list (외국인/기관 거래대금)
+       price_out:  inquire-price output (대차잔고비율)
+       ssts_rows:  공매도 일별 추이 rows (ssts_vol_rlim 포함, 없으면 None)"""
+    if not inv_rows:
+        return {'score': None, 'detail': {}}
+
+    def _si(v):
+        try: return int(v)
+        except: return 0
+
+    def _sf(v):
+        try: return float(v)
+        except: return 0.0
+
+    n5 = min(5, len(inv_rows))
+    # 외국인/기관 5일 순매수 거래대금 (백만원 → 억원, 빈 문자열 안전 처리)
+    frgn_5d = sum(_si(r.get('frgn_ntby_tr_pbmn', 0)) for r in inv_rows[:n5]) / 100
+    orgn_5d = sum(_si(r.get('orgn_ntby_tr_pbmn', 0)) for r in inv_rows[:n5]) / 100
+
+    # 공매도 5일 평균비율 (ssts_rows 없으면 0)
+    if ssts_rows:
+        nd5 = min(5, len(ssts_rows))
+        ssts_avg = sum(_sf(r.get('ssts_vol_rlim', 0)) for r in ssts_rows[:nd5]) / nd5
+    else:
+        ssts_avg = 0.0
+
+    # 대차잔고비율 (당일)
+    loan_rate = _sf((price_out or {}).get('whol_loan_rmnd_rate', 0))
+
+    # OBV 5일 변화율 (OHLCV 없으면 0)
+    obv_chg = 0.0
+    if ohlcv_rows and len(ohlcv_rows) >= 6:
+        closes  = [_sf(r.get('stck_clpr', 0)) for r in ohlcv_rows]
+        volumes = [_sf(r.get('acml_vol',  0)) for r in ohlcv_rows]
+        obv_chg = _obv_trend(closes, volumes, n=5)
+
+    # ── 외국인 5일 거래대금 (30점) ───────────────────────────────
+    fr = frgn_5d
+    if   fr >  200:  frgn_sc = 30
+    elif fr >   50:  frgn_sc = 24
+    elif fr >   10:  frgn_sc = 18
+    elif fr >    0:  frgn_sc = 14
+    elif fr >  -10:  frgn_sc =  8
+    elif fr >  -50:  frgn_sc =  3
+    else:            frgn_sc =  0
+
+    # ── 기관 5일 거래대금 (25점) ─────────────────────────────────
+    og = orgn_5d
+    if   og >  200:  orgn_sc = 25
+    elif og >   50:  orgn_sc = 20
+    elif og >   10:  orgn_sc = 15
+    elif og >    0:  orgn_sc = 11
+    elif og >  -10:  orgn_sc =  6
+    elif og >  -50:  orgn_sc =  2
+    else:            orgn_sc =  0
+
+    # ── 공매도 5일 평균비율 (20점, 역배점) ───────────────────────
+    sv = ssts_avg
+    if   sv <  1:  ssts_sc = 20
+    elif sv <  2:  ssts_sc = 16
+    elif sv <  3:  ssts_sc = 12
+    elif sv <  5:  ssts_sc =  8
+    elif sv < 10:  ssts_sc =  4
+    else:          ssts_sc =  0
+
+    # ── 대차잔고비율 (15점, 역배점) ──────────────────────────────
+    lr = loan_rate
+    if   lr <  0.5:  loan_sc = 15
+    elif lr <  1.0:  loan_sc = 12
+    elif lr <  2.0:  loan_sc =  9
+    elif lr <  5.0:  loan_sc =  5
+    elif lr < 10.0:  loan_sc =  2
+    else:            loan_sc =  0
+
+    # ── OBV 5일 추세 (10점) ─────────────────────────────────────
+    if   obv_chg >  3:  obv_sc = 10
+    elif obv_chg >  0:  obv_sc =  7
+    elif obv_chg > -3:  obv_sc =  5
+    else:               obv_sc =  2
+
+    return {'score': frgn_sc + orgn_sc + ssts_sc + loan_sc + obv_sc, 'detail': {}}
+
 # 텔레그램봇 updater(토큰, 입력값)
 updater = Updater(token=token, use_context=True)
 dispatcher = updater.dispatcher
@@ -300,9 +575,6 @@ def echo(update, context):
             ext = user_text + " : 미존재 종목"
             context.bot.send_message(chat_id=user_id, text=ext)
 
-    # if len(code) > 0:
-    #     dividend = get_dividend(code)
-
     def get_chart(code):
         title = company + '[' + code + ']'
         pre_day = datetime.today() - timedelta(500)
@@ -365,69 +637,40 @@ def echo(update, context):
         plt.savefig('/home/terra/chart/save2.png')
         plt.close(fig)
 
-    def get_sales_sum(col):
+    def send_stock_summary(code):
+        try:
+            ac_sum = get_phills2_account()
+            price_out = inquire_price(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            ohlcv_rows = get_daily_ohlcv(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            ssts_rows = get_short_selling(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            inv_rows = get_investor_trend(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
 
-        dict = {}
-        count = 0
+            chart_score = calc_chart_score(ohlcv_rows).get('score')
+            supply_score = calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=ssts_rows).get('score')
 
-        for x in dividend.index:
+            market = (price_out or {}).get('rprs_mrkt_kor_name', '') or '-'
+            industry = (price_out or {}).get('bstp_kor_isnm', '') or '-'
+            try:
+                mktcap = int(str((price_out or {}).get('hts_avls', '0')).replace(',', ''))
+            except Exception:
+                mktcap = 0
 
-            if count > 4:
-                break
-            else:
-                row = str(x)
-                idx = 0
-
-                for val in dividend[col]:
-                    dfrow = str(dividend[col].index[idx])
-
-                    if row[0:10] == dfrow[0:10]:
-                        dict[dfrow[0:7]] = format(int(val), ',d')
-
-                    idx += 1
-
-                count += 1
-
-        return dict
-
-    def return_print(*message):
-        io = StringIO()
-        print(*message, file=io)
-        return io.getvalue()
+            text = (
+                f"수급점수: {supply_score if supply_score is not None else '-'}점\n"
+                f"차트점수: {chart_score if chart_score is not None else '-'}점\n"
+                f"시장구분: {market}\n"
+                f"업종: {industry}\n"
+                f"시가총액: {format(mktcap, ',d')}억원"
+            )
+            context.bot.send_message(chat_id=user_id, text=text)
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id, text=f"[종목 정보] 조회 오류: {str(e)}")
 
     if len(code) > 0:
         get_chart(code)
-        with open('/home/terra/chart/save2.png', 'rb') as f:
+        with open('/home/terra/chart/save2.png', 'rb') as f:        
             context.bot.send_photo(chat_id=user_id, photo=f)
-
-    # if len(code) > 0 and dividend is not None:
-    #     get_chart(code)
-    #     with open('/home/terra/chart/save2.png', 'rb') as f:
-    #         context.bot.send_photo(chat_id=user_id, photo=f)
-
-    #     text0 = return_print("<" + company + ">")
-    #     text1 = return_print("[매출액]")
-    #     if "매출액" in dividend.columns:
-    #         for date in get_sales_sum("매출액").keys():
-    #             text1 = text1+return_print("%s : %s" % (date, get_sales_sum("매출액")[date]))
-    #     text2 = return_print("[영업이익]")
-    #     if "영업이익" in dividend.columns:
-    #         for date in get_sales_sum("영업이익").keys():
-    #             text2 = text2+return_print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
-    #     text3 = return_print("[당기순이익]")
-    #     if "당기순이익" in dividend.columns:
-    #         for date in get_sales_sum("당기순이익").keys():
-    #             text3 = text3+return_print("%s : %s" % (date, get_sales_sum("당기순이익")[date]))
-    #     text4 = return_print("[금융수익]")
-    #     if "금융수익" in dividend.columns:
-    #         for date in get_sales_sum("금융수익").keys():
-    #             text4 = text4+return_print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
-    #     text5 = return_print("[기타수익]")
-    #     if "기타수익" in dividend.columns:
-    #         for date in get_sales_sum("기타수익").keys():
-    #             text5 = text5+return_print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
-
-    #     context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5)
+        send_stock_summary(code)
 
 def _do_interest_register(chat_id, context, pending):
     try:
