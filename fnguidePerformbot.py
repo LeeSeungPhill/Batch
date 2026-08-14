@@ -204,9 +204,12 @@ def get_dividend(code):
         if 'IFRS(별도)' in IS_temp.columns:
             IS_temp.index = IS_temp['IFRS(별도)'].values
             IS_temp.drop(['IFRS(별도)', '전년동기', '전년동기(%)'], inplace=True, axis=1)
-        else:
+        elif 'IFRS(개별)' in IS_temp.columns:
             IS_temp.index = IS_temp['IFRS(개별)'].values
             IS_temp.drop(['IFRS(개별)', '전년동기', '전년동기(%)'], inplace=True, axis=1)
+        else:
+            print(f"[{code}] FnGuide 재무 데이터 형식이 예상과 다릅니다 (사이트 개편/차단 가능성).")
+            return None
 
         for i, name in enumerate(IS_temp.index):
 
@@ -297,8 +300,8 @@ def echo(update, context):
             ext = user_text + " : 미존재 종목"
             context.bot.send_message(chat_id=user_id, text=ext)
 
-    if len(code) > 0:
-        dividend = get_dividend(code)
+    # if len(code) > 0:
+    #     dividend = get_dividend(code)
 
     def get_chart(code):
         title = company + '[' + code + ']'
@@ -392,34 +395,39 @@ def echo(update, context):
         print(*message, file=io)
         return io.getvalue()
 
-    if len(code) > 0 and dividend is not None:
+    if len(code) > 0:
         get_chart(code)
         with open('/home/terra/chart/save2.png', 'rb') as f:
             context.bot.send_photo(chat_id=user_id, photo=f)
 
-        text0 = return_print("<" + company + ">")
-        text1 = return_print("[매출액]")
-        if "매출액" in dividend.columns:
-            for date in get_sales_sum("매출액").keys():
-                text1 = text1+return_print("%s : %s" % (date, get_sales_sum("매출액")[date]))
-        text2 = return_print("[영업이익]")
-        if "영업이익" in dividend.columns:
-            for date in get_sales_sum("영업이익").keys():
-                text2 = text2+return_print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
-        text3 = return_print("[당기순이익]")
-        if "당기순이익" in dividend.columns:
-            for date in get_sales_sum("당기순이익").keys():
-                text3 = text3+return_print("%s : %s" % (date, get_sales_sum("당기순이익")[date]))
-        text4 = return_print("[금융수익]")
-        if "금융수익" in dividend.columns:
-            for date in get_sales_sum("금융수익").keys():
-                text4 = text4+return_print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
-        text5 = return_print("[기타수익]")
-        if "기타수익" in dividend.columns:
-            for date in get_sales_sum("기타수익").keys():
-                text5 = text5+return_print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
+    # if len(code) > 0 and dividend is not None:
+    #     get_chart(code)
+    #     with open('/home/terra/chart/save2.png', 'rb') as f:
+    #         context.bot.send_photo(chat_id=user_id, photo=f)
 
-        context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5)
+    #     text0 = return_print("<" + company + ">")
+    #     text1 = return_print("[매출액]")
+    #     if "매출액" in dividend.columns:
+    #         for date in get_sales_sum("매출액").keys():
+    #             text1 = text1+return_print("%s : %s" % (date, get_sales_sum("매출액")[date]))
+    #     text2 = return_print("[영업이익]")
+    #     if "영업이익" in dividend.columns:
+    #         for date in get_sales_sum("영업이익").keys():
+    #             text2 = text2+return_print("%s : %s" % (date, get_sales_sum("영업이익")[date]))
+    #     text3 = return_print("[당기순이익]")
+    #     if "당기순이익" in dividend.columns:
+    #         for date in get_sales_sum("당기순이익").keys():
+    #             text3 = text3+return_print("%s : %s" % (date, get_sales_sum("당기순이익")[date]))
+    #     text4 = return_print("[금융수익]")
+    #     if "금융수익" in dividend.columns:
+    #         for date in get_sales_sum("금융수익").keys():
+    #             text4 = text4+return_print("%s : %s" % (date, get_sales_sum("금융수익")[date]))
+    #     text5 = return_print("[기타수익]")
+    #     if "기타수익" in dividend.columns:
+    #         for date in get_sales_sum("기타수익").keys():
+    #             text5 = text5+return_print("%s : %s" % (date, get_sales_sum("기타수익")[date]))
+
+    #     context.bot.send_message(chat_id=user_id, text=text0+text1+text2+text3+text4+text5)
 
 def _do_interest_register(chat_id, context, pending):
     try:
