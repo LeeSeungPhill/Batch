@@ -161,6 +161,27 @@ def inquire_price(access_token, app_key, app_secret, code):
     ar = resp.APIResp(res)
     return ar.getBody().output
 
+# 종목 기본정보(시장구분·업종·시가총액·대차잔고비율) 조회 전용.
+# inquire_price()는 시세 조회 목적상 장운영시간 외에는 FID_COND_MRKT_DIV_CODE를 NX(넥스트레이드)로 전환하는데,
+# NXT는 코스피/코스닥 전종목을 커버하지 않아 소형주 등에서 output이 비거나 불완전할 수 있어 항상 "J"로 고정 조회.
+def inquire_price_info(access_token, app_key, app_secret, code):
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appKey": app_key,
+        "appSecret": app_secret,
+        "tr_id": "FHKST01010100"
+    }
+    params = {
+        'FID_COND_MRKT_DIV_CODE': "J",
+        'FID_INPUT_ISCD': code
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    data = res.json()
+    return data.get('output') if data.get('rt_cd') == '0' else None
+
 def get_period_high_low(access_token, app_key, app_secret, code, period="D", count=30):
     headers = {
         "Content-Type": "application/json",
@@ -313,6 +334,42 @@ def _obv_trend(closes, volumes, n=5):
     if len(obs) < n + 1: return 0.0
     prev = obs[-(n+1)]
     return (obs[-1] - prev) / abs(prev) * 100 if abs(prev) > 1 else 0.0
+
+def calc_peak_trough_trend(highs: list, closes: list, lows: list, dates: list):
+    """종가 리스트(날짜 오름차순) 기준 지그재그 고점/저점으로 현재 추세와 그 시작일 계산.
+    고점: 전일 대비 상승 + 익일 대비 하락. 저점: 전일 대비 하락 + 익일 대비 상승.
+    추세: 마지막 고점 재돌파 → Uptrend, 마지막 저점 재이탈 → Downtrend, 그 외 → Sideways."""
+    n = len(closes)
+    if n < 3:
+        return None
+
+    high_pts = [None] * n
+    low_pts  = [None] * n
+    for i in range(1, n - 1):
+        if highs[i] > highs[i - 1] and highs[i] > highs[i + 1]:
+            high_pts[i] = highs[i]
+        if lows[i] < lows[i - 1] and lows[i] < lows[i + 1]:
+            low_pts[i] = lows[i]
+
+    trends = []
+    last_high, last_low = None, None
+    for i in range(n):
+        if high_pts[i] is not None:
+            last_high = high_pts[i]
+        if low_pts[i] is not None:
+            last_low = low_pts[i]
+        if last_high is not None and highs[i] > last_high:
+            trends.append('Uptrend')
+        elif last_low is not None and lows[i] < last_low:
+            trends.append('Downtrend')
+        else:
+            trends.append('Sideways')
+
+    cur_trend = trends[-1]
+    start_idx = n - 1
+    while start_idx > 0 and trends[start_idx - 1] == cur_trend:
+        start_idx -= 1
+    return {'trend': cur_trend, 'start_date': dates[start_idx]}
 
 def calc_chart_score(rows):
     """rows: FHKST01010400 output (최신→과거 내림차순)."""
@@ -689,7 +746,7 @@ def echo(update, context):
     def send_stock_summary(code):
         try:
             ac_sum = get_phills2_account()
-            price_out = inquire_price(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
+            price_out = inquire_price_info(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
             time.sleep(0.3)
             ohlcv_rows = get_daily_ohlcv(ac_sum['access_token'], ac_sum['app_key'], ac_sum['app_secret'], code)
             time.sleep(0.3)
@@ -701,6 +758,23 @@ def echo(update, context):
             supply = calc_supply_score(ohlcv_rows, inv_rows, price_out, ssts_rows=ssts_rows)
             chart_score, chart_d = chart.get('score'), chart.get('detail') or {}
             supply_score, supply_d = supply.get('score'), supply.get('detail') or {}
+
+            # 추세/추세시작일: 일봉(최신→과거) → 날짜 오름차순 변환 후 지그재그 고점/저점 기준 산출
+            trend_kr = {'Uptrend': '상승추세', 'Downtrend': '하락추세', 'Sideways': '횡보'}
+            asc_rows = list(reversed(ohlcv_rows))
+            trend_result = calc_peak_trough_trend(
+                [int(r.get('stck_hgpr') or 0) for r in asc_rows],
+                [int(r.get('stck_clpr') or 0) for r in asc_rows],
+                [int(r.get('stck_lwpr') or 0) for r in asc_rows],
+                [r.get('stck_bsop_date') for r in asc_rows],
+            )
+            if trend_result:
+                trend_str = trend_kr.get(trend_result['trend'], trend_result['trend'])
+                sd = trend_result['start_date'] or ''
+                start_date_str = f"{sd[:4]}-{sd[4:6]}-{sd[6:8]}" if len(sd) == 8 else (sd or '-')
+                trend_line = f"추세: {trend_str} (시작일 {start_date_str})\n"
+            else:
+                trend_line = "추세: -\n"
 
             market = (price_out or {}).get('rprs_mrkt_kor_name', '') or '-'
             industry = (price_out or {}).get('bstp_kor_isnm', '') or '-'
@@ -734,8 +808,8 @@ def echo(update, context):
 
             text = (
                 f"{market}[{size}] {industry}(시가총액 {format(mktcap, ',d')}억원)\n"
-                f"제안매수금액: {format(suggest_buy_amt, ',d')}원 (권장범위 {format(amt_min, ',d')}~{format(amt_max, ',d')}원, {amt_desc})\n"
-                f"제안손절금액: {format(suggest_loss_amt, ',d')}원\n\n"
+                f"제안매수금액: {format(suggest_buy_amt, ',d')}원, 제안손절금액: {format(suggest_loss_amt, ',d')}원\n"
+                f"{trend_line}\n"
                 f"[차트점수] {chart_score if chart_score is not None else '-'}점\n"
                 f"  · 추세(MA5/20/60): {_v(chart_d.get('ma5'))}/{_v(chart_d.get('ma20'))}/{_v(chart_d.get('ma60'))} → {_v(chart_d.get('trend_score'))}점\n"
                 f"  · ADX: {_v(chart_d.get('adx'))}(+DI {_v(chart_d.get('plus_di'))}/-DI {_v(chart_d.get('minus_di'))}) → {_v(chart_d.get('adx_score'))}점\n"
