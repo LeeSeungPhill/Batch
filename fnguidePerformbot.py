@@ -669,7 +669,7 @@ def echo(update, context):
                 mktcap = 0
 
             text = (
-                f"시장구분: {market}, 업종: {industry}, 시가총액: {format(mktcap, ',d')}억원\n"
+                f"{market} - {industry}, 시가총액: {format(mktcap, ',d')}억원\n"
                 f"수급점수: {supply_score if supply_score is not None else '-'}점, 차트점수: {chart_score if chart_score is not None else '-'}점"
             )
             context.bot.send_message(chat_id=user_id, text=text)
