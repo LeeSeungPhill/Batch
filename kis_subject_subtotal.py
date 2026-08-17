@@ -106,51 +106,6 @@ def process_combination(access_token, app_key, app_secret, market_code, tr_code,
         cur_ins.close()
         print(f"  → {len(records)}건 저장 완료")
 
-# 계정 조회 및 토큰 갱신
-cur01 = conn.cursor()
-cur01.execute(
-    "select acct_no, access_token, app_key, app_secret, token_publ_date, "
-    "substr(token_publ_date, 0, 9) AS token_day "
-    "from \"stockAccount_stock_account\" where nick_name = %s",
-    (arguments[1],)
-)
-result_one = cur01.fetchone()
-cur01.close()
-
-acct_no      = result_one[0]
-access_token = result_one[1]
-app_key      = result_one[2]
-app_secret   = result_one[3]
-
-validTokenDate = datetime.strptime(result_one[4], '%Y%m%d%H%M%S')
-if (datetime.now() - validTokenDate).days >= 1 or result_one[5] != today:
-    access_token = auth(app_key, app_secret)
-    token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
-    print("new access_token : " + access_token)
-    cur02 = conn.cursor()
-    cur02.execute(
-        "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s",
-        [access_token, token_publ_date, datetime.now(), acct_no]
-    )
-    conn.commit()
-    cur02.close()
-
-if time > '1003' and time < '1122':
-    hms = '1003'
-elif time > '1122' and time < '1322':
-    hms = '1122'
-elif time > '1322' and time < '1432':
-    hms = '1322'
-else:
-    hms = '1432'
-
-# 시장(2) × 매수매도(2) × 외국기관(2) = 8가지 조합 일괄 처리
-for market_code, tr_code, main_code in product(MARKET_MAP, TR_MAP, MAIN_MAP):
-    try:
-        process_combination(access_token, app_key, app_secret, market_code, tr_code, main_code, hms)
-    except Exception as e:
-        print(f"[{market_code}/{tr_code}/{main_code}] 오류: {e}")
-
 # 저장 완료 후 요약 메시지 텔레그램 전송
 def send_subject_summary():
     COMBOS = [
@@ -227,5 +182,50 @@ finally:
     _conn_check.close()
 
 if _is_business:
+    # 계정 조회 및 토큰 갱신
+    cur01 = conn.cursor()
+    cur01.execute(
+        "select acct_no, access_token, app_key, app_secret, token_publ_date, "
+        "substr(token_publ_date, 0, 9) AS token_day "
+        "from \"stockAccount_stock_account\" where nick_name = %s",
+        (arguments[1],)
+    )
+    result_one = cur01.fetchone()
+    cur01.close()
+
+    acct_no      = result_one[0]
+    access_token = result_one[1]
+    app_key      = result_one[2]
+    app_secret   = result_one[3]
+
+    validTokenDate = datetime.strptime(result_one[4], '%Y%m%d%H%M%S')
+    if (datetime.now() - validTokenDate).days >= 1 or result_one[5] != today:
+        access_token = auth(app_key, app_secret)
+        token_publ_date = datetime.now().strftime("%Y%m%d%H%M%S")
+        print("new access_token : " + access_token)
+        cur02 = conn.cursor()
+        cur02.execute(
+            "update \"stockAccount_stock_account\" set access_token = %s, token_publ_date = %s, last_chg_date = %s where acct_no = %s",
+            [access_token, token_publ_date, datetime.now(), acct_no]
+        )
+        conn.commit()
+        cur02.close()
+
+    if time > '1003' and time < '1122':
+        hms = '1003'
+    elif time > '1122' and time < '1322':
+        hms = '1122'
+    elif time > '1322' and time < '1432':
+        hms = '1322'
+    else:
+        hms = '1432'
+
+    # 시장(2) × 매수매도(2) × 외국기관(2) = 8가지 조합 일괄 처리
+    for market_code, tr_code, main_code in product(MARKET_MAP, TR_MAP, MAIN_MAP):
+        try:
+            process_combination(access_token, app_key, app_secret, market_code, tr_code, main_code, hms)
+        except Exception as e:
+            print(f"[{market_code}/{tr_code}/{main_code}] 오류: {e}")
+
     send_subject_summary()
 conn.close()
