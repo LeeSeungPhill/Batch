@@ -19,6 +19,8 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 
 conn = db.connect(conn_string)
 
+today = datetime.now().strftime("%Y%m%d")
+
 CHAT_ID = "2147256258"
 
 def safe_day_rate(raw):
@@ -358,7 +360,29 @@ async def main():
     finally:
         conn.close()
 
+def is_business_day(check_date: datetime, conn) -> bool:
+    """
+    DB 기준 영업일 여부 확인
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT is_business_day(%s)",
+        (check_date,)
+    )
+    result = cur.fetchone()
+    cur.close()
+
+    return bool(result[0])
+
 # asyncio로 프로그램을 실행합니다.
 if __name__ == '__main__':
-	asyncio.run(main())
+    # 영업일 확인용 임시 연결 (스레드 진입 전 단일 사용)
+    _conn_check = db.connect(conn_string)
+    try:
+        _is_business = is_business_day(today, _conn_check)
+    finally:
+        _conn_check.close()
+
+    if _is_business:
+	    asyncio.run(main())
 
