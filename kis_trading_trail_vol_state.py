@@ -727,6 +727,13 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
     d_order_price = 0
     d_order_amount = 0
 
+    # 매도가가 상한가 초과시 상한가로 조정 (전일 종가 × 1.30 기준)
+    prev_day_info = get_prev_day_info(code, trail_day, access_token, app_key, app_secret, conn)
+    if prev_day_info is not None:
+        upper_limit = get_valid_sell_price(int(prev_day_info['close_price'] * 1.30))
+        if int(trail_price) > upper_limit:
+            trail_price = upper_limit
+
     try:
         # 매도 주문정보 존재시 취소 처리
         if sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code) == 'success':
@@ -823,6 +830,13 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
 def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, trail_plan, basic_qty, basic_amt, acct_no, access_token, app_key, app_secret, code, name, trail_day, trail_dtm, trail_tp, proc_min, trade_result, conn, bot, chat_id):
     d_order_price = 0
     d_order_amount = 0
+
+    # 매도가가 상한가 초과시 상한가로 조정 (전일 종가 × 1.30 기준)
+    prev_day_info = get_prev_day_info(code, trail_day, access_token, app_key, app_secret, conn)
+    if prev_day_info is not None:
+        upper_limit = get_valid_sell_price(int(prev_day_info['close_price'] * 1.30))
+        if int(trail_price) > upper_limit:
+            trail_price = upper_limit
 
     try:
         # 매도 주문정보 존재시 취소 처리
