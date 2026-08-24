@@ -154,6 +154,7 @@ g_trail_state_code = ""
 g_trail_state_name = ""
 g_trail_state_acct_no = ""
 g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, nick_name, name, stop, target, exit) 리스트
+g_trail_state_table = "trading_trail"   # 버튼 클릭 시점에 확정된 처리 대상 테이블(trading_trail/trading_trail_nxt)
 
 g_fibo_code = ""   # 피보나치매도 선택 종목코드
 g_fibo_name = ""   # 피보나치매도 선택 종목명
@@ -558,6 +559,10 @@ def is_nxt_able(access_token, app_key, app_secret, code):
         return output.get('nxt_tr_stop_yn') == 'N' and output.get('tr_stop_yn') == 'N' and output.get("cptt_trad_tr_psbl_yn") == 'Y'
     except Exception:
         return False
+
+# 추적삭제/추적등록/추적변경/추적상태 처리 대상 테이블 (15:30 이후 trading_trail_nxt, 그 외 trading_trail)
+def trail_table_name():
+    return "trading_trail_nxt" if datetime.now().strftime('%H%M') > '1530' else "trading_trail"
 
 # 주식현재가 일자별
 def get_kis_daily_chart(
@@ -1082,7 +1087,7 @@ def callback_get(update, context) :
     global g_selected_accounts
     global g_holding_edit_field
     global g_interest_edit_field
-    global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts
+    global g_trail_state_code, g_trail_state_name, g_trail_state_acct_no, g_trail_state_accounts, g_trail_state_table
     global g_fibo_code, g_fibo_name
     global g_sell3x_code, g_sell3x_company
     global g_corr_code, g_corr_company, g_corr_dvsn
@@ -2489,6 +2494,7 @@ def callback_get(update, context) :
         cb_hour_minute = g_trail71_hour_minute
         target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
         ac_default = account(arguments[1])
+        tbl71 = trail_table_name()
 
         def process_trail71(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             try:
@@ -2556,9 +2562,9 @@ def callback_get(update, context) :
                     thread_conn = db.connect(conn_string)
                     try:
                         cur400 = thread_conn.cursor()
-                        merge_query = """
+                        merge_query = f"""
                             WITH ins AS (
-                                INSERT INTO trading_trail (
+                                INSERT INTO {tbl71} (
                                     order_no, order_type, order_dt, order_tmd,
                                     order_price, order_amount, complete_qty, remain_qty,
                                     acct_no, code, name, trail_day, trail_dtm, trail_tp,
@@ -2640,6 +2646,7 @@ def callback_get(update, context) :
         cb_hour_minute = g_trail73_hour_minute
         target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
         ac_default = account(arguments[1])
+        tbl73 = trail_table_name()
 
         def process_trail73(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             try:
@@ -2707,9 +2714,9 @@ def callback_get(update, context) :
                     thread_conn = db.connect(conn_string)
                     try:
                         cur400 = thread_conn.cursor()
-                        merge_query = """
+                        merge_query = f"""
                             WITH ins AS (
-                                INSERT INTO trading_trail (
+                                INSERT INTO {tbl73} (
                                     order_no, order_type, order_dt, order_tmd,
                                     order_price, order_amount, complete_qty, remain_qty,
                                     acct_no, code, name, trail_day, trail_dtm, trail_tp,
@@ -2775,8 +2782,8 @@ def callback_get(update, context) :
     elif command == "추적변경":
         try:
             with get_conn().cursor() as cur_tc:
-                cur_tc.execute("""
-                    SELECT DISTINCT code, name FROM trading_trail
+                cur_tc.execute(f"""
+                    SELECT DISTINCT code, name FROM {trail_table_name()}
                     WHERE trail_tp IN ('1', '2', 'L')
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND basic_qty > 0
@@ -3602,10 +3609,11 @@ def callback_get(update, context) :
             result_msgs = []
         
             # 추적 delete
+            tbl_del = trail_table_name()
             conn200 = get_conn()
             cur200 = conn200.cursor()
-            delete_query = """
-                DELETE FROM trading_trail WHERE acct_no = %s AND trail_day = %s
+            delete_query = f"""
+                DELETE FROM {tbl_del} WHERE acct_no = %s AND trail_day = %s
                 """
             # delete 인자값 설정
             cur200.execute(delete_query, (acct_no, trail_day))
@@ -3649,8 +3657,8 @@ def callback_get(update, context) :
     elif command == "재개" and "추적상태" in data_selected:
         try:
             with get_conn().cursor() as cur_rs:
-                cur_rs.execute("""
-                    SELECT DISTINCT code, name FROM trading_trail
+                cur_rs.execute(f"""
+                    SELECT DISTINCT code, name FROM {trail_table_name()}
                     WHERE trail_tp IN ('P', 'C', 'U')
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND basic_qty > 0
@@ -3674,8 +3682,8 @@ def callback_get(update, context) :
     elif command == "멈춤" and "추적상태" in data_selected:
         try:
             with get_conn().cursor() as cur_st:
-                cur_st.execute("""
-                    SELECT DISTINCT code, name FROM trading_trail
+                cur_st.execute(f"""
+                    SELECT DISTINCT code, name FROM {trail_table_name()}
                     WHERE trail_tp IN ('1', '2', 'L')
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND basic_qty > 0
@@ -3728,7 +3736,7 @@ def callback_get(update, context) :
             result_two00 = cur200.fetchall()
             cur200.close()
 
-            after_1520 = datetime.now().strftime('%H%M') >= '1520'
+            after_1530 = datetime.now().strftime('%H%M') > '1530'
             nxt_targets = []  # (code, name) for NXT buttons
 
             if len(result_two00) > 0:
@@ -3764,8 +3772,8 @@ def callback_get(update, context) :
 
                     result_msgs.append(msg)
 
-                    # 15:20 이후 trail_tp '1','2' 대상 NXT 버튼 수집
-                    if after_1520 and trail_tp in ('1', '2'):
+                    # 15:30 이후 trail_tp '1','2' 대상 NXT 버튼 수집
+                    if after_1530 and trail_tp in ('1', '2'):
                         nxt_targets.append((code, name))
 
             if result_msgs:
@@ -4024,12 +4032,13 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_resume_"):
         ts_code = command[len("trail_resume_"):]
+        tbl_resume = trail_table_name()
 
         # ── 유효성 검증: 현재도 재개 대상(trail_tp IN ('P','C','U'))인지 확인 ──
         try:
             with get_conn().cursor() as cur_chk:
-                cur_chk.execute("""
-                    SELECT DISTINCT name FROM trading_trail
+                cur_chk.execute(f"""
+                    SELECT DISTINCT name FROM {tbl_resume}
                     WHERE code = %s
                       AND trail_day = prev_business_day_char(CURRENT_DATE)
                       AND trail_tp IN ('P', 'C', 'U')
@@ -4083,7 +4092,7 @@ def callback_get(update, context) :
                 cur_rn.execute(
                     "SELECT t.acct_no, s.nick_name, t.name, "
                     "min(t.stop_price), max(t.target_price), min(t.exit_price) "
-                    "FROM trading_trail t "
+                    f"FROM {tbl_resume} t "
                     "JOIN \"stockAccount_stock_account\" s ON s.acct_no = t.acct_no "
                     "WHERE t.code = %s AND t.trail_day = prev_business_day_char(CURRENT_DATE) "
                     "AND t.basic_qty > 0 AND t.trail_tp IN ('P', 'C', 'U') "
@@ -4102,6 +4111,7 @@ def callback_get(update, context) :
             ts_stop_price = ts_target_price = ts_exit_price = 0
         g_trail_state_code = ts_code
         g_trail_state_name = ts_name
+        g_trail_state_table = tbl_resume
         g_trail_state_accounts = rn_rows
         menuNum = '41B'
         context.bot.send_message(
@@ -4111,12 +4121,13 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_stop_"):
         ts_code = command[len("trail_stop_"):]
+        tbl_stop = trail_table_name()
 
         # ── 유효성 검증: 현재도 추적 대상(trail_tp IN ('1','2','L'))인지 확인 ──
         try:
             with get_conn().cursor() as cur_chk:
-                cur_chk.execute("""
-                    SELECT DISTINCT name FROM trading_trail
+                cur_chk.execute(f"""
+                    SELECT DISTINCT name FROM {tbl_stop}
                     WHERE code = %s
                       AND trail_day = prev_business_day_char(CURRENT_DATE)
                       AND trail_tp IN ('1', '2', 'L')
@@ -4169,7 +4180,7 @@ def callback_get(update, context) :
             c_sp = get_conn()
             with c_sp.cursor() as cur_sn:
                 cur_sn.execute(
-                    "SELECT name, stop_price, target_price, exit_price FROM trading_trail WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
+                    f"SELECT name, stop_price, target_price, exit_price FROM {tbl_stop} WHERE code = %s AND trail_day = prev_business_day_char(CURRENT_DATE) AND basic_qty > 0 ORDER BY trail_dtm DESC LIMIT 1",
                     (ts_code,)
                 )
                 sn_row = cur_sn.fetchone()
@@ -4182,8 +4193,8 @@ def callback_get(update, context) :
                 ts_target_price = int(sn_row[2])
                 ts_exit_price = int(sn_row[3])
             with c_sp.cursor() as cur_sp:
-                cur_sp.execute("""
-                    UPDATE trading_trail SET trail_tp = 'P', mod_dt = now()
+                cur_sp.execute(f"""
+                    UPDATE {tbl_stop} SET trail_tp = 'P', mod_dt = now()
                     WHERE code = %s
                     AND trail_day = prev_business_day_char(CURRENT_DATE)
                     AND trail_tp IN ('1', '2', 'L')
@@ -4205,12 +4216,13 @@ def callback_get(update, context) :
 
     elif command.startswith("trail_change_"):
         ts_code = command[len("trail_change_"):]
+        tbl_change = trail_table_name()
 
         # ── 유효성 검증: 현재도 변경 대상(trail_tp IN ('1','2','L'))인지 확인 ──
         try:
             with get_conn().cursor() as cur_chk:
-                cur_chk.execute("""
-                    SELECT DISTINCT name FROM trading_trail
+                cur_chk.execute(f"""
+                    SELECT DISTINCT name FROM {tbl_change}
                     WHERE code = %s
                       AND trail_day = prev_business_day_char(CURRENT_DATE)
                       AND trail_tp IN ('1', '2', 'L')
@@ -4264,7 +4276,7 @@ def callback_get(update, context) :
                 cur_tc2.execute(
                      "SELECT t.acct_no, s.nick_name, t.name, "
                     "min(t.stop_price), max(t.target_price), min(t.exit_price) "
-                    "FROM trading_trail t "
+                    f"FROM {tbl_change} t "
                     "JOIN \"stockAccount_stock_account\" s ON s.acct_no = t.acct_no "
                     "WHERE t.code = %s AND t.trail_day = prev_business_day_char(CURRENT_DATE) "
                     "AND t.basic_qty > 0 AND t.trail_tp IN ('1', '2', 'L') "
@@ -4284,6 +4296,7 @@ def callback_get(update, context) :
         g_trail_state_code = ts_code
         g_trail_state_name = ts_name
         g_trail_state_accounts = tc2_row
+        g_trail_state_table = tbl_change
         menuNum = '81B'
         context.bot.send_message(
             chat_id=query.message.chat_id,
@@ -5161,6 +5174,7 @@ def echo(update, context):
         initMenuNum()
         ts_code = g_trail_state_code
         ts_name = g_trail_state_name
+        tbl_41b = g_trail_state_table
         parts41B = user_text.strip().split(',')
         if (len(parts41B) < 4
                 or not parts41B[0].strip().isdecimal()
@@ -5205,10 +5219,10 @@ def echo(update, context):
             thread_conn = db.connect(conn_string)
             try:
                 with thread_conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(f"""
                         WITH target AS (
                             SELECT acct_no, code, trail_day, trail_dtm, trail_tp
-                            FROM trading_trail
+                            FROM {tbl_41b}
                             WHERE acct_no = %s AND code = %s
                             AND trail_day = prev_business_day_char(CURRENT_DATE)
                             AND trail_tp IN ('C', 'U', 'P')
@@ -5216,17 +5230,17 @@ def echo(update, context):
                             ORDER BY trail_dtm DESC
                             LIMIT 1
                         )
-                        UPDATE trading_trail SET
+                        UPDATE {tbl_41b} SET
                             trail_dtm = %s, trail_tp = %s, stop_price = %s, target_price = %s, exit_price = %s,
                             proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
                             trail_plan = NULL, trail_price = NULL, trail_rate = NULL,
                             trail_qty = NULL, trail_amt = NULL, volumn = NULL
                         FROM target
-                        WHERE trading_trail.acct_no = target.acct_no
-                          AND trading_trail.code = target.code
-                          AND trading_trail.trail_day = target.trail_day
-                          AND trading_trail.trail_dtm = target.trail_dtm
-                          AND trading_trail.trail_tp = target.trail_tp
+                        WHERE {tbl_41b}.acct_no = target.acct_no
+                          AND {tbl_41b}.code = target.code
+                          AND {tbl_41b}.trail_day = target.trail_day
+                          AND {tbl_41b}.trail_dtm = target.trail_dtm
+                          AND {tbl_41b}.trail_tp = target.trail_tp
                         RETURNING 1
                     """, (
                         t_acct_no, ts_code,
@@ -5282,6 +5296,7 @@ def echo(update, context):
         initMenuNum()
         ts_code = g_trail_state_code
         ts_name = g_trail_state_name
+        tbl_81b = g_trail_state_table
         parts81B = user_text.strip().split(',')
         if (len(parts81B) < 4
                 or not parts81B[0].strip().isdecimal()
@@ -5333,10 +5348,10 @@ def echo(update, context):
             thread_conn = db.connect(conn_string)
             try:
                 with thread_conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(f"""
                         WITH target AS (
                             SELECT acct_no, code, trail_day, trail_dtm, trail_tp
-                            FROM trading_trail
+                            FROM {tbl_81b}
                             WHERE acct_no = %s AND code = %s
                             AND trail_day = prev_business_day_char(CURRENT_DATE)
                             AND trail_tp IN ('1', '2', 'L')
@@ -5344,17 +5359,17 @@ def echo(update, context):
                             ORDER BY trail_dtm DESC
                             LIMIT 1
                         )
-                        UPDATE trading_trail SET
+                        UPDATE {tbl_81b} SET
                             trail_dtm = %s, trail_tp = '1', stop_price = %s, target_price = %s, exit_price = %s,
                             proc_min = %s, mod_dt = %s, basic_price = %s, basic_qty = %s, basic_amt = %s,
                             trail_plan = %s, trail_price = NULL, trail_rate = NULL,
                             trail_qty = NULL, trail_amt = NULL, volumn = NULL
                         FROM target
-                        WHERE trading_trail.acct_no = target.acct_no
-                          AND trading_trail.code = target.code
-                          AND trading_trail.trail_day = target.trail_day
-                          AND trading_trail.trail_dtm = target.trail_dtm
-                          AND trading_trail.trail_tp = target.trail_tp
+                        WHERE {tbl_81b}.acct_no = target.acct_no
+                          AND {tbl_81b}.code = target.code
+                          AND {tbl_81b}.trail_day = target.trail_day
+                          AND {tbl_81b}.trail_dtm = target.trail_dtm
+                          AND {tbl_81b}.trail_tp = target.trail_tp
                         RETURNING 1
                     """, (
                         t_acct_no, ts_code,
@@ -6471,7 +6486,8 @@ def echo(update, context):
                 year_day = datetime.now().strftime("%Y%m%d")                                                # 날짜-8자리(YYYYMMDD, 현재일자:0)
                 hour_minute = datetime.now().strftime('%H%M%S')                                             # 시간-6자리(HHMMSS, 현재일시:0)
                 sell_rate = int(val_text[4])
-                
+                tbl72 = trail_table_name()
+
                 target_nicks = g_selected_accounts if g_selected_accounts else [None]
 
                 def process_nick_72(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -6507,9 +6523,9 @@ def echo(update, context):
                                     sell_amt = int(target_price * sell_qty)
                                     loss_amt = int((base_price - exit_price) * hldg_qty)
 
-                                    merge_query = """
+                                    merge_query = f"""
                                         WITH ins AS (
-                                            INSERT INTO trading_trail (
+                                            INSERT INTO {tbl72} (
                                                 acct_no,
                                                 code,
                                                 name,
