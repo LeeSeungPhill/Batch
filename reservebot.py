@@ -555,7 +555,7 @@ def is_nxt_able(access_token, app_key, app_secret, code):
         if not ar.isOK():
             return False
         output = ar.getBody().output
-        return output.get('nxt_tr_stop_yn') == 'N' and output.get('tr_stop_yn') == 'N'
+        return output.get('nxt_tr_stop_yn') == 'N' and output.get('tr_stop_yn') == 'N' and output.get("cptt_trad_tr_psbl_yn") == 'Y'
     except Exception:
         return False
 
@@ -3798,10 +3798,19 @@ def callback_get(update, context) :
                     message_id=query.message.message_id
                 )
 
-            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 중 NXT 거래가능 종목만
+            # 당일 이미 trading_trail_nxt 에 등록된 종목 조회
+            cur_nxt_chk = get_conn().cursor()
+            cur_nxt_chk.execute("""
+                SELECT DISTINCT code FROM trading_trail_nxt
+                WHERE acct_no = %s AND trail_day = %s
+            """, (acct_no, trail_day))
+            registered_nxt_codes = {r[0] for r in cur_nxt_chk.fetchall()}
+            cur_nxt_chk.close()
+
+            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 중 NXT 거래가능 + 당일 미등록 종목만
             nxt_targets = [
                 (c, n) for c, n in nxt_targets
-                if is_nxt_able(access_token, app_key, app_secret, c)
+                if c not in registered_nxt_codes and is_nxt_able(access_token, app_key, app_secret, c)
             ]
             if nxt_targets:
                 global g_nxt_pending
