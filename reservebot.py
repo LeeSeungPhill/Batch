@@ -534,6 +534,31 @@ def inquire_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output
 
+# 상품기본조회 (종목의 NXT 거래정지여부 등 확인용)
+def is_nxt_able(access_token, app_key, app_secret, code):
+    """해당 종목의 NXT 거래가능 여부 반환 (nxt_tr_stop_yn == 'N' and tr_stop_yn == 'N')"""
+    try:
+        headers = {"Content-Type": "application/json",
+                   "authorization": f"Bearer {access_token}",
+                   "appKey": app_key,
+                   "appSecret": app_secret,
+                   "tr_id": "CTPF1002R",
+                   "custtype": "P"}
+        params = {
+                    'PRDT_TYPE_CD': "300",
+                    'PDNO': code
+        }
+        PATH = "uapi/domestic-stock/v1/quotations/search-stock-info"
+        URL = f"{URL_BASE}/{PATH}"
+        res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+        ar = resp.APIResp(res)
+        if not ar.isOK():
+            return False
+        output = ar.getBody().output
+        return output.get('nxt_tr_stop_yn') == 'N' and output.get('tr_stop_yn') == 'N'
+    except Exception:
+        return False
+
 # 주식현재가 일자별
 def get_kis_daily_chart(
         stock_code: str,
@@ -3773,7 +3798,11 @@ def callback_get(update, context) :
                     message_id=query.message.message_id
                 )
 
-            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 존재 시 전송
+            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 중 NXT 거래가능 종목만
+            nxt_targets = [
+                (c, n) for c, n in nxt_targets
+                if is_nxt_able(access_token, app_key, app_secret, c)
+            ]
             if nxt_targets:
                 global g_nxt_pending
                 g_nxt_pending[query.message.chat_id] = {
