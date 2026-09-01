@@ -2777,7 +2777,7 @@ def callback_get(update, context) :
     elif command == "다시계산" and "trail73" in data_selected:
         menuNum = "73"
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
-        query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0)를 입력하세요.")
+        query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.")
 
     elif command == "추적변경":
         try:
@@ -2849,7 +2849,7 @@ def callback_get(update, context) :
             "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "71": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "72": "종목코드(종목명), 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
-            "73": "종목코드(종목명), 매수가(현재가:0)를 입력하세요.",
+            "73": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.",
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         prompt = prompt_texts.get(menu_num, "입력하세요.")
@@ -6101,15 +6101,14 @@ def echo(update, context):
                     ext = name_text + " : 미존재 종목"
                     context.bot.send_message(chat_id=user_id, text=ext)
     else:
-        if not ',' in user_text:
-            # 입력메시지가 종목명에 존재하는 경우
-            if len(stock_code[stock_code.company == user_text].values) > 0:
-                code = stock_code[stock_code.company == user_text].code.values[0].strip()  ## strip() : 공백제거
-                company = stock_code[stock_code.company == user_text].company.values[0].strip()  ## strip() : 공백제거
-            else:
-                code = ""
-                ext = user_text + " : 미존재 종목"
-                context.bot.send_message(chat_id=user_id, text=ext)                        
+        # 입력메시지가 6자리 미만 → 종목명 입력으로 간주 (콤마 유무 모두 처리)
+        name_text = user_text.split(',')[0].strip()
+        if len(stock_code[stock_code.company == name_text].values) > 0:
+            code = stock_code[stock_code.company == name_text].code.values[0].strip()  ## strip() : 공백제거
+            company = stock_code[stock_code.company == name_text].company.values[0].strip()  ## strip() : 공백제거
+        else:
+            code = ""
+            context.bot.send_message(chat_id=user_id, text=name_text + " : 미존재 종목")
 
     if code != "":
 
@@ -6593,23 +6592,33 @@ def echo(update, context):
                     t.join()
 
         elif menuNum == '73':
-            initMenuNum()
-            parts73 = user_text.split(',', 1)
+            # 입력: 종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)
+            # initMenuNum() 은 미리보기 전송이 확정된 시점에만 호출 → 검증 실패 시 재입력 가능
+            parts73 = user_text.split(',', 2)
             if len(parts73) < 2 or not parts73[1].strip().isdecimal():
                 context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0) 미존재 또는 부적합")
             else:
                 buy_price_73 = int(stck_prpr) if parts73[1].strip() == '0' else int(parts73[1].strip())
                 buy_price_73 = round_to_valid_price(buy_price_73, get_tick_size(buy_price_73))
 
-                # 이탈가 : 금일 저가, 매수금액/손절금액 : 시장비율 기반 제안값 자동 적용
-                loss_price_73 = int(stck_lwpr)
+                # 이탈가 : 미입력 또는 0 → 금일 저가, 매수금액/손절금액 : 시장비율 기반 제안값 자동 적용
+                if len(parts73) >= 3 and parts73[2].strip().isdecimal() and parts73[2].strip() != '0':
+                    loss_price_73 = int(parts73[2].strip())
+                else:
+                    loss_price_73 = int(stck_lwpr)
                 loss_price_73 = round_to_valid_price(loss_price_73, get_tick_size(loss_price_73))
                 input_buy_amt_73 = suggest_buy_amt    # 제안 매수금액
                 item_loss_sum_73 = _suggest_loss      # 제안 손절금액
 
+                # 매수가-이탈가 최소 간격 (틱, 또는 매수가의 0.5% 중 큰 값) → 매수량 폭증 방지
+                min_gap_73 = max(get_tick_size(buy_price_73), int(buy_price_73 * 0.005))
+
                 if buy_price_73 <= loss_price_73:
                     context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(" + format(buy_price_73, ',d') + ")가 이탈가(" + format(loss_price_73, ',d') + ") 이하입니다.")
+                elif (buy_price_73 - loss_price_73) < min_gap_73:
+                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(" + format(buy_price_73, ',d') + ")와 이탈가(" + format(loss_price_73, ',d') + ") 차이가 너무 작습니다. 이탈가를 다시 지정하세요.")
                 else:
+                    initMenuNum()
                     # 공통 손절율
                     loss_rate_73 = round((100 - (loss_price_73 / buy_price_73) * 100) * -1, 2)
 
@@ -6646,7 +6655,7 @@ def echo(update, context):
                     preview_text = (
                         "[선택계좌: " + selected_str + "]\n"
                         "[" + company + "(<code>" + code + "</code>)]\n"
-                        "매수가: " + format(buy_price_73, ',d') + "원 | 이탈가(금일저가): " + format(loss_price_73, ',d') + "원 | 손절율: " + str(loss_rate_73) + "%\n"
+                        "매수가: " + format(buy_price_73, ',d') + "원 | 이탈가: " + format(loss_price_73, ',d') + "원 | 손절율: " + str(loss_rate_73) + "%\n"
                         "─────────────────\n"
                         "  손절금액 기준 (제안: " + format(item_loss_sum_73, ',d') + "원)\n"
                         "  매수금액: " + format(loss_buy_amt_73, ',d') + "원 | 매수량: " + format(loss_buy_qty_73, ',d') + "주 | 손실금액: " + format(item_loss_sum_73, ',d') + "원\n"
