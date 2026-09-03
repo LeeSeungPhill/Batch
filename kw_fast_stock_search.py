@@ -215,7 +215,7 @@ class WebSocketClient:
         try:
             self.websocket = await websockets.connect(self.uri)
             self.connected = True
-            print("서버와 연결을 시도 중입니다.")
+            # print("서버와 연결을 시도 중입니다.")
 
             # 로그인 패킷
             param = {
@@ -223,7 +223,7 @@ class WebSocketClient:
                 'token': self.access_token
             }
 
-            print('실시간 시세 서버로 로그인 패킷을 전송합니다.')
+            # print('실시간 시세 서버로 로그인 패킷을 전송합니다.')
             # 웹소켓 연결 시 로그인 정보 전달
             await self.send_message(message=param)
 
@@ -241,7 +241,7 @@ class WebSocketClient:
                 message = json.dumps(message)
 
             await self.websocket.send(message)
-            print(f'Message sent: {message}')
+            # print(f'Message sent: {message}')
 
     # 서버에서 오는 메시지를 수신하여 출력합니다.
     async def receive_messages(self):
@@ -265,10 +265,10 @@ class WebSocketClient:
                 # 메시지 유형이 LOGIN일 경우 로그인 시도 결과 체크
                 if trnm == 'LOGIN':
                     if response.get('return_code') != 0:
-                        print('로그인 실패하였습니다. : ', response.get('return_msg'))
+                        print(f"[{datetime.now().strftime('%H%M%S')}] 로그인 실패하였습니다. : {response.get('return_msg')}")
                         await self.disconnect()
                     else:
-                        print('로그인 성공하였습니다.')
+                        print(f"[{datetime.now().strftime('%H%M%S')}] 로그인 성공하였습니다.")
                         await self.send_message({'trnm': 'CNSRLST'})
 
                 elif trnm == 'CNSRLST':
