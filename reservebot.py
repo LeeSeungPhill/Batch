@@ -2455,7 +2455,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "63N")
 
     elif command == "추적등록":
-        button_list = build_button(["매수주문등록", "주문제외등록", "매수자동등록"], data_selected)
+        button_list = build_button(["매수자동등록", "주문제외등록", "매수주문등록"], data_selected)
         show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
 
         context.bot.edit_message_text(text="추적등록 방식을 선택해 주세요.",
