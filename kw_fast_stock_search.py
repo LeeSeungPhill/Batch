@@ -1,5 +1,6 @@
 import requests
 import json
+import os
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 import psycopg2 as db
 import math
@@ -25,6 +26,50 @@ conn = db.connect(conn_string)
 today = datetime.now().strftime("%Y%m%d")
 
 CHAT_ID = "2147256258"
+
+# 중단 시 재가동 버튼 콜백 (fnguidePerformbot.py 의 callback_get 에서 처리)
+RESTART_CALLBACK = "menu,kwfast_restart"
+# 중복 실행 방지용 PID 파일
+PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kw_fast_stock_search.pid")
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def acquire_singleton_lock() -> bool:
+    """이미 동일 스크립트가 실행 중이면 False, 아니면 PID 파일 생성 후 True"""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE) as f:
+                old = int((f.read().strip() or "0"))
+            if old and old != os.getpid() and _pid_alive(old):
+                return False
+        with open(PID_FILE, "w") as f:
+            f.write(str(os.getpid()))
+        return True
+    except Exception as e:
+        print(f"PID 락 처리 오류(무시하고 진행): {e}")
+        return True
+
+
+def release_singleton_lock():
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE) as f:
+                owner = f.read().strip()
+            if owner == str(os.getpid()):
+                os.remove(PID_FILE)
+    except Exception:
+        pass
 
 def safe_day_rate(raw):
     day_rate = 0.00
@@ -175,6 +220,22 @@ async def send_telegram_message(message_text: str, bot_token: str, parse_mode: s
         reply_markup=reply_markup
     )
 
+
+async def notify_fatal(bot_token: str, reason: str):
+    """비정상 중단 알림 + 재가동 버튼 전송"""
+    try:
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔄 프로세스 재가동", callback_data=RESTART_CALLBACK)
+        ]])
+        msg = (
+            f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시 프로세스가 중단됐습니다.\n"
+            f"사유: {html.escape(str(reason))}\n\n아래 버튼으로 재가동할 수 있습니다."
+        )
+        await send_telegram_message(msg, bot_token, parse_mode='HTML', reply_markup=markup)
+    except Exception as e:
+        print(f"중단 알림 전송 오류: {e}")
+
+
 def auth(APP_KEY, APP_SECRET):
 
     params = {
@@ -215,6 +276,9 @@ class WebSocketClient:
         self.reg_seq = 0           # 실시간 등록 그룹 번호 시퀀스
         self.code_group = {}       # code -> 등록 그룹 번호
         self._pending_reregister = False  # 재접속 후 재등록 필요 여부
+        self.stop_reason = None    # 종료 사유 ('market_close' 면 정상, 그 외는 비정상)
+        self.reconnect_fail = 0    # 연속 재접속 실패 횟수
+        self._session_ok = False   # 이번 접속에서 로그인 성공 여부
 
     # WebSocket 서버에 연결합니다.
     async def connect(self):
@@ -272,9 +336,11 @@ class WebSocketClient:
                 if trnm == 'LOGIN':
                     if response.get('return_code') != 0:
                         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 실패하였습니다. : {response.get('return_msg')}")
+                        self.stop_reason = f"로그인 실패: {response.get('return_msg')}"
                         await self.disconnect()
                     else:
                         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 성공하였습니다.")
+                        self._session_ok = True  # 정상 접속 - 재접속 실패 카운터 리셋 근거
                         # 재접속인 경우 감시 종목 실시간 재등록
                         await self._reregister_after_reconnect()
                         await self.send_message({'trnm': 'CNSRLST'})
@@ -503,6 +569,7 @@ class WebSocketClient:
         """PING 주기마다 호출 - 종료 시각 체크 / 신규 종목 등록 / 기준값 보완"""
         if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
             print("장 마감 - 실시간 돌파 감시 종료")
+            self.stop_reason = 'market_close'
             self.keep_running = False
             await self.disconnect()
             return
@@ -695,19 +762,44 @@ class WebSocketClient:
 
     # WebSocket 실행 (장중 상주 - 끊기면 재접속 후 감시 종목 재등록)
     async def run(self):
+        MAX_RECONNECT_FAIL = 5  # 연속 실패 시 포기하고 종료(→ 중단 알림)
         while self.keep_running:
+            self._session_ok = False
+            session_start = datetime.now()
             try:
                 await self.connect()
                 await self.receive_messages()
             except Exception as e:
                 print(f'run 예외: {e}')
+                if not self.stop_reason:
+                    self.stop_reason = f'실행 예외: {e}'
 
             if not self.keep_running:
                 break
 
+            # 장 마감 시각 이후면 재접속하지 않고 정상 종료
+            if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
+                print('장 마감 - 재접속 중단 및 종료')
+                self.stop_reason = 'market_close'
+                self.keep_running = False
+                break
+
+            # 재접속 실패 카운트: 로그인 성공 + 세션이 2분 이상 유지됐으면 정상으로 보고 리셋
+            session_dur = (datetime.now() - session_start).total_seconds()
+            if self._session_ok and session_dur >= 120:
+                self.reconnect_fail = 0
+            else:
+                self.reconnect_fail += 1
+            if self.reconnect_fail >= MAX_RECONNECT_FAIL:
+                print(f'재접속 {self.reconnect_fail}회 연속 실패 - 프로세스 종료')
+                if not self.stop_reason:
+                    self.stop_reason = f'재접속 {self.reconnect_fail}회 연속 실패'
+                self.keep_running = False
+                break
+
             # 비정상 종료 → 재접속 대기
             self.connected = False
-            print('연결 끊김 - 5초 후 재접속 시도')
+            print(f'연결 끊김({self.reconnect_fail}/{MAX_RECONNECT_FAIL}) - 5초 후 재접속 시도')
             await asyncio.sleep(5)
             # 재접속 시 실시간 재등록을 위해 상태 초기화
             self.reg_seq = 0
@@ -797,8 +889,19 @@ async def main():
     websocket_client = WebSocketClient(SOCKET_URL, access_token, bot_token, kis_access_token, kis_app_key, kis_app_secret)
     try:
         await websocket_client.run()
+    except Exception as e:
+        print(f'main 실행 예외: {e}')
+        await notify_fatal(bot_token, f'실행 오류: {e}')
+    else:
+        # 정상 장마감(market_close) 외의 사유로 끝났으면 재가동 버튼 알림
+        if websocket_client.stop_reason and websocket_client.stop_reason != 'market_close':
+            await notify_fatal(bot_token, websocket_client.stop_reason)
     finally:
-        conn.close()
+        release_singleton_lock()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def is_business_day(check_date: datetime, conn) -> bool:
     """
@@ -816,13 +919,38 @@ def is_business_day(check_date: datetime, conn) -> bool:
 
 # asyncio로 프로그램을 실행합니다.
 if __name__ == '__main__':
-    # 영업일 확인용 임시 연결 (스레드 진입 전 단일 사용)
+    # 영업일 확인 + 재가동 알림용 봇 토큰 로드 (스레드 진입 전 단일 사용)
     _conn_check = db.connect(conn_string)
     try:
         _is_business = is_business_day(today, _conn_check)
+        _bt_cur = _conn_check.cursor()
+        _bt_cur.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
+        _boot_bot_token = _bt_cur.fetchone()[0]
+        _bt_cur.close()
     finally:
         _conn_check.close()
 
-    if _is_business:
-	    asyncio.run(main())
+    if not _is_business:
+        print('영업일이 아니어서 종료합니다.')
+    elif not acquire_singleton_lock():
+        print('이미 실행 중이어서 재가동을 건너뜁니다.')
+        try:
+            asyncio.run(send_telegram_message(
+                f"ℹ️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시가 이미 실행 중이라 재가동을 건너뛰었습니다.",
+                _boot_bot_token))
+        except Exception:
+            pass
+    else:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print('사용자 중단(KeyboardInterrupt)')
+            release_singleton_lock()
+        except Exception as e:
+            print(f'비정상 종료: {e}')
+            release_singleton_lock()
+            try:
+                asyncio.run(notify_fatal(_boot_bot_token, f'기동 실패: {e}'))
+            except Exception:
+                pass
 
