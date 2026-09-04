@@ -1,13 +1,14 @@
 import requests
 import json
+import os
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 import psycopg2 as db
-import sys
 import math
 from datetime import datetime, timedelta
 import asyncio
 import websockets
 from psycopg2.extras import execute_values
+from collections import deque
 import html
 import pandas as pd
 import time
@@ -25,6 +26,50 @@ conn = db.connect(conn_string)
 today = datetime.now().strftime("%Y%m%d")
 
 CHAT_ID = "2147256258"
+
+# 중단 시 재가동 버튼 콜백 (fnguidePerformbot.py 의 callback_get 에서 처리)
+RESTART_CALLBACK = "menu,kwfast_restart"
+# 중복 실행 방지용 PID 파일
+PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kw_fast_stock_search.pid")
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def acquire_singleton_lock() -> bool:
+    """이미 동일 스크립트가 실행 중이면 False, 아니면 PID 파일 생성 후 True"""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE) as f:
+                old = int((f.read().strip() or "0"))
+            if old and old != os.getpid() and _pid_alive(old):
+                return False
+        with open(PID_FILE, "w") as f:
+            f.write(str(os.getpid()))
+        return True
+    except Exception as e:
+        print(f"PID 락 처리 오류(무시하고 진행): {e}")
+        return True
+
+
+def release_singleton_lock():
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE) as f:
+                owner = f.read().strip()
+            if owner == str(os.getpid()):
+                os.remove(PID_FILE)
+    except Exception:
+        pass
 
 def safe_day_rate(raw):
     day_rate = 0.00
@@ -175,6 +220,22 @@ async def send_telegram_message(message_text: str, bot_token: str, parse_mode: s
         reply_markup=reply_markup
     )
 
+
+async def notify_fatal(bot_token: str, reason: str):
+    """비정상 중단 알림 + 재가동 버튼 전송"""
+    try:
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔄 프로세스 재가동", callback_data=RESTART_CALLBACK)
+        ]])
+        msg = (
+            f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시 프로세스가 중단됐습니다.\n"
+            f"사유: {html.escape(str(reason))}\n\n아래 버튼으로 재가동할 수 있습니다."
+        )
+        await send_telegram_message(msg, bot_token, parse_mode='HTML', reply_markup=markup)
+    except Exception as e:
+        print(f"중단 알림 전송 오류: {e}")
+
+
 def auth(APP_KEY, APP_SECRET):
 
     params = {
@@ -209,13 +270,22 @@ class WebSocketClient:
         self.keep_running = True
         self.condition_list = []  # 조건검색 목록 저장
         self.search_results = []  # 조건검색 결과 저장
+        # 실시간 돌파 감시 상태 (A: 키움 실시간체결 + C: 롤링 10분 거래량)
+        self.watch = {}            # code -> 감시 상태 dict
+        self.watch_started = False # 감시 최초 기동 여부
+        self.reg_seq = 0           # 실시간 등록 그룹 번호 시퀀스
+        self.code_group = {}       # code -> 등록 그룹 번호
+        self._pending_reregister = False  # 재접속 후 재등록 필요 여부
+        self.stop_reason = None    # 종료 사유 ('market_close' 면 정상, 그 외는 비정상)
+        self.reconnect_fail = 0    # 연속 재접속 실패 횟수
+        self._session_ok = False   # 이번 접속에서 로그인 성공 여부
 
     # WebSocket 서버에 연결합니다.
     async def connect(self):
         try:
             self.websocket = await websockets.connect(self.uri)
             self.connected = True
-            print("서버와 연결을 시도 중입니다.")
+            # print("서버와 연결을 시도 중입니다.")
 
             # 로그인 패킷
             param = {
@@ -223,7 +293,7 @@ class WebSocketClient:
                 'token': self.access_token
             }
 
-            print('실시간 시세 서버로 로그인 패킷을 전송합니다.')
+            # print('실시간 시세 서버로 로그인 패킷을 전송합니다.')
             # 웹소켓 연결 시 로그인 정보 전달
             await self.send_message(message=param)
 
@@ -241,7 +311,7 @@ class WebSocketClient:
                 message = json.dumps(message)
 
             await self.websocket.send(message)
-            print(f'Message sent: {message}')
+            # print(f'Message sent: {message}')
 
     # 서버에서 오는 메시지를 수신하여 출력합니다.
     async def receive_messages(self):
@@ -265,10 +335,14 @@ class WebSocketClient:
                 # 메시지 유형이 LOGIN일 경우 로그인 시도 결과 체크
                 if trnm == 'LOGIN':
                     if response.get('return_code') != 0:
-                        print('로그인 실패하였습니다. : ', response.get('return_msg'))
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 실패하였습니다. : {response.get('return_msg')}")
+                        self.stop_reason = f"로그인 실패: {response.get('return_msg')}"
                         await self.disconnect()
                     else:
-                        print('로그인 성공하였습니다.')
+                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 성공하였습니다.")
+                        self._session_ok = True  # 정상 접속 - 재접속 실패 카운터 리셋 근거
+                        # 재접속인 경우 감시 종목 실시간 재등록
+                        await self._reregister_after_reconnect()
                         await self.send_message({'trnm': 'CNSRLST'})
 
                 elif trnm == 'CNSRLST':
@@ -319,6 +393,8 @@ class WebSocketClient:
                                   f"거래량: {format(vol, ',d')}주, 고가: {format(high_price, ',d')}원, "
                                   f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                         await self.save_to_db(self.power_rapid_name, self.search_results)
+                        # 저장 직후 실시간 돌파 감시 기동
+                        await self.start_breakout_watch()
                     # elif seq == self.condition_list[6][0]:  # 파워종목 결과
                     #     print(f'{self.power_item_name}')
                     #     # print(f'{self.power_item_name}-{self.search_results}')
@@ -335,13 +411,19 @@ class WebSocketClient:
                     #               f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                     #     await self.save_to_db(self.power_item_name, self.search_results)
                 
-                # 메시지 유형이 PING일 경우 10분봉 돌파 체크 후 종료
-                elif response.get('trnm') == 'PING':
-                    await self.check_10min_breakout()
-                    await self.websocket.close()
-                    self.keep_running = False
-                    self.connected = False
-                    sys.exit(0)
+                # 실시간 체결 데이터 → 돌파 감시
+                elif trnm == 'REAL':
+                    await self.on_real(response.get('data', []))
+
+                # 실시간 등록 응답
+                elif trnm == 'REG':
+                    if response.get('return_code') not in (0, None):
+                        print(f"실시간 등록 응답: {response.get('return_msg')}")
+
+                # 메시지 유형이 PING일 경우 연결 유지 + 감시 갱신
+                elif trnm == 'PING':
+                    await self.send_message(response)  # 수신값 그대로 반송(PONG)
+                    await self.refresh_breakout_watch()
 
                 else:
                     print(f'실시간 시세 서버 응답 수신: {response}')
@@ -365,202 +447,376 @@ class WebSocketClient:
             for i in items:
                 code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
 
-                # 기존 데이터 확인
-                cur.execute("""
-                    SELECT 1
-                    FROM stock_search_form
-                    WHERE code = %s AND search_day = %s AND search_name = %s
-                    LIMIT 1;
-                """, (code, today, search_name))
-
-                if not cur.fetchone():  # 기존 데이터가 없으면
-                    # 데이터 준비
-                    row = (
-                        today, now, search_name, code, i['302'],
-                        math.ceil(float(i['18'])),  # 저가
-                        math.ceil(float(i['17'])),  # 고가
-                        math.ceil(float(i['10'])),  # 현재가
-                        safe_day_rate(i.get('12')), # 등락률
-                        math.ceil(float(i['13'])),  # 거래량
-                        datetime.now()
-                    )
-                    data.append(row)
-
-                    # safe_search_name = html.escape(search_name)
-
-                    # # 텔레그램 메시지 준비
-                    # telegram_text = (
-                    #     f"&lt;{safe_search_name}&gt; {i['302']} [<code>{code}</code>] 현재가: {format(math.ceil(float(i['10'])), ',d')}원, "
-                    #     f"거래량: {format(math.ceil(float(i['13'])), ',d')}주, 고가: {format(math.ceil(float(i['17'])), ',d')}원, "
-                    #     f"저가: {format(math.ceil(float(i['18'])), ',d')}원, 등락율: {safe_day_rate(i.get('12'))}%"
-                    # )
-                    # telegram_messages.append((code, telegram_text))
+                # 데이터 준비 (code, search_day, search_name 기준 upsert)
+                row = (
+                    today, now, search_name, code, i['302'],
+                    math.ceil(float(i['18'])),  # 저가
+                    math.ceil(float(i['17'])),  # 고가
+                    math.ceil(float(i['10'])),  # 현재가
+                    safe_day_rate(i.get('12')), # 등락률
+                    math.ceil(float(i['13'])),  # 거래량
+                    datetime.now(),
+                    datetime.now()
+                )
+                data.append(row)
 
             if data:
-                # 삽입 쿼리
+                # upsert 쿼리: (search_day, search_name, code) 충돌 시 시세 정보 갱신
                 insert_query = """
                     INSERT INTO stock_search_form (
                         search_day, search_time, search_name, code, name,
-                        low_price, high_price, current_price, day_rate, volumn, cdate
+                        low_price, high_price, current_price, day_rate, volumn, crt_dt, mod_dt
                     )
                     VALUES %s
-                    ON CONFLICT (search_day, search_name, code) DO NOTHING
+                    ON CONFLICT (search_day, search_name, code) DO UPDATE SET
+                        search_time = EXCLUDED.search_time,
+                        name = EXCLUDED.name,
+                        low_price = EXCLUDED.low_price,
+                        high_price = EXCLUDED.high_price,
+                        current_price = EXCLUDED.current_price,
+                        day_rate = EXCLUDED.day_rate,
+                        volumn = EXCLUDED.volumn,
+                        mod_dt = EXCLUDED.mod_dt
                     RETURNING code;
                 """
 
-                # execute_values로 데이터 삽입
+                # execute_values로 데이터 upsert
                 execute_values(cur, insert_query, data)
 
                 # 커밋
                 conn.commit()
 
-                # 삽입된 코드 추출
-                inserted_codes = [row[0] for row in cur.fetchall()]
+                # upsert된 코드 추출
+                upserted_codes = [row[0] for row in cur.fetchall()]
 
-                # bot_token = self.bot_token
-
-                # # 텔레그램 메시지 전송
-                # for code, message in telegram_messages:
-                #     if code in inserted_codes:
-                #         await send_telegram_message(message, bot_token, parse_mode='HTML')
-
-                print(f"{len(inserted_codes)}건의 데이터가 저장되고 텔레그램 알림이 전송되었습니다.")
+                print(f"{len(upserted_codes)}건의 데이터가 저장(upsert)되었습니다.")
             else:
-                print("새로운 데이터가 없어 삽입 및 알림이 수행되지 않았습니다.")
+                print("데이터가 없어 저장이 수행되지 않았습니다.")
 
-    # 10분봉 고가 돌파 체크
-    async def check_10min_breakout(self):
-        if not self.kis_access_token:
-            print("KIS API 자격증명 없음 - 10분봉 돌파 체크 생략")
-            return
+    # ── 실시간 돌파 감시 (A: 키움 실시간체결 + C: 롤링 10분 거래량) ──────────────
+    #
+    #  · 기준(reference): search_time 이 속한 10분 구간 [ref_start, ref_end).
+    #    이 구간의 고가/거래량 합을 KIS 당일분봉으로 1회만 산출해 캐시한다.
+    #  · 감시: 해당 종목을 키움 실시간체결(0B) 구독. 체결 틱마다
+    #      현재가 > 기준고가  AND  최근 10분 롤링 거래량 > 기준 10분 거래량
+    #    을 만족하면 즉시 알림 → DB 갱신 → 실시간 해제.
+    #  · 롤링 10분 거래량은 누적거래량(FID 13) 스냅샷의 차분으로 구한다.
+    #    감시 10분 미만 구간은 경과분 비례(pace) 임계값으로 대체한다.
 
+    WATCH_WARMUP_SEC = 120      # 감시 시작 후 거래량 판정 유예
+    WATCH_ROLL_SEC = 600       # 롤링 거래량 창(10분)
+    REG_GROUP_SIZE = 90       # 실시간 등록 그룹당 종목 수
+    WATCH_END_HHMMSS = '153000'  # 이 시각 이후 감시 종료
+
+    def _load_watch_codes(self):
+        """오늘 미알림 종목 조회 (code, name, search_time)"""
         today = datetime.now().strftime('%Y%m%d')
-        now = datetime.now()
-
         with conn.cursor() as cur:
-            # 오늘 종목 중 돌파 미알림 건 조회
             cur.execute("""
                 SELECT code, name, search_time
                 FROM stock_search_form
                 WHERE search_day = %s
-                AND (breakout_noti_yn IS NULL OR breakout_noti_yn = 'N')
+                  AND (breakout_noti_yn IS NULL OR breakout_noti_yn = 'N')
             """, (today,))
-            stocks = cur.fetchall()
+            return cur.fetchall()
 
-        if not stocks:
-            print("10분봉 돌파 체크 대상 없음")
+    def _ensure_watch_entries(self):
+        """DB 미알림 종목 중 감시 목록에 없는 건을 추가하고 신규 code 리스트 반환"""
+        today = datetime.now().strftime('%Y%m%d')
+        new_codes = []
+        for code, name, search_time in self._load_watch_codes():
+            if code in self.watch:
+                continue
+            search_dt = datetime.strptime(today + search_time, "%Y%m%d%H%M")
+            self.watch[code] = {
+                'code': code,
+                'name': name,
+                'search_time': search_time,
+                'ref_start': get_10min_key(search_dt),                 # 기준 10분 구간 시작
+                'ref_end': get_next_completed_10min_dt(search_dt),     # 기준 10분 구간 종료(=완성 시각)
+                'ref_high': None,
+                'ref_vol': None,
+                'ref_ready': False,
+                'ref_last_try': None,
+                'cur_high': 0,
+                'acc_samples': deque(),      # (dt, 누적거래량) - 롤링 10분 계산용
+                'watch_start': None,         # 첫 실시간 체결 수신 시각
+                'watch_start_acc': None,     # 첫 실시간 체결 시점 누적거래량
+                'notified': False,
+            }
+            new_codes.append(code)
+        return new_codes
+
+    async def start_breakout_watch(self):
+        """조건검색 저장 직후 1회 호출 - 감시 대상 등록 및 기준값 산출"""
+        if self.watch_started:
+            return
+        self.watch_started = True
+        if not self.kis_access_token:
+            print("KIS 자격증명 없음 - 실시간 돌파 감시 생략")
             return
 
-        print(f"10분봉 돌파 체크 대상: {len(stocks)}건")
+        new_codes = self._ensure_watch_entries()
+        if not new_codes:
+            print("실시간 돌파 감시 대상 없음")
+            return
 
-        for code, name, search_time in stocks:
+        print(f"실시간 돌파 감시 대상: {len(new_codes)}건")
+        await self._build_references()
+        await self._register_codes(new_codes)
+
+    async def refresh_breakout_watch(self):
+        """PING 주기마다 호출 - 종료 시각 체크 / 신규 종목 등록 / 기준값 보완"""
+        if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
+            print("장 마감 - 실시간 돌파 감시 종료")
+            self.stop_reason = 'market_close'
+            self.keep_running = False
+            await self.disconnect()
+            return
+
+        if not self.watch_started:
+            await self.start_breakout_watch()
+            return
+
+        new_codes = self._ensure_watch_entries()
+        await self._build_references()
+        if new_codes:
+            print(f"실시간 돌파 감시 신규 등록: {len(new_codes)}건")
+            await self._register_codes(new_codes)
+
+    async def _build_references(self):
+        """기준 10분 구간이 완성된 종목의 기준 고가/거래량을 KIS 분봉으로 산출"""
+        now = datetime.now()
+        for w in self.watch.values():
+            if w['ref_ready'] or w['notified']:
+                continue
+            if now < w['ref_end']:
+                continue  # 기준 10분 구간 아직 미완성
+            if w['ref_last_try'] and (now - w['ref_last_try']).total_seconds() < 30:
+                continue  # 재시도 과다 방지
+            w['ref_last_try'] = now
             try:
-                # search_time(HHMM) → datetime 변환
-                search_dt = datetime.strptime(today + search_time, "%Y%m%d%H%M")
-                # 10분봉 완성 시각 계산
-                next_10min_dt = get_next_completed_10min_dt(search_dt)
-
-                # 아직 10분봉 미완성이면 skip
-                if now < next_10min_dt:
-                    continue
-
-                # KIS API 당일 분봉 조회 (search_time 이후 전체, 페이징)
-                df = get_kis_1min_chart(
-                    stock_code=code,
-                    search_time=search_time,
-                    access_token=self.kis_access_token,
-                    app_key=self.kis_app_key,
-                    app_secret=self.kis_app_secret
-                )
-
-                if df.empty:
-                    time.sleep(0.5)
-                    continue
-
-                # datetime 컬럼 생성
-                df["dt"] = pd.to_datetime(
-                    df["일자"] + df["시간"].str.replace(":", ""),
-                    format="%Y%m%d%H%M"
-                )
-
-                # search_time이 속한 10분봉 구간
-                tenmin_start = get_10min_key(search_dt)
-                tenmin_end = tenmin_start + timedelta(minutes=10)
-
-                # 10분봉 구간 내 분봉 추출 → 고가/거래량 계산
-                tenmin_df = df[(df["dt"] >= tenmin_start) & (df["dt"] < tenmin_end)]
-                if tenmin_df.empty:
-                    time.sleep(0.5)
-                    continue
-
-                tenmin_high = tenmin_df["고가"].astype(int).max()
-                tenmin_vol = tenmin_df["거래량"].astype(int).sum()  # 10분봉 누적 거래량
-
-                # 10분봉 이후 분봉에서 고가/거래량 돌파 확인
-                after_df = df[df["dt"] >= tenmin_end]
-                if after_df.empty:
-                    time.sleep(0.5)
-                    continue
-
-                latest_high = after_df["고가"].astype(int).max()
-
-                if latest_high > tenmin_high:
-                    # 고가 최대 분봉 (돌파 발생 분봉)
-                    breakout_row = after_df.loc[after_df["고가"].astype(int).idxmax()]
-
-                    # 돌파 분봉이 속한 10분봉 구간의 누적 거래량
-                    breakout_dt = breakout_row["dt"]
-                    breakout_10min_start = get_10min_key(breakout_dt)
-                    breakout_10min_end = breakout_10min_start + timedelta(minutes=10)
-                    breakout_tenmin_df = after_df[
-                        (after_df["dt"] >= breakout_10min_start) & (after_df["dt"] < breakout_10min_end)
-                    ]
-                    breakout_vol = breakout_tenmin_df["거래량"].astype(int).sum()
-
-                    # 거래량 돌파 체크: 돌파 10분봉 누적 거래량 > 기준 10분봉 누적 거래량
-                    if breakout_vol <= tenmin_vol:
-                        time.sleep(0.5)
-                        continue
-
-                    breakout_time = breakout_row["시간"].replace(":", "")  # HHMM
-                    current_price = int(df.iloc[-1]["종가"])  # 최신 분봉 종가 = 현재가
-
-                    # 돌파 알림 전송
-                    safe_name = html.escape(name.strip())
-                    breakout_time_fmt = now.strftime('%H:%M')
-                    current_rate = df.iloc[-1]["등락률"]
-                    message = (
-                        f"[{breakout_time_fmt}] {safe_name}[<code>{code}</code>] "
-                        f"10분봉 고가 : {tenmin_high:,}원 돌파, 현재 고가 : {latest_high:,}원, "
-                        f"현재가 : {current_price:,}원, 등락율 : {current_rate}%"
-                    )
-                    print(message)
-                    reg_markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("관심종목 등록", callback_data=f"menu,interest_register_{code}")
-                    ]])
-                    await send_telegram_message(message, self.bot_token, parse_mode='HTML', reply_markup=reg_markup)
-
-                    # 돌파 알림 완료 업데이트 (signal_time: 돌파 시간, signal_price: 돌파가)
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            UPDATE stock_search_form
-                            SET breakout_noti_yn = 'Y'
-                                , signal_time = %s
-                                , signal_price = %s
-                            WHERE code = %s AND search_day = %s
-                        """, (breakout_time, int(latest_high), code, today))
-                        conn.commit()
-
-                time.sleep(0.5)  # API rate limit
-
+                ok = await asyncio.to_thread(self._build_reference_sync, w)
+                if ok:
+                    print(f"기준 산출 [{w['name']}-{w['code']}] "
+                          f"고가 {w['ref_high']:,} / 10분거래량 {w['ref_vol']:,}")
             except Exception as e:
-                print(f"10분봉 돌파 체크 오류 [{name}-{code}]: {e}")
-                time.sleep(0.5)
+                print(f"기준 산출 오류 [{w['name']}-{w['code']}]: {e}")
+            await asyncio.sleep(0.3)
 
-    # WebSocket 실행
+    def _build_reference_sync(self, w):
+        """(블로킹) KIS 당일분봉으로 기준 10분 구간 고가/거래량 합 계산"""
+        df = get_kis_1min_chart(
+            stock_code=w['code'],
+            search_time=w['ref_start'].strftime('%H%M'),
+            access_token=self.kis_access_token,
+            app_key=self.kis_app_key,
+            app_secret=self.kis_app_secret,
+        )
+        if df.empty:
+            return False
+        df['dt'] = pd.to_datetime(
+            df['일자'] + df['시간'].str.replace(':', ''), format='%Y%m%d%H%M'
+        )
+        win = df[(df['dt'] >= w['ref_start']) & (df['dt'] < w['ref_end'])]
+        if win.empty:
+            return False
+        w['ref_high'] = int(win['고가'].astype(float).max())
+        w['ref_vol'] = int(win['거래량'].astype(float).sum())
+        w['ref_ready'] = True
+        return True
+
+    async def _register_codes(self, codes):
+        """키움 실시간체결(0B) 등록 - 그룹당 REG_GROUP_SIZE 종목"""
+        if not codes:
+            return
+        for idx in range(0, len(codes), self.REG_GROUP_SIZE):
+            chunk = codes[idx:idx + self.REG_GROUP_SIZE]
+            self.reg_seq += 1
+            grp = str(self.reg_seq)
+            for c in chunk:
+                self.code_group[c] = grp
+            await self.send_message({
+                'trnm': 'REG',
+                'grp_no': grp,
+                'refresh': '1',
+                'data': [{'item': chunk, 'type': ['0B']}],
+            })
+            await asyncio.sleep(0.2)
+
+    async def _unregister_code(self, code):
+        """돌파 알림 완료 종목 실시간 해제 (best-effort)"""
+        grp = self.code_group.pop(code, None)
+        if not grp:
+            return
+        try:
+            await self.send_message({
+                'trnm': 'REMOVE',
+                'grp_no': grp,
+                'data': [{'item': [code], 'type': ['0B']}],
+            })
+        except Exception as e:
+            print(f"실시간 해제 오류 [{code}]: {e}")
+
+    def _rolling_volume(self, w, now, acc_now):
+        """(현재 창 거래량, 비교 임계값) 반환. 판정 불가 시 (None, 0)."""
+        if not w['watch_start']:
+            return None, 0
+        elapsed = (now - w['watch_start']).total_seconds()
+        if elapsed < self.WATCH_WARMUP_SEC:
+            return None, 0  # 워밍업 중 - 거래량 판정 보류
+        if elapsed >= self.WATCH_ROLL_SEC:
+            # 완전한 롤링 10분 합: 현재 누적 - 10분 전 누적(추정)
+            cutoff = now - timedelta(seconds=self.WATCH_ROLL_SEC)
+            base_acc = None
+            for ts, acc in w['acc_samples']:
+                if ts <= cutoff:
+                    base_acc = acc
+                else:
+                    break
+            if base_acc is None:
+                base_acc = w['acc_samples'][0][1]
+            return acc_now - base_acc, w['ref_vol']
+        # 감시 10분 미만 → 경과분 비례(pace) 임계값
+        return acc_now - w['watch_start_acc'], w['ref_vol'] * (elapsed / self.WATCH_ROLL_SEC)
+
+    async def on_real(self, datalist):
+        """실시간 체결(0B) 수신 → 롤링 돌파 판정"""
+        now = datetime.now()
+        for d in datalist or []:
+            if d.get('type') != '0B':
+                continue
+            code = d.get('item', '') or ''
+            code = code[1:] if code.startswith('A') else code
+            w = self.watch.get(code)
+            if not w or w['notified']:
+                continue
+
+            vals = d.get('values', {}) or {}
+            try:
+                price = abs(int(float(vals.get('10') or 0)))   # 현재가
+                acc_vol = int(float(vals.get('13') or 0))      # 누적거래량
+            except (TypeError, ValueError):
+                continue
+            if price <= 0:
+                continue
+
+            # 누적거래량 샘플 적재 (롤링 10분 계산용)
+            if w['watch_start'] is None:
+                w['watch_start'] = now
+                w['watch_start_acc'] = acc_vol
+            w['acc_samples'].append((now, acc_vol))
+            while w['acc_samples'] and (now - w['acc_samples'][0][0]).total_seconds() > self.WATCH_ROLL_SEC + 120:
+                w['acc_samples'].popleft()
+
+            if not w['ref_ready']:
+                continue
+            if price > w['cur_high']:
+                w['cur_high'] = price
+            if price <= w['ref_high']:
+                continue  # 가격 미돌파
+
+            roll_vol, threshold = self._rolling_volume(w, now, acc_vol)
+            if roll_vol is None or roll_vol <= threshold:
+                continue  # 거래량 미돌파
+
+            await self._fire_breakout(code, w, price, roll_vol, threshold, now, vals)
+
+    async def _fire_breakout(self, code, w, price, roll_vol, threshold, now, vals):
+        """돌파 확정 - 텔레그램 알림 + DB 갱신 + 실시간 해제"""
+        w['notified'] = True
+        today = datetime.now().strftime('%Y%m%d')
+        rate = safe_day_rate(vals.get('12'))
+        safe_name = html.escape(w['name'].strip())
+        message = (
+            f"[{now.strftime('%H:%M')}] {safe_name}[<code>{code}</code>] "
+            f"기준 10분 고가 : {w['ref_high']:,}원 돌파, 현재가 : {price:,}원, "
+            f"최근10분 거래량 : {int(roll_vol):,} (기준 {int(threshold):,}), 등락율 : {rate}%"
+        )
+        print(message)
+        reg_markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("관심종목 등록", callback_data=f"menu,interest_register_{code}")
+        ]])
+        try:
+            await send_telegram_message(message, self.bot_token, parse_mode='HTML', reply_markup=reg_markup)
+        except Exception as e:
+            print(f"돌파 알림 전송 오류 [{code}]: {e}")
+
+        # 돌파 알림 완료 업데이트 (signal_time: 돌파 시각, signal_price: 돌파가)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE stock_search_form
+                       SET breakout_noti_yn = 'Y'
+                         , signal_time = %s
+                         , signal_price = %s
+                         , mod_dt = %s
+                     WHERE code = %s AND search_day = %s
+                """, (now.strftime('%H%M'), int(price), now, code, today))
+                conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"돌파 DB 갱신 오류 [{code}]: {e}")
+
+        await self._unregister_code(code)
+
+    # WebSocket 실행 (장중 상주 - 끊기면 재접속 후 감시 종목 재등록)
     async def run(self):
-        await self.connect()
-        await self.receive_messages()
+        MAX_RECONNECT_FAIL = 5  # 연속 실패 시 포기하고 종료(→ 중단 알림)
+        while self.keep_running:
+            self._session_ok = False
+            session_start = datetime.now()
+            try:
+                await self.connect()
+                await self.receive_messages()
+            except Exception as e:
+                print(f'run 예외: {e}')
+                if not self.stop_reason:
+                    self.stop_reason = f'실행 예외: {e}'
+
+            if not self.keep_running:
+                break
+
+            # 장 마감 시각 이후면 재접속하지 않고 정상 종료
+            if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
+                print('장 마감 - 재접속 중단 및 종료')
+                self.stop_reason = 'market_close'
+                self.keep_running = False
+                break
+
+            # 재접속 실패 카운트: 로그인 성공 + 세션이 2분 이상 유지됐으면 정상으로 보고 리셋
+            session_dur = (datetime.now() - session_start).total_seconds()
+            if self._session_ok and session_dur >= 120:
+                self.reconnect_fail = 0
+            else:
+                self.reconnect_fail += 1
+            if self.reconnect_fail >= MAX_RECONNECT_FAIL:
+                print(f'재접속 {self.reconnect_fail}회 연속 실패 - 프로세스 종료')
+                if not self.stop_reason:
+                    self.stop_reason = f'재접속 {self.reconnect_fail}회 연속 실패'
+                self.keep_running = False
+                break
+
+            # 비정상 종료 → 재접속 대기
+            self.connected = False
+            print(f'연결 끊김({self.reconnect_fail}/{MAX_RECONNECT_FAIL}) - 5초 후 재접속 시도')
+            await asyncio.sleep(5)
+            # 재접속 시 실시간 재등록을 위해 상태 초기화
+            self.reg_seq = 0
+            self.code_group = {}
+            self.watch_started = False
+            self._pending_reregister = True
+
+    async def _reregister_after_reconnect(self):
+        """재접속 직후 감시 목록 전체를 다시 실시간 등록"""
+        if not getattr(self, '_pending_reregister', False):
+            return
+        self._pending_reregister = False
+        codes = [c for c, w in self.watch.items() if not w['notified']]
+        if codes:
+            print(f"재접속 실시간 재등록: {len(codes)}건")
+            self.watch_started = True
+            await self._register_codes(codes)
 
     # WebSocket 연결 종료
     async def disconnect(self):
@@ -633,8 +889,19 @@ async def main():
     websocket_client = WebSocketClient(SOCKET_URL, access_token, bot_token, kis_access_token, kis_app_key, kis_app_secret)
     try:
         await websocket_client.run()
+    except Exception as e:
+        print(f'main 실행 예외: {e}')
+        await notify_fatal(bot_token, f'실행 오류: {e}')
+    else:
+        # 정상 장마감(market_close) 외의 사유로 끝났으면 재가동 버튼 알림
+        if websocket_client.stop_reason and websocket_client.stop_reason != 'market_close':
+            await notify_fatal(bot_token, websocket_client.stop_reason)
     finally:
-        conn.close()
+        release_singleton_lock()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def is_business_day(check_date: datetime, conn) -> bool:
     """
@@ -652,13 +919,38 @@ def is_business_day(check_date: datetime, conn) -> bool:
 
 # asyncio로 프로그램을 실행합니다.
 if __name__ == '__main__':
-    # 영업일 확인용 임시 연결 (스레드 진입 전 단일 사용)
+    # 영업일 확인 + 재가동 알림용 봇 토큰 로드 (스레드 진입 전 단일 사용)
     _conn_check = db.connect(conn_string)
     try:
         _is_business = is_business_day(today, _conn_check)
+        _bt_cur = _conn_check.cursor()
+        _bt_cur.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
+        _boot_bot_token = _bt_cur.fetchone()[0]
+        _bt_cur.close()
     finally:
         _conn_check.close()
 
-    if _is_business:
-	    asyncio.run(main())
+    if not _is_business:
+        print('영업일이 아니어서 종료합니다.')
+    elif not acquire_singleton_lock():
+        print('이미 실행 중이어서 재가동을 건너뜁니다.')
+        try:
+            asyncio.run(send_telegram_message(
+                f"ℹ️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시가 이미 실행 중이라 재가동을 건너뛰었습니다.",
+                _boot_bot_token))
+        except Exception:
+            pass
+    else:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print('사용자 중단(KeyboardInterrupt)')
+            release_singleton_lock()
+        except Exception as e:
+            print(f'비정상 종료: {e}')
+            release_singleton_lock()
+            try:
+                asyncio.run(notify_fatal(_boot_bot_token, f'기동 실패: {e}'))
+            except Exception:
+                pass
 
