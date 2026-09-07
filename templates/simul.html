@@ -583,10 +583,23 @@
 
   <h1><span>📈</span> 매매추적 시뮬레이션</h1>
 
+  <!-- 종목검색 -->
+  <div class="dash-card">
+    <div class="dash-header">
+      <span class="dash-title">🔍 종목검색 <span style="font-weight:400;color:#888;font-size:.8rem">(총 {{ stockSearchTotalCount }}건)</span></span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <input type="date" v-model="stockSearchDate" style="padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:.82rem" />
+        <span v-if="stockSearchLoading" style="font-size:.78rem;color:#aaa">불러오는 중...</span>
+        <button class="dash-btn-refresh" @click="loadStockSearchList" :disabled="stockSearchLoading">새로고침</button>
+      </span>
+    </div>
+    <div ref="stockSearchGridEl" class="ag-theme-alpine" style="width:100%;height:340px"></div>
+  </div>
+
   <!-- 투자관리 현황 -->
   <div class="dash-card">
     <div class="dash-header">
-      <span class="dash-title">📋 투자관리 현황</span>
+      <span class="dash-title">📋 투자관리 현황 <span style="font-weight:400;color:#888;font-size:.8rem">(총 {{ investMngTotalCount }}건)</span></span>
       <span style="display:flex;align-items:center;gap:8px">
         <span v-if="investMngListLoading" style="font-size:.78rem;color:#aaa">불러오는 중...</span>
         <button class="dash-btn-refresh" @click="loadInvestMngList" :disabled="investMngListLoading">새로고침</button>
@@ -641,7 +654,15 @@
       </div>
 
       <div class="field">
-        <label>상단가 (원)</label>
+        <label>매수하단 (원)</label>
+        <input v-model.number="investMng.down_range" type="number" min="0" placeholder="예) 90000" />
+      </div>
+      <div class="field">
+        <label>매수상단 (원)</label>
+        <input v-model.number="investMng.up_range" type="number" min="0" placeholder="예) 90000" />
+      </div>
+      <div class="field">
+        <label>목표가 (원)</label>
         <input v-model.number="investMng.high_price" type="number" min="0" placeholder="예) 90000" />
       </div>
       <div class="field">
@@ -1833,6 +1854,13 @@ createApp({
     const investMngListLoading = ref(false);
     let investMngGridApi       = null;
 
+    // ── 종목검색 (AgGrid) ──
+    const stockSearchGridEl    = ref(null);
+    const stockSearchLoading   = ref(false);
+    const stockSearchDate      = ref(today);
+    const stockSearchTotalCount = ref(0);
+    let stockSearchGridApi     = null;
+
     const form = ref({
       code: '', name: '', buy_price: null, loss_price: null,
       buy_amount: null, loss_input_amt: null, buy_date: today, buy_time: ''
@@ -1853,7 +1881,7 @@ createApp({
 
     // ── 투자관리(invest_mng) 입력 ──
     const investMng = ref({
-      code: '', name: '', main_business: '', high_price: null,
+      code: '', name: '', main_business: '', down_range:null, up_range:null, high_price: null,
       market: '', size: '', industry: '', mktcap: null,
       price: null, sales_amt: null, ep_sales_amt: null, report_dt: '',
       invest_issue: '', invest_point: '', invest_risk: '', check_dt: '',
@@ -1865,13 +1893,15 @@ createApp({
     const investMngPointError = ref('');
     const investMngFromCache  = ref(true);
 
-    // 상승잔존율: 현재가 대비 상단가(전고점)까지 남은 상승 여력.
+    // 상승잔존율: 현재가 대비 목표가(전고점)까지 남은 상승 여력.
     // remain_rate_eligible(백엔드 판정: 상장 5년 이상 근사 + 매출액·영업이익·당기순이익
     // -1→+1이 증가 또는 유사(-5% 이내 하락까지 허용))을 만족할 때만 값을 반환한다.
     const investMngRemainRate = computed(() => {
       if (!investMng.value.remain_rate_eligible) return null;
       const price = investMng.value.price;
       const high  = investMng.value.high_price;
+      const down_range  = investMng.value.down_range;
+      const up_range  = investMng.value.up_range;
       if (!price || high == null) return null;
       return Math.round((high - price) / price * 1000) / 10;
     });
@@ -1887,6 +1917,16 @@ createApp({
     function _fmtPct(v) { return v != null ? v + '%' : '-'; }
     function _fmtWon(v) { return v != null ? Number(v).toLocaleString('ko-KR') : '-'; }
 
+    // AgGrid 페이지네이션 패널 한글화 (두 그리드 공용)
+    const AG_GRID_LOCALE_KO = {
+      page: '페이지', more: '더보기', to: '~', of: '/',
+      next: '다음', last: '마지막', first: '처음', previous: '이전',
+      pageSizeSelectorLabel: '페이지당 건수', ariaPageSizeSelectorLabel: '페이지당 건수',
+      loadingOoo: '로딩중...', noRowsToShow: '표시할 데이터가 없습니다',
+    };
+
+    const investMngTotalCount = ref(0);
+
     function initInvestMngGrid() {
       if (!investMngGridEl.value || typeof agGrid === 'undefined') return;
       // ag-grid-community@30 은 createGrid()가 아니라 new agGrid.Grid() 방식으로
@@ -1897,7 +1937,9 @@ createApp({
           { headerName: '종목코드', field: 'code', width: 100 },
           { headerName: '종목명',   field: 'name', width: 130 },
           { headerName: '주요사업', field: 'main_business', flex: 1, minWidth: 160 },
-          { headerName: '상단가',   field: 'high_price',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '매수하단',   field: 'down_range',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '매수상단',   field: 'up_range',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '목표가',   field: 'high_price',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
           { headerName: '현재가',   field: 'price',         width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
           { headerName: '상승잔존율', field: 'remain_rate',   width: 110, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
           { headerName: '매출증가율', field: 'sales_rate',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
@@ -1906,6 +1948,10 @@ createApp({
         defaultColDef: { sortable: true, resizable: true },
         rowData: [],
         rowSelection: 'single',
+        pagination: true,
+        paginationPageSize: 10,
+        paginationPageSizeSelector: false,
+        localeText: AG_GRID_LOCALE_KO,
         onRowClicked: (e) => applyInvestMngRow(e.data),
       };
       new agGrid.Grid(investMngGridEl.value, gridOptions);
@@ -1919,11 +1965,67 @@ createApp({
         const data = await res.json();
         if (Array.isArray(data) && investMngGridApi) {
           investMngGridApi.setRowData(data);
+          investMngTotalCount.value = data.length;
         }
       } catch { /* 무시 */ } finally {
         investMngListLoading.value = false;
       }
     }
+
+    // ── 종목검색 그리드 ──
+    function _fmtHM(v) {
+      // crt_dt: "2026-09-04 14:55:59" → "14:55" / signal_time: "1505"(HHMM) → "15:05"
+      if (v == null || v === '') return '-';
+      const s = String(v);
+      if (/^\d{3,4}$/.test(s)) {
+        const p = s.padStart(4, '0');
+        return `${p.slice(0, 2)}:${p.slice(2, 4)}`;
+      }
+      const m = s.match(/(\d{2}):(\d{2})(?::\d{2})?$/);
+      return m ? `${m[1]}:${m[2]}` : s;
+    }
+
+    function initStockSearchGrid() {
+      if (!stockSearchGridEl.value || typeof agGrid === 'undefined') return;
+      const gridOptions = {
+        columnDefs: [
+          { headerName: '종목코드', field: 'code', width: 100 },
+          { headerName: '종목명',   field: 'name', width: 130 },
+          { headerName: '현재가',   field: 'current_price', width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '등락율',   field: 'day_rate',      width: 90,  type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
+          { headerName: '거래량',   field: 'volumn',        width: 120, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '생성일시', field: 'crt_dt',        width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
+          { headerName: '신호가',   field: 'signal_price',  width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '신호일시', field: 'signal_time',   width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
+        ],
+        defaultColDef: { sortable: true, resizable: true },
+        rowData: [],
+        pagination: true,
+        paginationPageSize: 10,
+        paginationPageSizeSelector: false,
+        localeText: AG_GRID_LOCALE_KO,
+      };
+      new agGrid.Grid(stockSearchGridEl.value, gridOptions);
+      stockSearchGridApi = gridOptions.api;
+    }
+
+    async function loadStockSearchList() {
+      if (!stockSearchDate.value) return;
+      stockSearchLoading.value = true;
+      try {
+        const dateStr = stockSearchDate.value.replace(/-/g, '');
+        const res  = await fetch(`/api/stock-search?date=${dateStr}`);
+        const data = await res.json();
+        if (Array.isArray(data) && stockSearchGridApi) {
+          stockSearchGridApi.setRowData(data);
+          stockSearchTotalCount.value = data.length;
+        }
+      } catch { /* 무시 */ } finally {
+        stockSearchLoading.value = false;
+      }
+    }
+
+    watch(stockSearchDate, loadStockSearchList);
 
     // 투자관리 현황 그리드에서 선택한 행을 하단 투자 관리 입력 폼에 반영
     function applyInvestMngRow(row) {
@@ -1932,6 +2034,8 @@ createApp({
       investMng.value.code               = row.code;
       investMng.value.name               = row.name;
       investMng.value.main_business      = row.main_business ?? '';
+      investMng.value.down_range         = row.down_range ?? null;
+      investMng.value.up_range           = row.up_range ?? null;
       investMng.value.high_price         = row.high_price ?? null;
       investMng.value.market             = row.market ?? '';
       investMng.value.size               = row.size ?? '';
@@ -2287,6 +2391,8 @@ createApp({
 
         const ex = data.existing || {};
         investMng.value.main_business  = ex.main_business ?? '';
+        investMng.value.down_range     = ex.down_range ?? null;
+        investMng.value.up_range       = ex.up_range ?? null;
         investMng.value.high_price     = ex.high_price ?? null;
         investMng.value.check_dt       = ex.check_dt ?? '';
         investMng.value.exclude        = ex.proc_yn === 'N';
@@ -2721,6 +2827,8 @@ createApp({
       loadDashboard();
       initInvestMngGrid();
       loadInvestMngList();
+      initStockSearchGrid();
+      loadStockSearchList();
     });
 
     return {
@@ -2731,7 +2839,8 @@ createApp({
       investMng, investMngLookingUp, investMngPointError, investMngFromCache,
       investMngStale, investMngStaleDays, investMngRemainRate, investMngSalesRate,
       investMngLookup, applyInvestMng,
-      investMngGridEl, investMngListLoading, loadInvestMngList,
+      investMngGridEl, investMngListLoading, loadInvestMngList, investMngTotalCount,
+      stockSearchGridEl, stockSearchLoading, stockSearchDate, loadStockSearchList, stockSearchTotalCount,
       stockScores, stockScoresLoading, scoreDetailOpen, fetchStockScores, scoreCls,
       stockTrend, stockTrendLoading, fetchStockTrend, trendLabel, trendCls,
       companyInfo, companyTab, fhTab, companyLoading, fetchCompanyInfo, bizExpanded,
