@@ -994,7 +994,19 @@ def callback_get(update, context):
         except Exception:
             pass
         try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
+            # cron 이 파이프/exec 로 실행하면 __file__ 이 없을 수 있어 여러 후보에서 탐색
+            _cands = []
+            try:
+                _cands.append(os.path.dirname(os.path.abspath(__file__)))
+            except NameError:
+                pass
+            if getattr(sys, "argv", None) and sys.argv[0]:
+                _cands.append(os.path.dirname(os.path.abspath(sys.argv[0])))
+            _cands.append(os.getcwd())
+            script_dir = next(
+                (d for d in _cands if d and os.path.isfile(os.path.join(d, "kw_fast_stock_search.py"))),
+                os.getcwd(),
+            )
             script_path = os.path.join(script_dir, "kw_fast_stock_search.py")
             popen_kwargs = dict(
                 cwd=script_dir,
