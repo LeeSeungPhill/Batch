@@ -29,8 +29,15 @@ CHAT_ID = "2147256258"
 
 # 중단 시 재가동 버튼 콜백 (fnguidePerformbot.py 의 callback_get 에서 처리)
 RESTART_CALLBACK = "menu,kwfast_restart"
+
+# 스크립트 디렉터리 (cron 이 파이프/exec 로 실행하면 __file__ 이 없을 수 있어 cwd 로 폴백)
+try:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    SCRIPT_DIR = os.getcwd()
+
 # 중복 실행 방지용 PID 파일
-PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kw_fast_stock_search.pid")
+PID_FILE = os.path.join(SCRIPT_DIR, "kw_fast_stock_search.pid")
 
 
 def _pid_alive(pid: int) -> bool:
