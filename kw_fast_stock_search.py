@@ -30,6 +30,10 @@ CHAT_ID = "2147256258"
 # 중단 시 재가동 버튼 콜백 (fnguidePerformbot.py 의 callback_get 에서 처리)
 RESTART_CALLBACK = "menu,kwfast_restart"
 
+# 실행 허용 시간대 (이 시간대 밖이면 기동하지 않음)
+RUN_START_HHMMSS = '090000'
+RUN_END_HHMMSS = '152000'
+
 # 스크립트 디렉터리 (cron 이 파이프/exec 로 실행하면 __file__ 이 없을 수 있어 cwd 로 폴백)
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -937,8 +941,12 @@ if __name__ == '__main__':
     finally:
         _conn_check.close()
 
+    _now_hms = datetime.now().strftime('%H%M%S')
+
     if not _is_business:
         print('영업일이 아니어서 종료합니다.')
+    elif not (RUN_START_HHMMSS <= _now_hms <= RUN_END_HHMMSS):
+        print(f'실행 허용 시간대(09:00~15:20)가 아니어서 종료합니다. (현재 {_now_hms[:2]}:{_now_hms[2:4]})')
     elif not acquire_singleton_lock():
         print('이미 실행 중이어서 재가동을 건너뜁니다.')
         try:

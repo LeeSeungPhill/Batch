@@ -217,6 +217,11 @@ g_trail73_loss_buy_amt = 0   # 손절금액 기준 매수금액
 g_trail73_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail73_amt_buy_amt = 0    # 매수금액 기준 매수금액
 
+# 보유종목 교체(HCHG) → 선택 보유종목 전량 매도 후 대체 매수 공유 상태
+g_hchg_nick = ""    # 처리 계좌 닉네임
+g_hchg_code = ""    # 매도 대상 보유종목코드
+g_hchg_name = ""    # 매도 대상 보유종목명
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 
@@ -1095,6 +1100,7 @@ def callback_get(update, context) :
     global g_rsv_sell_code, g_rsv_sell_name
     global g_rsv_corr_code, g_rsv_corr_name, g_rsv_corr_dvsn
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
+    global g_hchg_nick, g_hchg_code, g_hchg_name
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -1214,6 +1220,7 @@ def callback_get(update, context) :
             InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
             InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
             InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
+            InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
             InlineKeyboardButton("취소",          callback_data="menu,취소"),
         ]
         query.edit_message_text(
@@ -1748,6 +1755,13 @@ def callback_get(update, context) :
 
         def process_tm_sell():
             try:
+                # 매도 주문 전 기존 미체결 매도주문이 있으면 먼저 전량 취소
+                if order_cancel_proc(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
+                                     str(ac_tms['acct_no']), tm_sell_code, '01') != 'success':
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 기존 매도주문 취소 실패 → 중단")
+                    return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
                 ap_tms = inquire_price(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'], tm_sell_code)
                 tms_price = int(ap_tms['stck_prpr'])
                 tms_price = round_to_valid_price(tms_price, get_tick_size(tms_price))
@@ -1769,6 +1783,32 @@ def callback_get(update, context) :
                     text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 매도 오류: {str(e)}")
 
         threading.Thread(target=process_tm_sell).start()
+
+    elif command == "보유종목_교체":
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "HCHG")
+
+    elif command.startswith("hchg_pick:"):
+        # 보유종목 교체 — 보유종목 버튼 선택 → 대체매수 종목/단가 입력 프롬프트
+        _, hc_nick, hc_code = command.split(":", 2)
+        try:
+            ac_hcp = account(hc_nick)
+            c_hcp = stock_balance(ac_hcp['access_token'], ac_hcp['app_key'], ac_hcp['app_secret'], ac_hcp['acct_no'], "")
+            m_hcp = [c_hcp['prdt_name'][i]
+                     for i, _ in enumerate(c_hcp.index) if c_hcp['pdno'][i] == hc_code]
+        except Exception as e:
+            query.edit_message_text(text=f"[보유종목 교체] 조회 오류: {str(e)}")
+            return
+        hc_name = m_hcp[0] if m_hcp else hc_code
+        g_hchg_nick = hc_nick
+        g_hchg_code = hc_code
+        g_hchg_name = hc_name
+        menuNum = "HCHG"
+        query.edit_message_text(
+            text=(f"[{hc_name}(<code>{hc_code}</code>)] 보유종목 매도 후 대체매수\n"
+                  f"매도단가(현재가:0), 매도비율(전체:100), 매수종목명/코드(현금:0), 매수단가(현재가:0)를 입력하세요."),
+            parse_mode='HTML'
+        )
 
     elif command.startswith("downtrend_sell:"):
         # kis_trading_trail_vol_state.py 에서 전송한 하락추세 이탈 매도 대상 매도가 입력 처리
@@ -3089,6 +3129,16 @@ def callback_get(update, context) :
                         text=f"-{t_nick_label}- [트레이딩 전체] 매도 대상 종목이 없습니다.")
                     return
 
+                # 매도 주문 전 대상종목별 기존 미체결 매도주문 취소
+                for ta_code in ta_codes:
+                    try:
+                        order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), ta_code, '01')
+                        time.sleep(0.3)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{t_nick_label}-[트레이딩 전체][{ta_code}] 기존 매도주문 취소 오류: {str(e)}")
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
                 try:
                     e_ta = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
                 except Exception as e:
@@ -3363,6 +3413,74 @@ def callback_get(update, context) :
                 text=f"[선택계좌: {selected_str}]\n{stock_prefix}{prompt}",
                 parse_mode='HTML'
             )
+        elif menu_num == "HCHG":
+            # 보유종목 교체 — 계좌별 보유종목(단가/수량/금액) 선택 버튼 표시
+            menuNum = "0"
+            query.edit_message_text(text="[보유종목 교체] 보유종목 조회 중...")
+            target_nicks_hc = g_selected_accounts[:] if g_selected_accounts else [None]
+
+            def process_nick_hc(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                t_nick_label = nick if nick else arguments[1]
+                try:
+                    e_hc = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                except Exception as e:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [보유종목 교체] 잔고 조회 오류: {str(e)}")
+                    return
+                hc_buttons = []
+                for j, _ in enumerate(e_hc.index):
+                    hc_qty  = int(e_hc['hldg_qty'][j])
+                    hc_psbl = int(e_hc['ord_psbl_qty'][j])
+                    if hc_qty <= 0 or hc_psbl <= 0:
+                        continue
+                    hc_code = e_hc['pdno'][j]
+                    hc_name = e_hc['prdt_name'][j]
+                    hc_avg  = float(e_hc['pchs_avg_pric'][j])
+                    hc_amt  = int(e_hc['pchs_amt'][j])
+                    hc_buttons.append(
+                        InlineKeyboardButton(
+                            f"{hc_name} (단가:{format(hc_avg, ',.0f')} / 수량:{format(hc_qty, ',d')} / 금액:{format(hc_amt, ',d')})",
+                            callback_data=f"hchg_pick:{t_nick_label}:{hc_code}"
+                        )
+                    )
+                if not hc_buttons:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{t_nick_label}- [보유종목 교체] 매도 가능 보유종목이 없습니다.")
+                    return
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"-{t_nick_label}- [보유종목 교체] 변경할 보유종목을 선택하세요:",
+                    reply_markup=InlineKeyboardMarkup(build_menu(hc_buttons, 1))
+                )
+
+            threads_hc = []
+            for nick in target_nicks_hc:
+                if nick is not None:
+                    try:
+                        ac_hc = account(nick)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_hc = ac_hc['acct_no']; t_tok_hc = ac_hc['access_token']
+                    t_key_hc  = ac_hc['app_key'];  t_sec_hc = ac_hc['app_secret']
+                else:
+                    try:
+                        ac_hc_def = account(arguments[1])
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_hc = ac_hc_def['acct_no']; t_tok_hc = ac_hc_def['access_token']
+                    t_key_hc  = ac_hc_def['app_key'];  t_sec_hc = ac_hc_def['app_secret']
+                t = threading.Thread(target=process_nick_hc,
+                                     args=(nick, t_acct_hc, t_tok_hc, t_key_hc, t_sec_hc))
+                threads_hc.append(t)
+                t.start()
+                time.sleep(0.5)
+            for t in threads_hc:
+                t.join()
+            return
         else:
             query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
 
@@ -4690,6 +4808,7 @@ def echo(update, context):
     global g_rsv_sell_code, g_rsv_sell_name
     global g_rsv_corr_code, g_rsv_corr_name, g_rsv_corr_dvsn
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
+    global g_hchg_nick, g_hchg_code, g_hchg_name
 
     # 관심종목 가격 직접입력 대기 처리
     pending = _pending_register.get(user_id)
@@ -5781,6 +5900,143 @@ def echo(update, context):
             time.sleep(0.5)
         for t in threads_s3x:
             t.join()
+        return
+
+    if menuNum == 'HCHG':
+        # 입력: 매도단가(현재가:0), 매도비율(전체:100), 매수종목명/코드(현금:0), 매수단가(현재가:0)
+        hc_nick      = g_hchg_nick
+        hc_sell_code = g_hchg_code
+        hc_sell_name = g_hchg_name
+        if not hc_sell_code or not hc_nick:
+            initMenuNum()
+            context.bot.send_message(chat_id=user_id, text="선택된 보유종목이 없습니다. 다시 시도하세요.")
+            return
+
+        parts_hc = [p.strip() for p in user_text.strip().split(',')]
+        if (len(parts_hc) < 4
+                or not parts_hc[0].isdecimal()
+                or not parts_hc[1].isdecimal()
+                or not (1 <= int(parts_hc[1]) <= 100)
+                or not parts_hc[3].isdecimal()):
+            context.bot.send_message(
+                chat_id=user_id,
+                text="[보유종목 교체] 매도단가(현재가:0), 매도비율(1~100), 매수종목명/코드(현금:0), 매수단가(현재가:0) 형식이 올바르지 않습니다."
+            )
+            return  # menuNum 유지 → 재입력 가능
+
+        sell_unpr_in   = int(parts_hc[0])
+        sell_ratio     = int(parts_hc[1])
+        buy_target_raw = parts_hc[2]
+        buy_unpr_in    = int(parts_hc[3])
+
+        # 대체매수 종목 해석 ("0" 또는 공백 → 매수 생략, 매도만 수행)
+        hc_buy_code = ""
+        hc_buy_name = ""
+        if buy_target_raw not in ("0", ""):
+            if buy_target_raw.isdecimal() and len(buy_target_raw) >= 6 and len(stock_code[stock_code.code == buy_target_raw[:6]].values) > 0:
+                hc_buy_code = stock_code[stock_code.code == buy_target_raw[:6]].code.values[0].strip()
+                hc_buy_name = stock_code[stock_code.code == buy_target_raw[:6]].company.values[0].strip()
+            elif len(stock_code[stock_code.company == buy_target_raw].values) > 0:
+                hc_buy_code = stock_code[stock_code.company == buy_target_raw].code.values[0].strip()
+                hc_buy_name = stock_code[stock_code.company == buy_target_raw].company.values[0].strip()
+            else:
+                context.bot.send_message(chat_id=user_id, text=f"[보유종목 교체] 매수종목 '{buy_target_raw}' : 미존재 종목")
+                return  # menuNum 유지 → 재입력 가능
+
+        initMenuNum()
+
+        try:
+            ac_hc = account(hc_nick)
+        except Exception as e:
+            context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}- 계좌조회 오류: {str(e)}")
+            return
+
+        def process_hchg():
+            t_acct_no = str(ac_hc['acct_no'])
+            t_token   = ac_hc['access_token']
+            t_key     = ac_hc['app_key']
+            t_secret  = ac_hc['app_secret']
+            try:
+                # 매도 주문 전 기존 미체결 매도주문이 있으면 먼저 전량 취소
+                cancel_ret = order_cancel_proc(t_token, t_key, t_secret, t_acct_no, hc_sell_code, '01')
+                if cancel_ret != 'success':
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 기존 매도주문 취소 실패 → 중단")
+                    return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
+                # 매도가능수량 확인
+                e_hc = stock_balance(t_token, t_key, t_secret, t_acct_no, "")
+                sell_psbl_qty = 0
+                for j, _ in enumerate(e_hc.index):
+                    if e_hc['pdno'][j] == hc_sell_code:
+                        sell_psbl_qty = int(e_hc['ord_psbl_qty'][j])
+                        break
+                if sell_psbl_qty <= 0:
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 매도가능수량 없음")
+                    return
+
+                # 매도단가(0 → 현재가), 매도비율 기준 매도수량 산정 후 매도 주문 (지정가)
+                ap_s = inquire_price(t_token, t_key, t_secret, hc_sell_code)
+                sell_cur_price = int(ap_s['stck_prpr'])
+                sell_price = sell_cur_price if sell_unpr_in <= 0 else sell_unpr_in
+                sell_price = round_to_valid_price(sell_price, get_tick_size(sell_price))
+
+                sell_qty = sell_psbl_qty if sell_ratio >= 100 else max(1, int(sell_psbl_qty * sell_ratio / 100))
+                sell_qty = min(sell_qty, sell_psbl_qty)
+
+                c_s = order_cash(False, t_token, t_key, t_secret, t_acct_no,
+                                 hc_sell_code, "00", str(sell_qty), str(sell_price))
+                if c_s is None or c_s['ODNO'] == "":
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 매도주문 실패")
+                    return
+                sell_ord_no = str(int(c_s['ODNO']))
+                sell_amt = sell_price * sell_qty
+                context.bot.send_message(
+                    chat_id=user_id,
+                    text=(f"-{hc_nick}-[{hc_sell_name}(<code>{hc_sell_code}</code>)] 매도주문 완료 | "
+                          f"매도가:{format(sell_price, ',d')}원 | 비율:{sell_ratio}% | 수량:{format(sell_qty, ',d')}주 | "
+                          f"매도금액:{format(sell_amt, ',d')}원 | 주문번호:<code>{sell_ord_no}</code>"),
+                    parse_mode='HTML'
+                )
+
+                # 매수종목 미지정(0) → 매수 생략
+                if not hc_buy_code:
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}- 매수종목 미지정(현금:0) → 대체매수 생략")
+                    return
+
+                # 매수단가 (0 → 현재가), 매도금액 기준 매수량 산정
+                time.sleep(0.5)
+                ap_b = inquire_price(t_token, t_key, t_secret, hc_buy_code)
+                buy_cur_price = int(ap_b['stck_prpr'])
+                buy_price = buy_cur_price if buy_unpr_in <= 0 else buy_unpr_in
+                buy_price = round_to_valid_price(buy_price, get_tick_size(buy_price))
+                if buy_price <= 0:
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_buy_name}] 매수단가 산정 불가")
+                    return
+                buy_qty = int(sell_amt // buy_price)
+                if buy_qty <= 0:
+                    context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"-{hc_nick}-[{hc_buy_name}] 매도금액({format(sell_amt, ',d')}원) 기준 매수량 0주 → 매수 미처리"
+                    )
+                    return
+                c_b = order_cash(True, t_token, t_key, t_secret, t_acct_no,
+                                 hc_buy_code, "00", str(buy_qty), str(buy_price))
+                if c_b is not None and c_b['ODNO'] != "":
+                    context.bot.send_message(
+                        chat_id=user_id,
+                        text=(f"-{hc_nick}-[{hc_buy_name}(<code>{hc_buy_code}</code>)] 대체 매수주문 완료 | "
+                              f"매수가:{format(buy_price, ',d')}원 | 수량:{format(buy_qty, ',d')}주 | "
+                              f"매수금액:{format(buy_price * buy_qty, ',d')}원 | 주문번호:<code>{str(int(c_b['ODNO']))}</code>"),
+                        parse_mode='HTML'
+                    )
+                else:
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_buy_name}] 대체 매수주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}- [보유종목 교체] 오류: {str(e)}")
+
+        context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 보유종목 교체 처리 중...")
+        threading.Thread(target=process_hchg).start()
         return
 
     if menuNum == '61S':
