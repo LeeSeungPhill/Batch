@@ -1798,8 +1798,8 @@ def callback_get(update, context) :
         g_hchg_name = hc_name
         menuNum = "HCHG"
         query.edit_message_text(
-            text=(f"-{hc_nick}-[{hc_name}(<code>{hc_code}</code>)] 보유종목 변경 (매도 후 대체매수)\n"
-                  f"매도단가(현재가:0), 매도비율(전체:100), 매수종목명/종목코드(현금:0), 매수단가(현재가:0)를 입력하세요."),
+            text=(f"[{hc_name}(<code>{hc_code}</code>)] 보유종목 매도 후 대체매수\n"
+                  f"매도단가(현재가:0), 매도비율(전체:100), 매수종목명/코드(현금:0), 매수단가(현재가:0)를 입력하세요."),
             parse_mode='HTML'
         )
 
@@ -3422,7 +3422,7 @@ def callback_get(update, context) :
                     hc_amt  = int(e_hc['pchs_amt'][j])
                     hc_buttons.append(
                         InlineKeyboardButton(
-                            f"[{t_nick_label}] {hc_name} (단가:{format(hc_avg, ',.0f')} / 수량:{format(hc_qty, ',d')} / 금액:{format(hc_amt, ',d')})",
+                            f"{hc_name} (단가:{format(hc_avg, ',.0f')} / 수량:{format(hc_qty, ',d')} / 금액:{format(hc_amt, ',d')})",
                             callback_data=f"hchg_pick:{t_nick_label}:{hc_code}"
                         )
                     )
@@ -5886,7 +5886,7 @@ def echo(update, context):
         return
 
     if menuNum == 'HCHG':
-        # 입력: 매도단가(현재가:0), 매도비율(전체:100), 매수종목명/종목코드(현금:0), 매수단가(현재가:0)
+        # 입력: 매도단가(현재가:0), 매도비율(전체:100), 매수종목명/코드(현금:0), 매수단가(현재가:0)
         hc_nick      = g_hchg_nick
         hc_sell_code = g_hchg_code
         hc_sell_name = g_hchg_name
@@ -5903,7 +5903,7 @@ def echo(update, context):
                 or not parts_hc[3].isdecimal()):
             context.bot.send_message(
                 chat_id=user_id,
-                text="[보유종목 변경] 매도단가(현재가:0), 매도비율(1~100), 매수종목명/종목코드(현금:0), 매수단가(현재가:0) 형식이 올바르지 않습니다."
+                text="[보유종목 변경] 매도단가(현재가:0), 매도비율(1~100), 매수종목명/코드(현금:0), 매수단가(현재가:0) 형식이 올바르지 않습니다."
             )
             return  # menuNum 유지 → 재입력 가능
 
