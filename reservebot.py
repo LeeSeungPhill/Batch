@@ -217,7 +217,7 @@ g_trail73_loss_buy_amt = 0   # 손절금액 기준 매수금액
 g_trail73_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail73_amt_buy_amt = 0    # 매수금액 기준 매수금액
 
-# 보유종목 변경(HCHG) → 선택 보유종목 전량 매도 후 대체 매수 공유 상태
+# 보유종목 교체(HCHG) → 선택 보유종목 전량 매도 후 대체 매수 공유 상태
 g_hchg_nick = ""    # 처리 계좌 닉네임
 g_hchg_code = ""    # 매도 대상 보유종목코드
 g_hchg_name = ""    # 매도 대상 보유종목명
@@ -1220,7 +1220,7 @@ def callback_get(update, context) :
             InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
             InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
             InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
-            InlineKeyboardButton("보유종목 변경", callback_data="menu,보유종목_변경"),
+            InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
             InlineKeyboardButton("취소",          callback_data="menu,취소"),
         ]
         query.edit_message_text(
@@ -1784,12 +1784,12 @@ def callback_get(update, context) :
 
         threading.Thread(target=process_tm_sell).start()
 
-    elif command == "보유종목_변경":
+    elif command == "보유종목_교체":
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "HCHG")
 
     elif command.startswith("hchg_pick:"):
-        # 보유종목 변경 — 보유종목 버튼 선택 → 대체매수 종목/단가 입력 프롬프트
+        # 보유종목 교체 — 보유종목 버튼 선택 → 대체매수 종목/단가 입력 프롬프트
         _, hc_nick, hc_code = command.split(":", 2)
         try:
             ac_hcp = account(hc_nick)
@@ -1797,7 +1797,7 @@ def callback_get(update, context) :
             m_hcp = [c_hcp['prdt_name'][i]
                      for i, _ in enumerate(c_hcp.index) if c_hcp['pdno'][i] == hc_code]
         except Exception as e:
-            query.edit_message_text(text=f"[보유종목 변경] 조회 오류: {str(e)}")
+            query.edit_message_text(text=f"[보유종목 교체] 조회 오류: {str(e)}")
             return
         hc_name = m_hcp[0] if m_hcp else hc_code
         g_hchg_nick = hc_nick
@@ -3414,9 +3414,9 @@ def callback_get(update, context) :
                 parse_mode='HTML'
             )
         elif menu_num == "HCHG":
-            # 보유종목 변경 — 계좌별 보유종목(단가/수량/금액) 선택 버튼 표시
+            # 보유종목 교체 — 계좌별 보유종목(단가/수량/금액) 선택 버튼 표시
             menuNum = "0"
-            query.edit_message_text(text="[보유종목 변경] 보유종목 조회 중...")
+            query.edit_message_text(text="[보유종목 교체] 보유종목 조회 중...")
             target_nicks_hc = g_selected_accounts[:] if g_selected_accounts else [None]
 
             def process_nick_hc(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -3425,7 +3425,7 @@ def callback_get(update, context) :
                     e_hc = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
                 except Exception as e:
                     context.bot.send_message(chat_id=query.message.chat_id,
-                        text=f"-{t_nick_label}- [보유종목 변경] 잔고 조회 오류: {str(e)}")
+                        text=f"-{t_nick_label}- [보유종목 교체] 잔고 조회 오류: {str(e)}")
                     return
                 hc_buttons = []
                 for j, _ in enumerate(e_hc.index):
@@ -3445,11 +3445,11 @@ def callback_get(update, context) :
                     )
                 if not hc_buttons:
                     context.bot.send_message(chat_id=query.message.chat_id,
-                        text=f"-{t_nick_label}- [보유종목 변경] 매도 가능 보유종목이 없습니다.")
+                        text=f"-{t_nick_label}- [보유종목 교체] 매도 가능 보유종목이 없습니다.")
                     return
                 context.bot.send_message(
                     chat_id=query.message.chat_id,
-                    text=f"-{t_nick_label}- [보유종목 변경] 변경할 보유종목을 선택하세요:",
+                    text=f"-{t_nick_label}- [보유종목 교체] 변경할 보유종목을 선택하세요:",
                     reply_markup=InlineKeyboardMarkup(build_menu(hc_buttons, 1))
                 )
 
@@ -5920,7 +5920,7 @@ def echo(update, context):
                 or not parts_hc[3].isdecimal()):
             context.bot.send_message(
                 chat_id=user_id,
-                text="[보유종목 변경] 매도단가(현재가:0), 매도비율(1~100), 매수종목명/코드(현금:0), 매수단가(현재가:0) 형식이 올바르지 않습니다."
+                text="[보유종목 교체] 매도단가(현재가:0), 매도비율(1~100), 매수종목명/코드(현금:0), 매수단가(현재가:0) 형식이 올바르지 않습니다."
             )
             return  # menuNum 유지 → 재입력 가능
 
@@ -5940,7 +5940,7 @@ def echo(update, context):
                 hc_buy_code = stock_code[stock_code.company == buy_target_raw].code.values[0].strip()
                 hc_buy_name = stock_code[stock_code.company == buy_target_raw].company.values[0].strip()
             else:
-                context.bot.send_message(chat_id=user_id, text=f"[보유종목 변경] 매수종목 '{buy_target_raw}' : 미존재 종목")
+                context.bot.send_message(chat_id=user_id, text=f"[보유종목 교체] 매수종목 '{buy_target_raw}' : 미존재 종목")
                 return  # menuNum 유지 → 재입력 가능
 
         initMenuNum()
@@ -6033,9 +6033,9 @@ def echo(update, context):
                 else:
                     context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_buy_name}] 대체 매수주문 실패")
             except Exception as e:
-                context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}- [보유종목 변경] 오류: {str(e)}")
+                context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}- [보유종목 교체] 오류: {str(e)}")
 
-        context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 보유종목 변경 처리 중...")
+        context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 보유종목 교체 처리 중...")
         threading.Thread(target=process_hchg).start()
         return
 
