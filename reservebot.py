@@ -1755,6 +1755,13 @@ def callback_get(update, context) :
 
         def process_tm_sell():
             try:
+                # 매도 주문 전 기존 미체결 매도주문이 있으면 먼저 전량 취소
+                if order_cancel_proc(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
+                                     str(ac_tms['acct_no']), tm_sell_code, '01') != 'success':
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 기존 매도주문 취소 실패 → 중단")
+                    return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
                 ap_tms = inquire_price(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'], tm_sell_code)
                 tms_price = int(ap_tms['stck_prpr'])
                 tms_price = round_to_valid_price(tms_price, get_tick_size(tms_price))
@@ -3121,6 +3128,16 @@ def callback_get(update, context) :
                     context.bot.send_message(chat_id=query.message.chat_id,
                         text=f"-{t_nick_label}- [트레이딩 전체] 매도 대상 종목이 없습니다.")
                     return
+
+                # 매도 주문 전 대상종목별 기존 미체결 매도주문 취소
+                for ta_code in ta_codes:
+                    try:
+                        order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), ta_code, '01')
+                        time.sleep(0.3)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=query.message.chat_id,
+                            text=f"-{t_nick_label}-[트레이딩 전체][{ta_code}] 기존 매도주문 취소 오류: {str(e)}")
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
 
                 try:
                     e_ta = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
@@ -5940,10 +5957,12 @@ def echo(update, context):
             t_key     = ac_hc['app_key']
             t_secret  = ac_hc['app_secret']
             try:
-                # 기존 미체결 매도주문 취소
-                if order_cancel_proc(t_token, t_key, t_secret, t_acct_no, hc_sell_code, '01') != 'success':
-                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 기존 매도주문 취소 실패")
+                # 매도 주문 전 기존 미체결 매도주문이 있으면 먼저 전량 취소
+                cancel_ret = order_cancel_proc(t_token, t_key, t_secret, t_acct_no, hc_sell_code, '01')
+                if cancel_ret != 'success':
+                    context.bot.send_message(chat_id=user_id, text=f"-{hc_nick}-[{hc_sell_name}] 기존 매도주문 취소 실패 → 중단")
                     return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
 
                 # 매도가능수량 확인
                 e_hc = stock_balance(t_token, t_key, t_secret, t_acct_no, "")
