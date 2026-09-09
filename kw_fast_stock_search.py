@@ -466,9 +466,17 @@ class WebSocketClient:
         data = []
         # telegram_messages = []
 
+        if items:
+            # [진단] 첫 항목의 원본 FID 전체 덤프 (등락율 필드/포맷 확인용)
+            print(f"[save_to_db] 원본 첫 항목: {items[0]}")
+
         with conn.cursor() as cur:
             for i in items:
                 code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
+
+                raw_12 = i.get('12')
+                dr = safe_day_rate(raw_12)
+                print(f"[save_to_db] {code} 12={raw_12!r} → day_rate={dr}")
 
                 # 데이터 준비 (code, search_day, search_name 기준 upsert)
                 row = (
@@ -476,7 +484,7 @@ class WebSocketClient:
                     math.ceil(float(i['18'])),  # 저가
                     math.ceil(float(i['17'])),  # 고가
                     math.ceil(float(i['10'])),  # 현재가
-                    safe_day_rate(i.get('12')), # 등락률
+                    dr,                         # 등락률
                     math.ceil(float(i['13'])),  # 거래량
                     datetime.now(),
                     datetime.now()
