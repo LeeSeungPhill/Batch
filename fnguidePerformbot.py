@@ -1,9 +1,6 @@
 import re
 import json
 import time
-import os
-import sys
-import subprocess
 import pandas as pd
 from telegram.ext import Updater
 from telegram.ext import MessageHandler, Filters, CallbackQueryHandler
@@ -985,48 +982,6 @@ def callback_get(update, context):
         except Exception:
             pass
         context.bot.send_message(chat_id=chat_id, text="1차저항가(금일고가:0),1차지지가(금일저가:0)을 입력하세요")
-
-    elif command == "kwfast_restart":
-        # 실시간 돌파 감시(kw_fast_stock_search.py) 프로세스 재가동
-        chat_id = query.message.chat_id
-        try:
-            query.answer("프로세스 재가동 중...")
-        except Exception:
-            pass
-        try:
-            # cron 이 파이프/exec 로 실행하면 __file__ 이 없을 수 있어 여러 후보에서 탐색
-            _cands = []
-            try:
-                _cands.append(os.path.dirname(os.path.abspath(__file__)))
-            except NameError:
-                pass
-            if getattr(sys, "argv", None) and sys.argv[0]:
-                _cands.append(os.path.dirname(os.path.abspath(sys.argv[0])))
-            _cands.append(os.getcwd())
-            script_dir = next(
-                (d for d in _cands if d and os.path.isfile(os.path.join(d, "kw_fast_stock_search.py"))),
-                os.getcwd(),
-            )
-            script_path = os.path.join(script_dir, "kw_fast_stock_search.py")
-            popen_kwargs = dict(
-                cwd=script_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            if os.name == "nt":
-                # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-                popen_kwargs["creationflags"] = 0x00000008 | subprocess.CREATE_NEW_PROCESS_GROUP
-            else:
-                popen_kwargs["start_new_session"] = True
-            subprocess.Popen([sys.executable, script_path], **popen_kwargs)
-            txt = (f"🔄 [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시 프로세스를 재가동했습니다.\n"
-                   f"(이미 실행 중이면 중복 실행되지 않습니다)")
-        except Exception as e:
-            txt = f"프로세스 재가동 실패: {e}"
-        try:
-            query.edit_message_text(text=txt)
-        except Exception:
-            context.bot.send_message(chat_id=chat_id, text=txt)
 
 # 텔레그램봇 응답 처리
 echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)

@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import asyncio
 import websockets
 from psycopg2.extras import execute_values
-from collections import deque
 import html
 import pandas as pd
 import time
@@ -26,9 +25,6 @@ conn = db.connect(conn_string)
 today = datetime.now().strftime("%Y%m%d")
 
 CHAT_ID = "2147256258"
-
-# 중단 시 재가동 버튼 콜백 (fnguidePerformbot.py 의 callback_get 에서 처리)
-RESTART_CALLBACK = "menu,kwfast_restart"
 
 # 실행 허용 시간대 (이 시간대 밖이면 기동하지 않음)
 RUN_START_HHMMSS = '090000'
@@ -212,6 +208,55 @@ def get_kis_1min_chart(
 
     return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량", "등락률"]]
 
+
+# KIS 당일 분봉 - 지정 시각 직전 최대 ~30봉을 1콜로 조회 (페이징 없음)
+def get_kis_1min_window(stock_code, end_dt, access_token, app_key, app_secret, market_code="J"):
+    """inquire-time-itemchartprice: end_dt(datetime) 기준 직전 1분봉 묶음(최대 30건)을
+    1회 호출로 반환. dt(datetime) 컬럼 포함 DataFrame. 실패 시 빈 DataFrame."""
+    url = f"{KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+    headers = {
+        "Content-Type": "application/json",
+        "authorization": f"Bearer {access_token}",
+        "appkey": app_key,
+        "appsecret": app_secret,
+        "tr_id": "FHKST03010200",
+        "custtype": "P",
+    }
+    params = {
+        "FID_ETC_CLS_CODE": "",
+        "FID_COND_MRKT_DIV_CODE": market_code,
+        "FID_INPUT_ISCD": stock_code,
+        "FID_INPUT_HOUR_1": end_dt.strftime("%H%M%S"),
+        "FID_PW_DATA_INCU_YN": "Y",
+    }
+    try:
+        res = requests.get(url, headers=headers, params=params, timeout=10)
+        data = res.json()
+    except Exception as e:
+        print(f"분봉 조회 오류 ({stock_code}): {e}")
+        return pd.DataFrame()
+
+    rows = data.get("output2") or []
+    if not rows:
+        return pd.DataFrame()
+    prdy_ctrt = (data.get("output1") or {}).get("prdy_ctrt", "0.00")
+
+    df = pd.DataFrame(rows).rename(columns={
+        "stck_bsop_date": "일자",
+        "stck_cntg_hour": "시간",
+        "stck_oprc": "시가",
+        "stck_hgpr": "고가",
+        "stck_lwpr": "저가",
+        "stck_prpr": "종가",
+        "cntg_vol": "거래량",
+    })
+    df["dt"] = pd.to_datetime(df["일자"] + df["시간"], format="%Y%m%d%H%M%S", errors="coerce")
+    df = df.dropna(subset=["dt"])
+    df["등락률"] = prdy_ctrt
+    df = df.drop_duplicates(subset=["dt"]).sort_values("dt").reset_index(drop=True)
+    return df[["일자", "시간", "시가", "고가", "저가", "종가", "거래량", "등락률", "dt"]]
+
+
 def get_10min_key(dt: datetime):
     return dt.replace(minute=(dt.minute // 10) * 10, second=0)
 
@@ -230,21 +275,6 @@ async def send_telegram_message(message_text: str, bot_token: str, parse_mode: s
         parse_mode=parse_mode,
         reply_markup=reply_markup
     )
-
-
-async def notify_fatal(bot_token: str, reason: str):
-    """비정상 중단 알림 + 재가동 버튼 전송"""
-    try:
-        markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔄 프로세스 재가동", callback_data=RESTART_CALLBACK)
-        ]])
-        msg = (
-            f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시 프로세스가 중단됐습니다.\n"
-            f"사유: {html.escape(str(reason))}\n\n아래 버튼으로 재가동할 수 있습니다."
-        )
-        await send_telegram_message(msg, bot_token, parse_mode='HTML', reply_markup=markup)
-    except Exception as e:
-        print(f"중단 알림 전송 오류: {e}")
 
 
 def auth(APP_KEY, APP_SECRET):
@@ -281,15 +311,7 @@ class WebSocketClient:
         self.keep_running = True
         self.condition_list = []  # 조건검색 목록 저장
         self.search_results = []  # 조건검색 결과 저장
-        # 실시간 돌파 감시 상태 (A: 키움 실시간체결 + C: 롤링 10분 거래량)
-        self.watch = {}            # code -> 감시 상태 dict
-        self.watch_started = False # 감시 최초 기동 여부
-        self.reg_seq = 0           # 실시간 등록 그룹 번호 시퀀스
-        self.code_group = {}       # code -> 등록 그룹 번호
-        self._pending_reregister = False  # 재접속 후 재등록 필요 여부
-        self.stop_reason = None    # 종료 사유 ('market_close' 면 정상, 그 외는 비정상)
-        self.reconnect_fail = 0    # 연속 재접속 실패 횟수
-        self._session_ok = False   # 이번 접속에서 로그인 성공 여부
+        self.power_rapid_name = ''  # 파워급등주 조건식 이름
 
     # WebSocket 서버에 연결합니다.
     async def connect(self):
@@ -347,13 +369,9 @@ class WebSocketClient:
                 if trnm == 'LOGIN':
                     if response.get('return_code') != 0:
                         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 실패하였습니다. : {response.get('return_msg')}")
-                        self.stop_reason = f"로그인 실패: {response.get('return_msg')}"
                         await self.disconnect()
                     else:
                         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 로그인 성공하였습니다.")
-                        self._session_ok = True  # 정상 접속 - 재접속 실패 카운터 리셋 근거
-                        # 재접속인 경우 감시 종목 실시간 재등록
-                        await self._reregister_after_reconnect()
                         await self.send_message({'trnm': 'CNSRLST'})
 
                 elif trnm == 'CNSRLST':
@@ -404,8 +422,10 @@ class WebSocketClient:
                                   f"거래량: {format(vol, ',d')}주, 고가: {format(high_price, ',d')}원, "
                                   f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                         await self.save_to_db(self.power_rapid_name, self.search_results)
-                        # 저장 직후 실시간 돌파 감시 기동
-                        await self.start_breakout_watch()
+
+                    # 조건검색 저장 후 돌파 체크(REST) 1회 수행하고 종료
+                    await self.check_10min_breakout()
+                    await self.disconnect()
                     # elif seq == self.condition_list[6][0]:  # 파워종목 결과
                     #     print(f'{self.power_item_name}')
                     #     # print(f'{self.power_item_name}-{self.search_results}')
@@ -422,19 +442,9 @@ class WebSocketClient:
                     #               f"저가: {format(low_price, ',d')}원, 등락율: {rate:.2f}%")
                     #     await self.save_to_db(self.power_item_name, self.search_results)
                 
-                # 실시간 체결 데이터 → 돌파 감시
-                elif trnm == 'REAL':
-                    await self.on_real(response.get('data', []))
-
-                # 실시간 등록 응답
-                elif trnm == 'REG':
-                    if response.get('return_code') not in (0, None):
-                        print(f"실시간 등록 응답: {response.get('return_msg')}")
-
-                # 메시지 유형이 PING일 경우 연결 유지 + 감시 갱신
+                # 메시지 유형이 PING일 경우 수신값 그대로 반송(PONG)
                 elif trnm == 'PING':
-                    await self.send_message(response)  # 수신값 그대로 반송(PONG)
-                    await self.refresh_breakout_watch()
+                    await self.send_message(response)
 
                 else:
                     print(f'실시간 시세 서버 응답 수신: {response}')
@@ -504,24 +514,21 @@ class WebSocketClient:
             else:
                 print("데이터가 없어 저장이 수행되지 않았습니다.")
 
-    # ── 실시간 돌파 감시 (A: 키움 실시간체결 + C: 롤링 10분 거래량) ──────────────
-    #
-    #  · 기준(reference): search_time 이 속한 10분 구간 [ref_start, ref_end).
-    #    이 구간의 고가/거래량 합을 KIS 당일분봉으로 1회만 산출해 캐시한다.
-    #  · 감시: 해당 종목을 키움 실시간체결(0B) 구독. 체결 틱마다
-    #      현재가 > 기준고가  AND  최근 10분 롤링 거래량 > 기준 10분 거래량
-    #    을 만족하면 즉시 알림 → DB 갱신 → 실시간 해제.
-    #  · 롤링 10분 거래량은 누적거래량(FID 13) 스냅샷의 차분으로 구한다.
-    #    감시 10분 미만 구간은 경과분 비례(pace) 임계값으로 대체한다.
+    # ── 돌파 체크 (B: REST 폴링 + C: 롤링 10분 거래량) ────────────────────────────
+    #  1분 단위 cron 호출 전제. 조건검색 저장 직후 1회 수행하고 프로세스를 종료한다.
+    #  기준(reference) : search_time 이 속한 10분 구간 [ref_start, ref_end) 의 고가 / 거래량 합
+    #  현재(rolling)   : 조회 시점 기준 최근 10분의 고가 / 거래량 합
+    #  두 값을 모두 돌파하면 알림 → DB 갱신.
+    BREAKOUT_CONCURRENCY = 5   # KIS API 동시 호출 제한
 
-    WATCH_WARMUP_SEC = 120      # 감시 시작 후 거래량 판정 유예
-    WATCH_ROLL_SEC = 600       # 롤링 거래량 창(10분)
-    REG_GROUP_SIZE = 90       # 실시간 등록 그룹당 종목 수
-    WATCH_END_HHMMSS = '153000'  # 이 시각 이후 감시 종료
+    async def check_10min_breakout(self):
+        if not self.kis_access_token:
+            print("KIS 자격증명 없음 - 돌파 체크 생략")
+            return
 
-    def _load_watch_codes(self):
-        """오늘 미알림 종목 조회 (code, name, search_time)"""
         today = datetime.now().strftime('%Y%m%d')
+        now = datetime.now()
+
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT code, name, search_time
@@ -529,220 +536,97 @@ class WebSocketClient:
                 WHERE search_day = %s
                   AND (breakout_noti_yn IS NULL OR breakout_noti_yn = 'N')
             """, (today,))
-            return cur.fetchall()
+            stocks = cur.fetchall()
 
-    def _ensure_watch_entries(self):
-        """DB 미알림 종목 중 감시 목록에 없는 건을 추가하고 신규 code 리스트 반환"""
-        today = datetime.now().strftime('%Y%m%d')
-        new_codes = []
-        for code, name, search_time in self._load_watch_codes():
-            if code in self.watch:
-                continue
-            search_dt = datetime.strptime(today + search_time, "%Y%m%d%H%M")
-            self.watch[code] = {
-                'code': code,
-                'name': name,
-                'search_time': search_time,
-                'ref_start': get_10min_key(search_dt),                 # 기준 10분 구간 시작
-                'ref_end': get_next_completed_10min_dt(search_dt),     # 기준 10분 구간 종료(=완성 시각)
-                'ref_high': None,
-                'ref_vol': None,
-                'ref_ready': False,
-                'ref_last_try': None,
-                'cur_high': 0,
-                'acc_samples': deque(),      # (dt, 누적거래량) - 롤링 10분 계산용
-                'watch_start': None,         # 첫 실시간 체결 수신 시각
-                'watch_start_acc': None,     # 첫 실시간 체결 시점 누적거래량
-                'notified': False,
-            }
-            new_codes.append(code)
-        return new_codes
-
-    async def start_breakout_watch(self):
-        """조건검색 저장 직후 1회 호출 - 감시 대상 등록 및 기준값 산출"""
-        if self.watch_started:
-            return
-        self.watch_started = True
-        if not self.kis_access_token:
-            print("KIS 자격증명 없음 - 실시간 돌파 감시 생략")
+        if not stocks:
+            print("돌파 체크 대상 없음")
             return
 
-        new_codes = self._ensure_watch_entries()
-        if not new_codes:
-            print("실시간 돌파 감시 대상 없음")
-            return
+        print(f"돌파 체크 대상: {len(stocks)}건")
 
-        print(f"실시간 돌파 감시 대상: {len(new_codes)}건")
-        await self._build_references()
-        await self._register_codes(new_codes)
+        sem = asyncio.Semaphore(self.BREAKOUT_CONCURRENCY)
 
-    async def refresh_breakout_watch(self):
-        """PING 주기마다 호출 - 종료 시각 체크 / 신규 종목 등록 / 기준값 보완"""
-        if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
-            print("장 마감 - 실시간 돌파 감시 종료")
-            self.stop_reason = 'market_close'
-            self.keep_running = False
-            await self.disconnect()
-            return
+        async def _guarded(code, name, search_time):
+            async with sem:
+                try:
+                    return await self._eval_breakout(code, name, search_time, today, now)
+                except Exception as e:
+                    print(f"돌파 체크 오류 [{name}-{code}]: {e}")
+                    return None
 
-        if not self.watch_started:
-            await self.start_breakout_watch()
-            return
+        results = await asyncio.gather(*[_guarded(c, n, s) for c, n, s in stocks])
 
-        new_codes = self._ensure_watch_entries()
-        await self._build_references()
-        if new_codes:
-            print(f"실시간 돌파 감시 신규 등록: {len(new_codes)}건")
-            await self._register_codes(new_codes)
+        # 돌파 확정 건만 순차 처리 (알림 + DB 갱신)
+        for r in [x for x in results if x]:
+            await self._fire_breakout(today, now, r)
 
-    async def _build_references(self):
-        """기준 10분 구간이 완성된 종목의 기준 고가/거래량을 KIS 분봉으로 산출"""
-        now = datetime.now()
-        for w in self.watch.values():
-            if w['ref_ready'] or w['notified']:
-                continue
-            if now < w['ref_end']:
-                continue  # 기준 10분 구간 아직 미완성
-            if w['ref_last_try'] and (now - w['ref_last_try']).total_seconds() < 30:
-                continue  # 재시도 과다 방지
-            w['ref_last_try'] = now
-            try:
-                ok = await asyncio.to_thread(self._build_reference_sync, w)
-                if ok:
-                    print(f"기준 산출 [{w['name']}-{w['code']}] "
-                          f"고가 {w['ref_high']:,} / 10분거래량 {w['ref_vol']:,}")
-            except Exception as e:
-                print(f"기준 산출 오류 [{w['name']}-{w['code']}]: {e}")
-            await asyncio.sleep(0.3)
+    async def _eval_breakout(self, code, name, search_time, today, now):
+        """단일 종목 돌파 판정. 돌파면 dict, 아니면 None."""
+        search_dt = datetime.strptime(today + search_time, "%Y%m%d%H%M")
+        ref_start = get_10min_key(search_dt)
+        ref_end = ref_start + timedelta(minutes=10)
 
-    def _build_reference_sync(self, w):
-        """(블로킹) KIS 당일분봉으로 기준 10분 구간 고가/거래량 합 계산"""
-        df = get_kis_1min_chart(
-            stock_code=w['code'],
-            search_time=w['ref_start'].strftime('%H%M'),
-            access_token=self.kis_access_token,
-            app_key=self.kis_app_key,
-            app_secret=self.kis_app_secret,
+        # 기준 10분 구간이 아직 끝나지 않았으면 판정 불가
+        if now < ref_end:
+            return None
+
+        # 최근 분봉 1콜 (현재시각 기준 직전 ~30봉)
+        recent_df = await asyncio.to_thread(
+            get_kis_1min_window, code, now,
+            self.kis_access_token, self.kis_app_key, self.kis_app_secret,
         )
-        if df.empty:
-            return False
-        df['dt'] = pd.to_datetime(
-            df['일자'] + df['시간'].str.replace(':', ''), format='%Y%m%d%H%M'
-        )
-        win = df[(df['dt'] >= w['ref_start']) & (df['dt'] < w['ref_end'])]
-        if win.empty:
-            return False
-        w['ref_high'] = int(win['고가'].astype(float).max())
-        w['ref_vol'] = int(win['거래량'].astype(float).sum())
-        w['ref_ready'] = True
-        return True
+        if recent_df.empty:
+            return None
 
-    async def _register_codes(self, codes):
-        """키움 실시간체결(0B) 등록 - 그룹당 REG_GROUP_SIZE 종목"""
-        if not codes:
-            return
-        for idx in range(0, len(codes), self.REG_GROUP_SIZE):
-            chunk = codes[idx:idx + self.REG_GROUP_SIZE]
-            self.reg_seq += 1
-            grp = str(self.reg_seq)
-            for c in chunk:
-                self.code_group[c] = grp
-            await self.send_message({
-                'trnm': 'REG',
-                'grp_no': grp,
-                'refresh': '1',
-                'data': [{'item': chunk, 'type': ['0B']}],
-            })
-            await asyncio.sleep(0.2)
+        # 최근 분봉이 기준 구간까지 덮으면 재사용, 아니면 기준 구간 별도 조회
+        if recent_df["dt"].min() <= ref_start:
+            ref_df = recent_df
+        else:
+            ref_df = await asyncio.to_thread(
+                get_kis_1min_window, code, ref_end,
+                self.kis_access_token, self.kis_app_key, self.kis_app_secret,
+            )
+            if ref_df.empty:
+                return None
 
-    async def _unregister_code(self, code):
-        """돌파 알림 완료 종목 실시간 해제 (best-effort)"""
-        grp = self.code_group.pop(code, None)
-        if not grp:
-            return
-        try:
-            await self.send_message({
-                'trnm': 'REMOVE',
-                'grp_no': grp,
-                'data': [{'item': [code], 'type': ['0B']}],
-            })
-        except Exception as e:
-            print(f"실시간 해제 오류 [{code}]: {e}")
+        ref_win = ref_df[(ref_df["dt"] >= ref_start) & (ref_df["dt"] < ref_end)]
+        if ref_win.empty:
+            return None
+        ref_high = int(ref_win["고가"].astype(float).max())
+        ref_vol = int(ref_win["거래량"].astype(float).sum())
 
-    def _rolling_volume(self, w, now, acc_now):
-        """(현재 창 거래량, 비교 임계값) 반환. 판정 불가 시 (None, 0)."""
-        if not w['watch_start']:
-            return None, 0
-        elapsed = (now - w['watch_start']).total_seconds()
-        if elapsed < self.WATCH_WARMUP_SEC:
-            return None, 0  # 워밍업 중 - 거래량 판정 보류
-        if elapsed >= self.WATCH_ROLL_SEC:
-            # 완전한 롤링 10분 합: 현재 누적 - 10분 전 누적(추정)
-            cutoff = now - timedelta(seconds=self.WATCH_ROLL_SEC)
-            base_acc = None
-            for ts, acc in w['acc_samples']:
-                if ts <= cutoff:
-                    base_acc = acc
-                else:
-                    break
-            if base_acc is None:
-                base_acc = w['acc_samples'][0][1]
-            return acc_now - base_acc, w['ref_vol']
-        # 감시 10분 미만 → 경과분 비례(pace) 임계값
-        return acc_now - w['watch_start_acc'], w['ref_vol'] * (elapsed / self.WATCH_ROLL_SEC)
+        # 최근 10분 롤링 구간
+        roll_win = recent_df[recent_df["dt"] >= now - timedelta(minutes=10)]
+        if roll_win.empty:
+            return None
+        roll_high = int(roll_win["고가"].astype(float).max())
+        roll_vol = int(roll_win["거래량"].astype(float).sum())
 
-    async def on_real(self, datalist):
-        """실시간 체결(0B) 수신 → 롤링 돌파 판정"""
-        now = datetime.now()
-        for d in datalist or []:
-            if d.get('type') != '0B':
-                continue
-            code = d.get('item', '') or ''
-            code = code[1:] if code.startswith('A') else code
-            w = self.watch.get(code)
-            if not w or w['notified']:
-                continue
+        # 돌파 판정: 최근 10분 고가 > 기준 10분 고가  AND  최근 10분 거래량 > 기준 10분 거래량
+        if roll_high <= ref_high or roll_vol <= ref_vol:
+            return None
 
-            vals = d.get('values', {}) or {}
-            try:
-                price = abs(int(float(vals.get('10') or 0)))   # 현재가
-                acc_vol = int(float(vals.get('13') or 0))      # 누적거래량
-            except (TypeError, ValueError):
-                continue
-            if price <= 0:
-                continue
+        last = recent_df.iloc[-1]
+        return {
+            'code': code,
+            'name': name,
+            'ref_high': ref_high,
+            'ref_vol': ref_vol,
+            'roll_high': roll_high,
+            'roll_vol': roll_vol,
+            'current_price': int(float(last["종가"])),
+            'current_rate': last["등락률"],
+        }
 
-            # 누적거래량 샘플 적재 (롤링 10분 계산용)
-            if w['watch_start'] is None:
-                w['watch_start'] = now
-                w['watch_start_acc'] = acc_vol
-            w['acc_samples'].append((now, acc_vol))
-            while w['acc_samples'] and (now - w['acc_samples'][0][0]).total_seconds() > self.WATCH_ROLL_SEC + 120:
-                w['acc_samples'].popleft()
-
-            if not w['ref_ready']:
-                continue
-            if price > w['cur_high']:
-                w['cur_high'] = price
-            if price <= w['ref_high']:
-                continue  # 가격 미돌파
-
-            roll_vol, threshold = self._rolling_volume(w, now, acc_vol)
-            if roll_vol is None or roll_vol <= threshold:
-                continue  # 거래량 미돌파
-
-            await self._fire_breakout(code, w, price, roll_vol, threshold, now, vals)
-
-    async def _fire_breakout(self, code, w, price, roll_vol, threshold, now, vals):
-        """돌파 확정 - 텔레그램 알림 + DB 갱신 + 실시간 해제"""
-        w['notified'] = True
-        today = datetime.now().strftime('%Y%m%d')
-        rate = safe_day_rate(vals.get('12'))
-        safe_name = html.escape(w['name'].strip())
+    async def _fire_breakout(self, today, now, r):
+        """돌파 확정 - 텔레그램 알림 + DB 갱신"""
+        code = r['code']
+        safe_name = html.escape(r['name'].strip())
         message = (
             f"[{now.strftime('%H:%M')}] {safe_name}[<code>{code}</code>] "
-            f"기준 10분 고가 : {w['ref_high']:,}원 돌파, 현재가 : {price:,}원, "
-            f"최근10분 거래량 : {int(roll_vol):,} (기준 {int(threshold):,}), 등락율 : {rate}%"
+            f"기준 10분 고가 : {r['ref_high']:,}원 돌파, 최근10분 고가 : {r['roll_high']:,}원, "
+            f"현재가 : {r['current_price']:,}원, "
+            f"최근10분 거래량 : {r['roll_vol']:,} (기준 {r['ref_vol']:,}), 등락율 : {r['current_rate']}%"
         )
         print(message)
         reg_markup = InlineKeyboardMarkup([[
@@ -763,71 +647,19 @@ class WebSocketClient:
                          , signal_price = %s
                          , mod_dt = %s
                      WHERE code = %s AND search_day = %s
-                """, (now.strftime('%H%M'), int(price), now, code, today))
+                """, (now.strftime('%H%M'), r['current_price'], now, code, today))
                 conn.commit()
         except Exception as e:
             conn.rollback()
             print(f"돌파 DB 갱신 오류 [{code}]: {e}")
 
-        await self._unregister_code(code)
-
-    # WebSocket 실행 (장중 상주 - 끊기면 재접속 후 감시 종목 재등록)
+    # WebSocket 실행 (1회성: 조건검색 → 저장 → 돌파 체크 → 종료)
     async def run(self):
-        MAX_RECONNECT_FAIL = 5  # 연속 실패 시 포기하고 종료(→ 중단 알림)
-        while self.keep_running:
-            self._session_ok = False
-            session_start = datetime.now()
-            try:
-                await self.connect()
-                await self.receive_messages()
-            except Exception as e:
-                print(f'run 예외: {e}')
-                if not self.stop_reason:
-                    self.stop_reason = f'실행 예외: {e}'
-
-            if not self.keep_running:
-                break
-
-            # 장 마감 시각 이후면 재접속하지 않고 정상 종료
-            if datetime.now().strftime('%H%M%S') >= self.WATCH_END_HHMMSS:
-                print('장 마감 - 재접속 중단 및 종료')
-                self.stop_reason = 'market_close'
-                self.keep_running = False
-                break
-
-            # 재접속 실패 카운트: 로그인 성공 + 세션이 2분 이상 유지됐으면 정상으로 보고 리셋
-            session_dur = (datetime.now() - session_start).total_seconds()
-            if self._session_ok and session_dur >= 120:
-                self.reconnect_fail = 0
-            else:
-                self.reconnect_fail += 1
-            if self.reconnect_fail >= MAX_RECONNECT_FAIL:
-                print(f'재접속 {self.reconnect_fail}회 연속 실패 - 프로세스 종료')
-                if not self.stop_reason:
-                    self.stop_reason = f'재접속 {self.reconnect_fail}회 연속 실패'
-                self.keep_running = False
-                break
-
-            # 비정상 종료 → 재접속 대기
-            self.connected = False
-            print(f'연결 끊김({self.reconnect_fail}/{MAX_RECONNECT_FAIL}) - 5초 후 재접속 시도')
-            await asyncio.sleep(5)
-            # 재접속 시 실시간 재등록을 위해 상태 초기화
-            self.reg_seq = 0
-            self.code_group = {}
-            self.watch_started = False
-            self._pending_reregister = True
-
-    async def _reregister_after_reconnect(self):
-        """재접속 직후 감시 목록 전체를 다시 실시간 등록"""
-        if not getattr(self, '_pending_reregister', False):
+        await self.connect()
+        if not self.connected:
+            print('WebSocket 연결 실패 - 종료 (다음 cron 에서 재시도)')
             return
-        self._pending_reregister = False
-        codes = [c for c, w in self.watch.items() if not w['notified']]
-        if codes:
-            print(f"재접속 실시간 재등록: {len(codes)}건")
-            self.watch_started = True
-            await self._register_codes(codes)
+        await self.receive_messages()
 
     # WebSocket 연결 종료
     async def disconnect(self):
@@ -902,13 +734,7 @@ async def main():
         await websocket_client.run()
     except Exception as e:
         print(f'main 실행 예외: {e}')
-        await notify_fatal(bot_token, f'실행 오류: {e}')
-    else:
-        # 정상 장마감(market_close) 외의 사유로 끝났으면 재가동 버튼 알림
-        if websocket_client.stop_reason and websocket_client.stop_reason != 'market_close':
-            await notify_fatal(bot_token, websocket_client.stop_reason)
     finally:
-        release_singleton_lock()
         try:
             conn.close()
         except Exception:
@@ -928,16 +754,12 @@ def is_business_day(check_date: datetime, conn) -> bool:
 
     return bool(result[0])
 
-# asyncio로 프로그램을 실행합니다.
+# asyncio로 프로그램을 실행합니다. (cron 이 1분 단위로 호출하는 1회성 프로세스)
 if __name__ == '__main__':
-    # 영업일 확인 + 재가동 알림용 봇 토큰 로드 (스레드 진입 전 단일 사용)
+    # 영업일 확인용 임시 연결
     _conn_check = db.connect(conn_string)
     try:
         _is_business = is_business_day(today, _conn_check)
-        _bt_cur = _conn_check.cursor()
-        _bt_cur.execute("select bot_token1 from \"stockAccount_stock_account\" where nick_name = 'kwphills75'")
-        _boot_bot_token = _bt_cur.fetchone()[0]
-        _bt_cur.close()
     finally:
         _conn_check.close()
 
@@ -948,24 +770,14 @@ if __name__ == '__main__':
     elif not (RUN_START_HHMMSS <= _now_hms <= RUN_END_HHMMSS):
         print(f'실행 허용 시간대(09:00~15:20)가 아니어서 종료합니다. (현재 {_now_hms[:2]}:{_now_hms[2:4]})')
     elif not acquire_singleton_lock():
-        print('이미 실행 중이어서 재가동을 건너뜁니다.')
-        try:
-            asyncio.run(send_telegram_message(
-                f"ℹ️ [{datetime.now().strftime('%H:%M:%S')}] 실시간 돌파 감시가 이미 실행 중이라 재가동을 건너뛰었습니다.",
-                _boot_bot_token))
-        except Exception:
-            pass
+        print('이전 실행이 아직 진행 중이어서 이번 호출은 건너뜁니다.')
     else:
         try:
             asyncio.run(main())
         except KeyboardInterrupt:
             print('사용자 중단(KeyboardInterrupt)')
-            release_singleton_lock()
         except Exception as e:
             print(f'비정상 종료: {e}')
+        finally:
             release_singleton_lock()
-            try:
-                asyncio.run(notify_fatal(_boot_bot_token, f'기동 실패: {e}'))
-            except Exception:
-                pass
 
