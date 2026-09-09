@@ -79,23 +79,25 @@ def release_singleton_lock():
         pass
 
 def safe_day_rate(raw):
+    """등락율 문자열 → float(%) 변환.
+    키움 FID 12 는 소수점 문자열('2.34', '-1.55') 또는
+    정수 ×1000 스케일('2340', '-1550') 두 형태로 올 수 있어 모두 처리한다.
+    """
     day_rate = 0.00
     try:
-        raw = str(raw).strip()
-        if raw:
-            # 부호 처리
-            sign = -1 if raw.startswith('-') else 1
-            # 숫자만 추출
-            digits = ''.join(ch for ch in raw if ch.isdigit())
-            if digits:
-                value = sign * (int(digits) / 1000)  # 3자리 소수점
-                # numeric(8,2) 허용 범위 내로 clamp
-                if value > 999999.99:
-                    day_rate = 999999.99
-                elif value < -999999.99:
-                    day_rate = -999999.99
-                else:
-                    day_rate = round(value, 2)
+        s = str(raw).strip()
+        if s:
+            if '.' in s:
+                # 이미 % 단위 실수
+                value = float(s)
+            else:
+                # 정수 ×1000 스케일 (부호 문자 제거 후 복원)
+                sign = -1 if '-' in s else 1
+                digits = ''.join(ch for ch in s if ch.isdigit())
+                value = sign * (int(digits) / 1000) if digits else 0.0
+            # numeric(8,2) 허용 범위 내로 clamp
+            value = max(-999999.99, min(999999.99, value))
+            day_rate = round(value, 2)
     except Exception as e:
         print(f"등락율 변환 오류: {raw} → {e}")
         day_rate = 0.00
@@ -414,7 +416,7 @@ class WebSocketClient:
                             code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
                             name = i['302']
                             current_price = math.ceil(float(i['10']))
-                            rate = float(i['12']) / 1000
+                            rate = safe_day_rate(i['12'])
                             vol = math.ceil(float(i['13']))
                             high_price = math.ceil(float(i['17']))
                             low_price = math.ceil(float(i['18']))
