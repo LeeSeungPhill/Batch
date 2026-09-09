@@ -78,6 +78,31 @@ def release_singleton_lock():
     except Exception:
         pass
 
+# 전일대비기호(FID 25): 1 상한, 2 상승, 3 보합, 4 하한, 5 하락
+_DOWN_SIGN_CODES = ('4', '5')
+
+
+def day_rate_from_item(i):
+    """조건검색 항목에서 등락률(%) 산출.
+    1순위: 현재가(10) + 전일대비(11) 로 계산 → 매 조회마다 현재가가 반영되어 값이 갱신됨.
+           등락률 = 전일대비 / (현재가 - 전일대비) * 100
+    2순위: 계산 불가 시 FID 12 를 safe_day_rate 로 변환해 폴백.
+    """
+    try:
+        cur = abs(float(str(i.get('10', '')).replace('+', '').strip()))
+        diff = float(str(i.get('11', '')).replace('+', '').strip())
+        # 전일대비가 부호 없이 크기만 올 때 부호코드로 방향 보정
+        if diff > 0 and str(i.get('25', '')).strip() in _DOWN_SIGN_CODES:
+            diff = -diff
+        prev_close = cur - diff
+        if cur > 0 and prev_close > 0:
+            value = round(diff / prev_close * 100, 2)
+            return max(-999999.99, min(999999.99, value))
+    except (TypeError, ValueError):
+        pass
+    return safe_day_rate(i.get('12'))
+
+
 def safe_day_rate(raw):
     """등락율 문자열 → float(%) 변환.
     키움 FID 12 는 소수점 문자열('2.34', '-1.55') 또는
@@ -416,7 +441,7 @@ class WebSocketClient:
                             code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
                             name = i['302']
                             current_price = math.ceil(float(i['10']))
-                            rate = safe_day_rate(i['12'])
+                            rate = day_rate_from_item(i)
                             vol = math.ceil(float(i['13']))
                             high_price = math.ceil(float(i['17']))
                             low_price = math.ceil(float(i['18']))
@@ -474,9 +499,9 @@ class WebSocketClient:
             for i in items:
                 code = i['9001'][1:] if i['9001'].startswith('A') else i['9001']
 
-                raw_12 = i.get('12')
-                dr = safe_day_rate(raw_12)
-                print(f"[save_to_db] {code} 12={raw_12!r} → day_rate={dr}")
+                dr = day_rate_from_item(i)
+                print(f"[save_to_db] {code} 10={i.get('10')!r} 11={i.get('11')!r} "
+                      f"12={i.get('12')!r} 25={i.get('25')!r} → day_rate={dr}")
 
                 # 데이터 준비 (code, search_day, search_name 기준 upsert)
                 row = (
