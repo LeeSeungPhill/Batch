@@ -588,6 +588,8 @@
     <div class="dash-header">
       <span class="dash-title">🔍 종목검색 <span style="font-weight:400;color:#888;font-size:.8rem">(총 {{ stockSearchTotalCount }}건)</span></span>
       <span style="display:flex;align-items:center;gap:8px">
+        <input type="text" v-model="stockSearchFilterText" @input="onStockSearchFilter" placeholder="종목명 검색"
+               style="padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:.82rem;width:120px" />
         <input type="date" v-model="stockSearchDate" style="padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:.82rem" />
         <span v-if="stockSearchLoading" style="font-size:.78rem;color:#aaa">불러오는 중...</span>
         <button class="dash-btn-refresh" @click="loadStockSearchList" :disabled="stockSearchLoading">새로고침</button>
@@ -601,6 +603,8 @@
     <div class="dash-header">
       <span class="dash-title">📋 투자관리 현황 <span style="font-weight:400;color:#888;font-size:.8rem">(총 {{ investMngTotalCount }}건)</span></span>
       <span style="display:flex;align-items:center;gap:8px">
+        <input type="text" v-model="investMngFilterText" @input="onInvestMngFilter" placeholder="종목명 검색"
+               style="padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:.82rem;width:120px" />
         <span v-if="investMngListLoading" style="font-size:.78rem;color:#aaa">불러오는 중...</span>
         <button class="dash-btn-refresh" @click="loadInvestMngList" :disabled="investMngListLoading">새로고침</button>
       </span>
@@ -1852,13 +1856,21 @@ createApp({
     // ── 투자관리 현황 (AgGrid) ──
     const investMngGridEl      = ref(null);
     const investMngListLoading = ref(false);
+    const investMngFilterText  = ref('');
     let investMngGridApi       = null;
+    function onInvestMngFilter() {
+      if (investMngGridApi) investMngGridApi.setQuickFilter(investMngFilterText.value);
+    }
 
     // ── 종목검색 (AgGrid) ──
     const stockSearchGridEl    = ref(null);
     const stockSearchLoading   = ref(false);
     const stockSearchDate      = ref(today);
     const stockSearchTotalCount = ref(0);
+    const stockSearchFilterText = ref('');
+    function onStockSearchFilter() {
+      if (stockSearchGridApi) stockSearchGridApi.setQuickFilter(stockSearchFilterText.value);
+    }
     let stockSearchGridApi     = null;
 
     const form = ref({
@@ -1936,14 +1948,14 @@ createApp({
         columnDefs: [
           { headerName: '종목코드', field: 'code', width: 100 },
           { headerName: '종목명',   field: 'name', width: 130 },
+          { headerName: '현재가',   field: 'price',         width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '목표가',   field: 'high_price',    width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '상승잔존', field: 'remain_rate',   width: 90, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
+          { headerName: '매수하단',   field: 'down_range',    width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '매수상단',   field: 'up_range',    width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '매출증가', field: 'sales_rate',    width: 90, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
+          { headerName: '배당',   field: 'dividend_rate', width: 90,  type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
           { headerName: '주요사업', field: 'main_business', flex: 1, minWidth: 160 },
-          { headerName: '매수하단',   field: 'down_range',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '매수상단',   field: 'up_range',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '목표가',   field: 'high_price',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '현재가',   field: 'price',         width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '상승잔존율', field: 'remain_rate',   width: 110, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
-          { headerName: '매출증가율', field: 'sales_rate',    width: 110, type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
-          { headerName: '배당율',   field: 'dividend_rate', width: 90,  type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
         ],
         defaultColDef: { sortable: true, resizable: true },
         rowData: [],
@@ -1991,12 +2003,13 @@ createApp({
         columnDefs: [
           { headerName: '종목코드', field: 'code', width: 100 },
           { headerName: '종목명',   field: 'name', width: 130 },
-          { headerName: '현재가',   field: 'current_price', width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
+          { headerName: '검출시분', field: 'search_time',   width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
+          { headerName: '최신시분', field: 'mod_dt',        width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
+          { headerName: '현재가',   field: 'current_price', width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
           { headerName: '등락율',   field: 'day_rate',      width: 90,  type: 'rightAligned', valueFormatter: p => _fmtPct(p.value) },
+          { headerName: '신호시분', field: 'signal_time',   width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
+          { headerName: '신호가',   field: 'signal_price',  width: 90, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
           { headerName: '거래량',   field: 'volumn',        width: 120, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '생성일시', field: 'crt_dt',        width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
-          { headerName: '신호가',   field: 'signal_price',  width: 110, type: 'rightAligned', valueFormatter: p => _fmtWon(p.value) },
-          { headerName: '신호일시', field: 'signal_time',   width: 90, type: 'rightAligned', valueFormatter: p => _fmtHM(p.value) },
         ],
         defaultColDef: { sortable: true, resizable: true },
         rowData: [],
@@ -2840,7 +2853,9 @@ createApp({
       investMngStale, investMngStaleDays, investMngRemainRate, investMngSalesRate,
       investMngLookup, applyInvestMng,
       investMngGridEl, investMngListLoading, loadInvestMngList, investMngTotalCount,
+      investMngFilterText, onInvestMngFilter,
       stockSearchGridEl, stockSearchLoading, stockSearchDate, loadStockSearchList, stockSearchTotalCount,
+      stockSearchFilterText, onStockSearchFilter,
       stockScores, stockScoresLoading, scoreDetailOpen, fetchStockScores, scoreCls,
       stockTrend, stockTrendLoading, fetchStockTrend, trendLabel, trendCls,
       companyInfo, companyTab, fhTab, companyLoading, fetchCompanyInfo, bizExpanded,

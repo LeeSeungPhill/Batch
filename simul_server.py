@@ -1058,7 +1058,9 @@ def invest_mng_list():
             'price': price,
             'sales_amt': sales_amt, 'ep_sales_amt': ep_sales_amt, 'report_dt': report_dt,
             'invest_issue': invest_issue, 'invest_point': invest_point, 'invest_risk': invest_risk,
-            'remain_rate': remain_rate, 'dividend_rate': dividend_rate, 'sales_rate': sales_rate,
+            # numeric(Decimal) 컬럼은 jsonify가 문자열로 직렬화 → AG Grid가 사전식으로
+            # 정렬해 "100"이 "99"보다 앞에 오는 문제가 생긴다. float 로 변환해 숫자로 내려준다.
+            'remain_rate': remain_rate, 'dividend_rate': _num_or_none(dividend_rate), 'sales_rate': _num_or_none(sales_rate),
             'value_check': value_check, 'dividend_check': dividend_check, 'growth_check': growth_check,
             'check_dt': check_dt, 'proc_yn': proc_yn, 'down_range': down_range, 'up_range': up_range,
         }
@@ -1800,10 +1802,10 @@ def api_stock_search():
         conn = get_conn()
         cur  = conn.cursor()
         cur.execute("""
-            SELECT code, name, current_price, day_rate, volumn, crt_dt, signal_price, signal_time
+            SELECT code, name, current_price, day_rate, volumn, mod_dt, signal_price, signal_time, search_time
             FROM public.stock_search_form
             WHERE search_day = %s
-            ORDER BY crt_dt DESC
+            ORDER BY mod_dt DESC, search_time DESC
         """, (date,))
         rows = cur.fetchall()
         cur.close()
@@ -1818,9 +1820,10 @@ def api_stock_search():
             'current_price': r[2],
             'day_rate':      float(r[3]) if r[3] is not None else None,
             'volumn':        int(r[4]) if r[4] is not None else None,
-            'crt_dt':        r[5].strftime('%Y-%m-%d %H:%M:%S') if r[5] else None,
+            'mod_dt':        r[5].strftime('%Y-%m-%d %H:%M:%S') if r[5] else None,
             'signal_price':  r[6],
             'signal_time':   (r[7] or '').strip() if r[7] else None,
+            'search_time':   (r[8] or '').strip() if r[8] else None,
         }
         for r in rows
     ])
