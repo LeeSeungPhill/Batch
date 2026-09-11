@@ -224,6 +224,8 @@ g_hchg_name = ""    # 매도 대상 보유종목명
 
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
+INVEST_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong']  # 선택 가능 계좌 목록
+TRADING_ACCOUNTS = ['phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 
 def format_number(value):
     try:
@@ -1011,10 +1013,18 @@ def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=Non
     extra = [current_acc] if current_acc and current_acc not in SELECTABLE_ACCOUNTS else []
     all_accounts = extra + SELECTABLE_ACCOUNTS
     all_checked = len(g_selected_accounts) == len(all_accounts) and all(a in g_selected_accounts for a in all_accounts)
-    buttons = [[InlineKeyboardButton(
-        f"{'✅' if all_checked else '⬜'} 전체선택",
-        callback_data=f"acc_{menu_num}_all"
-    )]]
+    invest_checked = len(g_selected_accounts) == len(INVEST_ACCOUNTS) and all(a in g_selected_accounts for a in INVEST_ACCOUNTS)
+    trading_checked = len(g_selected_accounts) == len(TRADING_ACCOUNTS) and all(a in g_selected_accounts for a in TRADING_ACCOUNTS)
+    buttons = [
+        [InlineKeyboardButton(
+            f"{'✅' if all_checked else '⬜'} 전체선택",
+            callback_data=f"acc_{menu_num}_all"
+        )],
+        [
+            InlineKeyboardButton(f"{'✅' if invest_checked else '⬜'} 투자선택", callback_data=f"acc_{menu_num}_invest"),
+            InlineKeyboardButton(f"{'✅' if trading_checked else '⬜'} 매매선택", callback_data=f"acc_{menu_num}_trading"),
+        ],
+    ]
     row = []
     for acc in all_accounts:
         check = "✅" if acc in g_selected_accounts else "⬜"
@@ -2854,6 +2864,24 @@ def callback_get(update, context) :
         g_selected_accounts.clear()
         if not all_checked:
             g_selected_accounts.extend(all_accounts)
+        show_account_selection_keyboard(query, menu_num)
+
+    elif command.startswith("acc_") and command.endswith("_invest"):
+        # 투자 계좌 일괄 선택/해제: callback_data = "acc_{menu_num}_invest"
+        menu_num = command.split("_")[1]
+        invest_checked = len(g_selected_accounts) == len(INVEST_ACCOUNTS) and all(a in g_selected_accounts for a in INVEST_ACCOUNTS)
+        g_selected_accounts.clear()
+        if not invest_checked:
+            g_selected_accounts.extend(INVEST_ACCOUNTS)
+        show_account_selection_keyboard(query, menu_num)
+
+    elif command.startswith("acc_") and command.endswith("_trading"):
+        # 매매 계좌 일괄 선택/해제: callback_data = "acc_{menu_num}_trading"
+        menu_num = command.split("_")[1]
+        trading_checked = len(g_selected_accounts) == len(TRADING_ACCOUNTS) and all(a in g_selected_accounts for a in TRADING_ACCOUNTS)
+        g_selected_accounts.clear()
+        if not trading_checked:
+            g_selected_accounts.extend(TRADING_ACCOUNTS)
         show_account_selection_keyboard(query, menu_num)
 
     elif command.startswith("acc_") and "_t_" in command:
