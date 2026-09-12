@@ -222,6 +222,9 @@ g_hchg_nick = ""    # 처리 계좌 닉네임
 g_hchg_code = ""    # 매도 대상 보유종목코드
 g_hchg_name = ""    # 매도 대상 보유종목명
 
+# 시장관리(MKTM) → 선택 시장레벨 공유 상태
+g_mktm_level = ""   # "1":시장상승, "2":시장하락, "3":시장패턴
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 INVEST_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong']  # 선택 가능 계좌 목록
@@ -441,7 +444,7 @@ def get_command(update, context) :
                                  "전체예약", "예약주문", "예약정정", "예약취소", 
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "매수손실금액", "피보나치매도", "코스피", "코스닥"], callback_header="menu")
+                                 "반등매도", "시장관리", "코스피", "코스닥"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
     
@@ -1111,6 +1114,7 @@ def callback_get(update, context) :
     global g_rsv_corr_code, g_rsv_corr_name, g_rsv_corr_dvsn
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
     global g_hchg_nick, g_hchg_code, g_hchg_name
+    global g_mktm_level
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -3509,6 +3513,18 @@ def callback_get(update, context) :
             for t in threads_hc:
                 t.join()
             return
+        elif menu_num == "MKTM":
+            # 시장관리 — 시장레벨(상승/하락/패턴) 선택 버튼 표시
+            menuNum = "0"
+            mktm_buttons = [
+                InlineKeyboardButton("시장상승", callback_data="mktm_lv:1"),
+                InlineKeyboardButton("시장하락", callback_data="mktm_lv:2"),
+                InlineKeyboardButton("시장패턴", callback_data="mktm_lv:3"),
+            ]
+            query.edit_message_text(
+                text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
+                reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
+            )
         else:
             query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
 
@@ -4491,14 +4507,7 @@ def callback_get(update, context) :
             text=f"[{g_kk_name}({g_kk_code})] {g_kk_field} 값을 입력하세요. (숫자만 입력)"
         )
 
-    elif command == "매수손실금액":
-        menuNum = "91"
-
-        context.bot.edit_message_text(text="종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.",
-                                        chat_id=query.message.chat_id,
-                                        message_id=query.message.message_id)
-
-    elif command == "피보나치매도":
+    elif command == "반등매도":
         try:
             ac_fb = account(arguments[1])
             c_fb = stock_balance(ac_fb['access_token'], ac_fb['app_key'], ac_fb['app_secret'], ac_fb['acct_no'], "")
@@ -4518,7 +4527,7 @@ def callback_get(update, context) :
             else:
                 query.edit_message_text(text="보유종목이 없습니다.")
         except Exception as e:
-            query.edit_message_text(text=f"[피보나치매도] 오류: {str(e)}")
+            query.edit_message_text(text=f"[반등매도] 오류: {str(e)}")
 
     elif command.startswith("fibo_sell_"):
         fb_code = command[len("fibo_sell_"):]
@@ -4721,6 +4730,22 @@ def callback_get(update, context) :
         for t in threads_fo:
             t.join()
 
+    elif command == "시장관리":
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "MKTM")
+
+    elif command.startswith("mktm_lv:"):
+        # 시장관리 — 시장레벨 버튼 선택 → 매매금액 입력 프롬프트
+        mktm_level = command.split(":", 1)[1]
+        level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
+        g_mktm_level = mktm_level
+        menuNum = "MKTM"
+        selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
+        query.edit_message_text(
+            text=(f"[선택계좌: {selected_str}]\n"
+                  f"[{level_label}] 매매금액(기본20,000,000원:0)을 입력하세요.")
+        )
+
     elif data_selected.startswith('tp:'):
         # kis_trading_set.py 에서 전송한 종목 교체 고려 대상 이탈가(stop_price), 목표가(target_price), 최종이탈가(exit_price), 매도비율(trail_plan) 입력 처리
         parts = data_selected.split(':')
@@ -4837,6 +4862,7 @@ def echo(update, context):
     global g_rsv_corr_code, g_rsv_corr_name, g_rsv_corr_dvsn
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
     global g_hchg_nick, g_hchg_code, g_hchg_name
+    global g_mktm_level
 
     # 관심종목 가격 직접입력 대기 처리
     pending = _pending_register.get(user_id)
@@ -6067,6 +6093,102 @@ def echo(update, context):
         threading.Thread(target=process_hchg).start()
         return
 
+    if menuNum == 'MKTM':
+        # 입력: 매매금액(기본20,000,000원:0)
+        mktm_level = g_mktm_level
+        level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
+        if mktm_level not in ("1", "2", "3"):
+            initMenuNum()
+            context.bot.send_message(chat_id=user_id, text="선택된 시장레벨이 없습니다. 다시 시도하세요.")
+            return
+
+        mktm_text = user_text.strip().replace(',', '')
+        if not mktm_text.isdecimal():
+            context.bot.send_message(chat_id=user_id, text=f"[{level_label}] 매매금액(기본20,000,000원:0) 형식이 올바르지 않습니다.")
+            return  # menuNum 유지 → 재입력 가능
+
+        total_asset_mktm = 20_000_000 if mktm_text == '0' else int(mktm_text)
+        risk_rate_mktm = 5 if mktm_level == "1" else 2.5
+        today_mktm = datetime.now().strftime("%Y%m%d")
+
+        initMenuNum()
+
+        target_nicks_mktm = g_selected_accounts[:] if g_selected_accounts else [None]
+
+        def process_nick_mktm(nick, t_acct_no):
+            t_nick_label = nick if nick else arguments[1]
+            try:
+                # 시장비율 조회 → 손절금액 산정
+                market_ratio_mktm = 0.0
+                with get_conn().cursor() as cur_mr_mktm:
+                    cur_mr_mktm.execute(
+                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        (str(t_acct_no),)
+                    )
+                    row_mr_mktm = cur_mr_mktm.fetchone()
+                    if row_mr_mktm and row_mr_mktm[0] is not None:
+                        market_ratio_mktm = float(row_mr_mktm[0])
+
+                # 계좌손절금액
+                loss_amt_mktm = max(50_000, min(250_000, 50_000 + (market_ratio_mktm / 100) * 200_000))
+                # 계좌리스크
+                risk_sum_mktm = total_asset_mktm * risk_rate_mktm * 0.01
+                # 계좌종목갯수 
+                item_number_mktm = max(1, int(round(risk_sum_mktm / loss_amt_mktm)))
+                asset_risk_num_mktm = int(mktm_level + today_mktm)
+
+                conn_mktm = get_conn()
+                with conn_mktm.cursor() as cur_mktm:
+                    # 최신값 생성 전, 기존 적용종료일(99991231) 대상을 현재일자로 먼저 마감
+                    cur_mktm.execute(
+                        """UPDATE public."stockMarketMng_stock_market_mng"
+                           SET aply_end_dt = %s, mod_dt = %s
+                           WHERE acct_no = %s AND aply_end_dt = '99991231'""",
+                        (today_mktm, datetime.now(), str(t_acct_no))
+                    )
+                    # 최신값 생성
+                    cur_mktm.execute(
+                        """INSERT INTO public."stockMarketMng_stock_market_mng"
+                           (asset_risk_num, acct_no, market_level_num, total_asset, risk_rate, risk_sum, item_number, aply_start_dt, aply_end_dt, crt_dt, mod_dt)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (asset_risk_num_mktm, str(t_acct_no), mktm_level, total_asset_mktm, risk_rate_mktm,
+                         risk_sum_mktm, item_number_mktm, today_mktm, '99991231', datetime.now(), datetime.now())
+                    )
+                conn_mktm.commit()
+
+                context.bot.send_message(
+                    chat_id=user_id,
+                    text=(f"-{t_nick_label}-[{level_label}] 매매금액:{format(total_asset_mktm, ',d')}원 | "
+                          f"리스크:{risk_rate_mktm}% | 리스크금액:{format(int(risk_sum_mktm), ',d')}원 | "
+                          f"시장비율:{market_ratio_mktm:.0f}% | 손절금액:{format(int(loss_amt_mktm), ',d')}원 | "
+                          f"종목갯수:{format(item_number_mktm, ',d')}개 처리 완료")
+                )
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{level_label}] 처리 오류: {str(e)}")
+
+        threads_mktm = []
+        for nick in target_nicks_mktm:
+            if nick is not None:
+                try:
+                    ac_mktm = account(nick)
+                except Exception as e:
+                    context.bot.send_message(chat_id=user_id, text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                    continue
+                t_acct_mktm = ac_mktm['acct_no']
+            else:
+                try:
+                    ac_mktm_def = account(arguments[1])
+                except Exception as e:
+                    context.bot.send_message(chat_id=user_id, text=f"계좌조회 오류: {str(e)}")
+                    continue
+                t_acct_mktm = ac_mktm_def['acct_no']
+            t = threading.Thread(target=process_nick_mktm, args=(nick, t_acct_mktm))
+            threads_mktm.append(t)
+            t.start()
+        for t in threads_mktm:
+            t.join()
+        return
+
     if menuNum == '61S':
         initMenuNum()
         rs_code = g_rsv_sell_code
@@ -6951,64 +7073,6 @@ def echo(update, context):
                     button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail73")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
-
-        elif menuNum == '91':
-            initMenuNum()
-            commandBot = user_text.split(sep=',', maxsplit=2)
-            if (len(commandBot) < 3
-                    or not commandBot[1].strip().isdecimal()
-                    or not commandBot[2].strip().isdecimal()):
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(현재가:0), 이탈가(저가:0) 미존재 또는 부적합")
-            else:
-                buy_price  = int(stck_prpr) if commandBot[1].strip() == '0' else int(commandBot[1].strip())
-                buy_price = round_to_valid_price(buy_price, get_tick_size(buy_price))
-                loss_price = int(stck_lwpr) if commandBot[2].strip() == '0' else int(commandBot[2].strip())
-                loss_price = round_to_valid_price(loss_price, get_tick_size(loss_price))
-                buy_amt = int(suggest_buy_amt)   # 매수금액 제안 (stock_info_str 기준)
-                item_loss_sum = int(_suggest_loss)     # 손절금액 제안 (stock_info_str 기준)
-
-                if buy_price <= loss_price:
-                    context.bot.send_message(chat_id=user_id, text="[" + company + "] 매수가(" + format(buy_price, ',d') + ")가 이탈가(" + format(loss_price, ',d') + ") 이하입니다.")
-                else:
-                    loss_rate = round((100 - (loss_price / buy_price) * 100) * -1, 2)
-
-                    # ① 손절금액 기준
-                    loss_buy_qty = int(round(item_loss_sum / (buy_price - loss_price)))
-                    loss_buy_amt = buy_price * loss_buy_qty
-
-                    # ② 매수금액 기준
-                    amt_buy_qty = int(round(buy_amt / buy_price)) if buy_amt > 0 else 0
-                    amt_buy_amt = buy_price * amt_buy_qty
-                    amt_item_loss = (buy_price - loss_price) * amt_buy_qty
-
-                    # 매수 가능(현금) 조회
-                    b = inquire_psbl_order(access_token, app_key, app_secret, acct_no)
-                    print("매수 가능(현금) : " + format(int(b), ',d'))
-
-                    shortage_str1 = "손절금액 기준: "
-                    shortage_str2 = "매수금액 기준: "
-                    if int(b) < loss_buy_amt:
-                        shortage_str1 += format(loss_buy_amt - int(b), ',d') + "원 부족\n"
-                    else:
-                        shortage_str1 += "\n"
-                    if amt_buy_amt > 0 and int(b) < amt_buy_amt:
-                        shortage_str2 += format(amt_buy_amt - int(b), ',d') + "원 부족\n"
-                    else:
-                        shortage_str2 += "\n"
-
-                    preview_text = (
-                        "[" + company + "(<code>" + code + "</code>)]\n"
-                        "매수가: " + format(buy_price, ',d') + "원 | 이탈가: " + format(loss_price, ',d') + "원 | 손절율: " + str(loss_rate) + "%"
-                        + stock_info_str + "\n"
-                        "─────────────────\n"
-                        + shortage_str1 +
-                        "  매수금액: " + format(loss_buy_amt, ',d') + "원 | 매수량: " + format(loss_buy_qty, ',d') + "주 | 손실금액: " + format(item_loss_sum, ',d') + "원\n"
-                        "─────────────────\n"
-                        + shortage_str2 +
-                        "  매수금액: " + format(amt_buy_amt, ',d') + "원 | 매수량: " + format(amt_buy_qty, ',d') + "주 | 손실금액: " + format(amt_item_loss, ',d') + "원"
-                    )
-                    context.bot.send_message(chat_id=user_id, text=preview_text, parse_mode='HTML')
-
 
 # 텔레그램봇 응답 처리
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))

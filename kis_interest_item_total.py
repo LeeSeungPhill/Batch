@@ -267,7 +267,6 @@ def compute_market_ratio(
             score -= weight
     return max(0, min(100, 50 + score))
 
-
 def fetch_market_state(conn, asset_num, acct_no):
     """현재 DB에 저장된 6개 시간프레임 신호 조회"""
     cur = conn.cursor()
@@ -284,161 +283,6 @@ def fetch_market_state(conn, asset_num, acct_no):
          'kosdak_short','kosdak_mid','kosdak_long'),
         row if row else (None,) * 6
     ))
-
-# 자산정보 및 시장레벨정보 처리
-def fund_marketLevel_proc(access_token, app_key, app_secret, acct_no, conn):
-    # 계좌잔고 조회
-    b = stock_balance(access_token, app_key, app_secret, acct_no, "all")
-
-    u_tot_evlu_amt = 0
-    u_dnca_tot_amt = 0
-    u_nass_amt = 0
-    u_prvs_rcdl_excc_amt = 0
-    u_scts_evlu_amt = 0
-    u_asst_icdc_amt = 0
-
-    for i, name in enumerate(b.index):
-        u_tot_evlu_amt = int(b['tot_evlu_amt'][i])
-        u_dnca_tot_amt = int(b['dnca_tot_amt'][i])
-        u_nass_amt = int(b['nass_amt'][i])
-        u_prvs_rcdl_excc_amt = int(b['prvs_rcdl_excc_amt'][i])
-        u_scts_evlu_amt = int(b['scts_evlu_amt'][i])
-        u_asst_icdc_amt = int(b['asst_icdc_amt'][i])
-
-    # 자산정보 조회
-    cur100 = conn.cursor()
-    cur100.execute("""
-        SELECT asset_num, cash_rate, tot_evlu_amt, prvs_rcdl_excc_amt
-        FROM "stockFundMng_stock_fund_mng"
-        WHERE acct_no = %s
-    """, (str(acct_no),))
-    result_one00 = cur100.fetchall()
-    cur100.close()
-
-    asset_num = 0 
-
-    for i in result_one00:
-        asset_num = i[0]
-
-    # 자산정보 변경
-    cur200 = conn.cursor()
-    update_query200 = "update \"stockFundMng_stock_fund_mng\" set tot_evlu_amt = %s, dnca_tot_amt = %s, prvs_rcdl_excc_amt = %s, nass_amt = %s, scts_evlu_amt = %s, asset_icdc_amt = %s, last_chg_date = %s where asset_num = %s and acct_no = %s"
-    # update 인자값 설정
-    record_to_update200 = ([u_tot_evlu_amt, u_dnca_tot_amt, u_prvs_rcdl_excc_amt, u_nass_amt, u_scts_evlu_amt, u_asst_icdc_amt, datetime.now(), asset_num, acct_no])
-    # DB 연결된 커서의 쿼리 수행
-    cur200.execute(update_query200, record_to_update200)
-    conn.commit()
-    cur200.close()
-
-    # 시장레벨정보 조회
-    cur300 = conn.cursor()
-    cur300.execute("""
-        SELECT asset_risk_num, market_level_num
-        FROM "stockMarketMng_stock_market_mng"
-        WHERE acct_no = %s AND aply_end_dt = '99991231'
-    """, (str(acct_no),))
-    result_one01 = cur300.fetchall()
-    cur300.close()
-
-    asset_risk_num = 0
-    n_asset_sum = 0
-    n_risk_rate = 0
-    n_stock_num = 0
-
-    for i in result_one01:
-
-        asset_risk_num = i[0]
-        # print("자산리스크번호 : " + str(asset_risk_num))   
-        if i[1] == "1":   # 하락 지속 후, 기술적 반등
-            n_asset_sum = u_prvs_rcdl_excc_amt * 30 * 0.01
-            if n_asset_sum < 10000000:
-                n_asset_sum = 10000000
-                n_risk_rate = 2
-                n_stock_num = 2
-            elif n_asset_sum > 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 2
-                n_stock_num = 4
-            else:
-                n_risk_rate = 1.8
-                n_stock_num = 3
-        elif i[1] == "2": # 단기 추세 전환 후, 기술적 반등
-            n_asset_sum = u_prvs_rcdl_excc_amt * 30 * 0.01
-            if n_asset_sum < 20000000:
-                n_asset_sum = 20000000
-                n_risk_rate = 3
-                n_stock_num = 4
-            elif n_asset_sum > 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 4
-                n_stock_num = 6
-            else:
-                n_risk_rate = 3.5
-                n_stock_num = 5
-        elif i[1] == "3": # 패턴내에서 기술적 반등
-            n_asset_sum = u_prvs_rcdl_excc_amt * 50 * 0.01
-            if n_asset_sum < 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 4
-                n_stock_num = 6
-            elif n_asset_sum > 50000000:
-                n_asset_sum = 50000000
-                n_risk_rate = 4
-                n_stock_num = 8
-            else:
-                n_risk_rate = 2.8
-                n_stock_num = 5
-        elif i[1] == "4": # 일봉상 추세 전환 후, 눌림구간에서 반등
-            n_asset_sum = u_prvs_rcdl_excc_amt * 70 * 0.01
-            if n_asset_sum < 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 5.5
-                n_stock_num = 8
-            elif n_asset_sum > 70000000:
-                n_asset_sum = 70000000
-                n_risk_rate = 3.5
-                n_stock_num = 10
-            else:
-                n_risk_rate = 5
-                n_stock_num = 10
-        elif i[1] == "5": # 상승 지속 후, 패턴내에서 기술적 반등
-            n_asset_sum = u_prvs_rcdl_excc_amt * 50 * 0.01
-            if n_asset_sum < 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 4
-                n_stock_num = 6
-            elif n_asset_sum > 50000000:
-                n_asset_sum = 50000000
-                n_risk_rate = 4
-                n_stock_num = 8
-            else:
-                n_risk_rate = 2.8
-                n_stock_num = 5
-        else:
-            n_asset_sum = u_prvs_rcdl_excc_amt * 30 * 0.01
-            if n_asset_sum < 10000000:
-                n_asset_sum = 10000000
-                n_risk_rate = 2
-                n_stock_num = 2
-            elif n_asset_sum > 30000000:
-                n_asset_sum = 30000000
-                n_risk_rate = 2
-                n_stock_num = 4
-            else:
-                n_risk_rate = 1.8
-                n_stock_num = 3
-
-    n_risk_sum = n_asset_sum * n_risk_rate * 0.01
-
-    # 시장레벨정보 변경
-    cur400 = conn.cursor()
-    update_query400 = "update \"stockMarketMng_stock_market_mng\" set total_asset = %s, risk_rate = %s, risk_sum = %s, item_number = %s where asset_risk_num = %s and acct_no = %s and aply_end_dt = '99991231'"
-    # update 인자값 설정
-    record_to_update400 = ([n_asset_sum, n_risk_rate, n_risk_sum, n_stock_num, asset_risk_num, acct_no])
-    # DB 연결된 커서의 쿼리 수행
-    cur400.execute(update_query400, record_to_update400)
-    conn.commit()
-    cur400.close()
 
 def fundTrail_proc(acct_no, conn):
     # 관심종목 코스피, 코스닥 미존재시 생성
@@ -624,7 +468,7 @@ def fundTrail_proc(acct_no, conn):
 
                 # 자산정보 이력 생성
                 cur601 = conn.cursor()
-                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query001 = "insert into stockfundmnghist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio, kospi_short, kospi_mid, kospi_long, kosdak_short, kosdak_mid, kosdak_long from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert001 = ([acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
@@ -667,9 +511,6 @@ def process_account(nick):
         updater = Updater(token=token, use_context=True)
         bot = updater.bot
 
-        # 자산정보 및 시장레벨정보 처리
-        # fund_marketLevel_proc(access_token, app_key, app_secret, acct_no)
-
         # 관심정보 및 종목손실금액 조회
         cur03 = conn_acct.cursor()
         cur03.execute("""
@@ -698,7 +539,6 @@ def process_account(nick):
             trail_signal_name = ""
             a = ""
             b = ""
-
 
             if len(i[0]) == 6:
 
@@ -840,19 +680,6 @@ def process_account(nick):
                         continue
 
                 b = inquire_daily_indexchartprice(access_token, app_key, app_secret, i[0], today)
-                # print("현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f'))  # 현재포인트
-                # print("최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f'))  # 최고포인트
-                # print("최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f'))  # 최저포인트
-                # print("누적거래량 : " + format(int(b['acml_vol']), ',d'))  # 누적거래량
-
-                # 시장레벨정보 조회
-                cur05 = conn_acct.cursor()
-                cur05.execute("""
-                    SELECT asset_risk_num, market_level_num FROM "stockMarketMng_stock_market_mng"
-                    WHERE acct_no = %s AND aply_end_dt = '99991231'
-                """, (str(acct_no),))
-                result_five = cur05.fetchall()
-                cur05.close()
 
                 signals = []
                 cur_prpr = math.ceil(float(b['bstp_nmix_prpr']))
@@ -861,54 +688,22 @@ def process_account(nick):
                     continue
 
                 if cur_prpr > i[2]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        for k in result_five:
-                            if int(k[1]) < 2:
-                                mln, rr, inum = "2", 3, 4
-                    signals.append({'code': '01', 'name': format(int(i[2]), ',d') + " {돌파포인트 돌파}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '01', 'name': format(int(i[2]), ',d') + " {돌파포인트 돌파}"})
 
                 if cur_prpr < i[3]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        for k in result_five:
-                            if int(k[1]) < 3:
-                                mln, rr, inum = "1", 2, 2
-                    signals.append({'code': '02', 'name': format(int(i[3]), ',d') + " {이탈포인트 이탈}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '02', 'name': format(int(i[3]), ',d') + " {이탈포인트 이탈}"})
 
                 if cur_prpr > i[4]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        for k in result_five:
-                            if int(k[1]) < 4:
-                                mln, rr, inum = "4", 5.5, 8
-                    signals.append({'code': '03', 'name': format(int(i[4]), ',d') + " {저항포인트 돌파}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '03', 'name': format(int(i[4]), ',d') + " {저항포인트 돌파}"})
 
                 if cur_prpr < i[5]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        for k in result_five:
-                            if int(k[1]) < 5:
-                                mln, rr, inum = "1", 2, 2
-                    signals.append({'code': '04', 'name': format(int(i[5]), ',d') + " {지지포인트 이탈}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '04', 'name': format(int(i[5]), ',d') + " {지지포인트 이탈}"})
 
                 if cur_prpr > i[6]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        mln, rr, inum = "5", 4, 6
-                    signals.append({'code': '05', 'name': format(int(i[6]), ',d') + " {추세상단포인트 돌파}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '05', 'name': format(int(i[6]), ',d') + " {추세상단포인트 돌파}"})
 
                 if cur_prpr < i[7]:
-                    mln, rr, inum = "", 0, 0
-                    if i[0] == "0001" and len(result_five) > 0:
-                        mln, rr, inum = "1", 2, 2
-                    signals.append({'code': '06', 'name': format(int(i[7]), ',d') + " {추세하단포인트 이탈}",
-                                    'market_level_num': mln, 'risk_rate': rr, 'item_number': inum})
+                    signals.append({'code': '06', 'name': format(int(i[7]), ',d') + " {추세하단포인트 이탈}"})
 
                 breakout_signals  = [s for s in signals if s['code'] in ('01', '03', '05')]
                 breakdown_signals = [s for s in signals if s['code'] in ('02', '04', '06')]
@@ -920,9 +715,6 @@ def process_account(nick):
                 for sig in signals:
                     trail_signal_code = sig['code']
                     trail_signal_name = sig['name']
-                    market_level_num  = sig['market_level_num']
-                    risk_rate         = sig['risk_rate']
-                    item_number       = sig['item_number']
 
                     # 오늘 동일 신호코드가 이미 기록된 경우 스킵
                     cur04 = conn_acct.cursor()
