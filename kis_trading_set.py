@@ -597,9 +597,8 @@ if _is_business:
                     f"미생성 : {skipped_count}건)"
                 )
                 if replace_candidates:
-                    message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
+                    message += "\n\n[종목교체 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
 
-                # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산 : 트레이딩현금 = LEAST((20,000,000 - filtered_scts_evlu), u_prvs_rcdl_excc_amt)
                 try:
                     b_all = stock_balance(access_token, app_key, app_secret, acct_no, "all")
                     u_prvs_rcdl_excc_amt = 0
@@ -700,7 +699,7 @@ if _is_business:
                     message += (
                         "\n\n" + market_mng_str +
                         f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 현금: {format(trading_cash, ',d')}원\n"
-                        f"시장비율: {market_ratio_v:.0f}%({format(filtered_tot_evlu * market_ratio_v / 100, ',d')}원), "
+                        f"시장비율: {market_ratio_v:.0f}%({format(int(filtered_tot_evlu * market_ratio_v / 100), ',d')}원), "
                         f"현재비율: {current_ratio_v:.1f}%({format(filtered_scts_evlu, ',d')}원)\n"
                         f" → 트레이딩 현금전환: {format(convert_cash, ',d')}원"
                     )
@@ -711,9 +710,9 @@ if _is_business:
                             int(rc['current_price']) * c_qty_map.get(rc['code'], 0)
                             for rc in replace_candidates
                         )
-                        cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
+                        cash_after_sell = trading_cash + replace_sell_amt
                         message += (
-                            f"\n* 교체대상 매도금액: {format(replace_sell_amt, ',d')}원 → "
+                            f"\n* 종목교체 매도금액: {format(replace_sell_amt, ',d')}원 → "
                             f"합산현금: {format(cash_after_sell, ',d')}원"
                         )
                 except Exception as e_summary:
@@ -735,7 +734,7 @@ if _is_business:
                     ]
                     bot.send_message(
                         chat_id=chat_id,
-                        text="[종목 교체 고려 대상] 종목을 선택하세요:",
+                        text="[종목교체 대상] 종목을 선택하세요:",
                         reply_markup=InlineKeyboardMarkup(tp_buttons)
                     )
 
