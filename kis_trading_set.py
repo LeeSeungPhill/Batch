@@ -671,13 +671,16 @@ if _is_business:
                         if len(mng_aply_start_dt_str) == 8:
                             mng_aply_start_dt_str = f"{mng_aply_start_dt_str[:4]}-{mng_aply_start_dt_str[4:6]}-{mng_aply_start_dt_str[6:8]}"
 
+                        # 마이너스인 경우 괄호로 표시
+                        available_item_number_str = f"({abs(available_item_number)})" if available_item_number < 0 else f"{available_item_number}"
+                        remaining_risk_str = f"({format(abs(remaining_risk), ',d')})" if remaining_risk < 0 else format(remaining_risk, ',d')
+
                         market_mng_str = (
-                            f"* 매매금액:{format(mng_total_asset, ',d')}원, "
-                            f"리스크금액:{format(mng_risk_sum, ',d')}원({mng_risk_rate:.1f}%), "
-                            f"허용종목:{mng_item_number}개, "
-                            f"{mng_level_label}({mng_aply_start_dt_str})\n"
-                            f"* 진행가능 종목수:{available_item_number}개, "
-                            f"잔여리스크 금액:{format(remaining_risk, ',d')}원\n\n"
+                            f"* {mng_level_label}({mng_aply_start_dt_str}), 매매금액: {format(mng_total_asset, ',d')}원\n"
+                            f"* 허용종목: {mng_item_number}개, "
+                            f"리스크금액: {format(mng_risk_sum, ',d')}원({mng_risk_rate:.1f}%)\n"
+                            f"* 추가종목: {available_item_number_str}개, "
+                            f"잔여리스크: {remaining_risk_str}원\n\n"
                         )
 
                     filtered_scts_evlu = sum(
@@ -694,13 +697,13 @@ if _is_business:
                         current_ratio_v = 100 - (trading_cash / filtered_tot_evlu * 100)
                         convert_cash = int(filtered_tot_evlu * (current_ratio_v - market_ratio_v) / 100) if current_ratio_v - market_ratio_v > 0 else 0
                         mr_str = (
-                            f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
-                            f"트레이딩 현금전환:{format(convert_cash, ',d')}원"
+                            f", 시장비율: {market_ratio_v:.0f}%, 현재비율: {current_ratio_v:.1f}%, "
+                            f"트레이딩 현금전환: {format(convert_cash, ',d')}원"
                         )
                     message += (
                         "\n\n" + market_mng_str +
-                        f"* 총 트레이딩 평가:{format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고:{format(filtered_scts_evlu, ',d')}원, "
-                        f"트레이딩 현금:{format(trading_cash, ',d')}원{mr_str}"
+                        f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고: {format(filtered_scts_evlu, ',d')}원, "
+                        f"트레이딩 현금: {format(trading_cash, ',d')}원{mr_str}"
                     )
 
                     if replace_candidates and filtered_tot_evlu > 0:
@@ -711,8 +714,8 @@ if _is_business:
                         )
                         cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
                         message += (
-                            f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
-                            f"합산현금:{format(cash_after_sell, ',d')}원"
+                            f"\n* 교체대상 매도금액: {format(replace_sell_amt, ',d')}원 → "
+                            f"합산현금: {format(cash_after_sell, ',d')}원"
                         )
                 except Exception as e_summary:
                     print(f"[{nick}] 요약 계산 오류: {e_summary}")
