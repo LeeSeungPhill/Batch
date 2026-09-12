@@ -624,6 +624,62 @@ if _is_business:
                         if row_mrv:
                             market_ratio_v = float(row_mrv[0])
 
+                    # 시장관리 정보(매매금액/리스크금액/허용종목/시장흐름) 및 진행가능 종목수/잔여리스크 금액
+                    market_mng_str = ""
+                    with conn.cursor() as cur_mng:
+                        cur_mng.execute(
+                            """SELECT total_asset, risk_sum, risk_rate, item_number, market_level_num, aply_start_dt
+                            FROM public."stockMarketMng_stock_market_mng"
+                            WHERE acct_no = %s AND aply_end_dt = '99991231'""",
+                            (str(acct_no),)
+                        )
+                        row_mng = cur_mng.fetchone()
+
+                    if row_mng:
+                        mng_total_asset, mng_risk_sum, mng_risk_rate, mng_item_number, mng_market_level_num, mng_aply_start_dt = row_mng
+                        mng_total_asset = int(mng_total_asset or 0)
+                        mng_risk_sum = int(mng_risk_sum or 0)
+                        mng_risk_rate = float(mng_risk_rate or 0)
+                        mng_item_number = int(mng_item_number or 0)
+                        mng_level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(str(mng_market_level_num), str(mng_market_level_num))
+
+                        # 진행가능 종목수 = 허용종목 - 진행중(trail_tp '1','2') 종목수
+                        with conn.cursor() as cur_prog:
+                            cur_prog.execute(
+                                """SELECT DISTINCT code FROM trading_trail
+                                WHERE acct_no = %s AND trail_day = %s AND trail_tp IN ('1','2')""",
+                                (str(acct_no), trail_day)
+                            )
+                            progressing_codes = [row[0] for row in cur_prog.fetchall()]
+                        available_item_number = mng_item_number - len(progressing_codes)
+
+                        # 잔여리스크 금액 = 리스크금액 - 손절금액(진행중 종목 합산)
+                        loss_amt_sum = 0
+                        if progressing_codes:
+                            with conn.cursor() as cur_loss:
+                                cur_loss.execute(
+                                    """SELECT COALESCE(SUM((purchase_price - end_loss_price) * purchase_amount), 0)
+                                    FROM public."stockBalance_stock_balance"
+                                    WHERE acct_no = %s AND proc_yn = 'Y' AND purchase_amount > 0 AND end_loss_price > 0
+                                    AND code = ANY(%s)""",
+                                    (str(acct_no), progressing_codes)
+                                )
+                                loss_amt_sum = int(cur_loss.fetchone()[0] or 0)
+                        remaining_risk = mng_risk_sum - loss_amt_sum
+
+                        mng_aply_start_dt_str = str(mng_aply_start_dt)
+                        if len(mng_aply_start_dt_str) == 8:
+                            mng_aply_start_dt_str = f"{mng_aply_start_dt_str[:4]}-{mng_aply_start_dt_str[4:6]}-{mng_aply_start_dt_str[6:8]}"
+
+                        market_mng_str = (
+                            f"* 매매금액:{format(mng_total_asset, ',d')}원, "
+                            f"리스크금액:{format(mng_risk_sum, ',d')}원({mng_risk_rate:.1f}%), "
+                            f"허용종목:{mng_item_number}개, "
+                            f"{mng_level_label}({mng_aply_start_dt_str})\n"
+                            f"* 진행가능 종목수:{available_item_number}개, "
+                            f"잔여리스크 금액:{format(remaining_risk, ',d')}원\n\n"
+                        )
+
                     filtered_scts_evlu = sum(
                         int(c['evlu_amt'][i])
                         for i, _ in enumerate(c.index)
@@ -642,7 +698,8 @@ if _is_business:
                             f"트레이딩 현금전환:{format(convert_cash, ',d')}원"
                         )
                     message += (
-                        f"\n\n* 총 트레이딩 평가:{format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고:{format(filtered_scts_evlu, ',d')}원, "
+                        "\n\n" + market_mng_str +
+                        f"* 총 트레이딩 평가:{format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고:{format(filtered_scts_evlu, ',d')}원, "
                         f"트레이딩 현금:{format(trading_cash, ',d')}원{mr_str}"
                     )
 
