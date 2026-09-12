@@ -514,10 +514,10 @@ if _is_business:
                                     )
                                     if i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                         drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
-                                        reason = f"매수가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
+                                        reason = f"매수가: {int(i_basic):,}원 대비 {drop_pct}% 하락→현재가: {int(i_cur):,}원"
                                         plain = f"{drop_pct}% 하락"
                                     elif days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
-                                        reason = f"{days_since_buy}일전 매수 목표가:{int(i_target):,}원 미달성→현재가:{int(i_cur):,}원"
+                                        reason = f"{days_since_buy}일전 매수 목표가: {int(i_target):,}원 미달성→현재가: {int(i_cur):,}원"
                                         plain = f"{days_since_buy}일 소요"
                                 except Exception as e_dt:
                                     print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
@@ -542,10 +542,10 @@ if _is_business:
                             reason = None
                             if i_cur > 0:
                                 if i_exit > 0 and i_cur < i_exit:
-                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_exit):,}원 최종이탈가 하회"
                                 elif i_basic > 0 and i_cur < i_basic:
-                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_basic):,}원 매수가 하회"
                             if reason:
                                 replace_candidates.append({
@@ -567,10 +567,10 @@ if _is_business:
                             reason = None
                             if i_cur > 0:
                                 if i_exit > 0 and i_cur < i_exit:
-                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_exit):,}원 최종이탈가 하회"
                                 elif i_basic > 0 and i_cur < i_basic:
-                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_basic):,}원 매수가 하회"
                             if reason:
                                 replace_candidates.append({
@@ -696,14 +696,13 @@ if _is_business:
                     if market_ratio_v is not None and filtered_tot_evlu > 0:
                         current_ratio_v = 100 - (trading_cash / filtered_tot_evlu * 100)
                         convert_cash = int(filtered_tot_evlu * (current_ratio_v - market_ratio_v) / 100) if current_ratio_v - market_ratio_v > 0 else 0
-                        mr_str = (
-                            f", 시장비율: {market_ratio_v:.0f}%, 현재비율: {current_ratio_v:.1f}%, "
-                            f"트레이딩 현금전환: {format(convert_cash, ',d')}원"
-                        )
+                        
                     message += (
                         "\n\n" + market_mng_str +
-                        f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고: {format(filtered_scts_evlu, ',d')}원, "
-                        f"트레이딩 현금: {format(trading_cash, ',d')}원{mr_str}"
+                        f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 현금: {format(trading_cash, ',d')}원\n"
+                        f"시장비율: {market_ratio_v:.0f}%({format(filtered_tot_evlu * market_ratio_v / 100, ',d')}원), "
+                        f"현재비율: {current_ratio_v:.1f}%({format(filtered_scts_evlu, ',d')}원)\n"
+                        f" → 트레이딩 현금전환: {format(convert_cash, ',d')}원"
                     )
 
                     if replace_candidates and filtered_tot_evlu > 0:
