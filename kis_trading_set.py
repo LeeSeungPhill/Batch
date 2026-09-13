@@ -514,10 +514,10 @@ if _is_business:
                                     )
                                     if i_stop > 0 and i_cur > i_stop and i_basic > 0 and i_cur < i_basic * 0.95:
                                         drop_pct = round((i_basic - i_cur) / i_basic * 100, 1)
-                                        reason = f"매수가:{int(i_basic):,}원 대비 {drop_pct}% 하락→현재가:{int(i_cur):,}원"
+                                        reason = f"매수가: {int(i_basic):,}원 대비 {drop_pct}% 하락→현재가: {int(i_cur):,}원"
                                         plain = f"{drop_pct}% 하락"
                                     elif days_since_buy >= 3 and i_target > 0 and i_cur > 0 and i_cur < i_target:
-                                        reason = f"{days_since_buy}일전 매수 목표가:{int(i_target):,}원 미달성→현재가:{int(i_cur):,}원"
+                                        reason = f"{days_since_buy}일전 매수 목표가: {int(i_target):,}원 미달성→현재가: {int(i_cur):,}원"
                                         plain = f"{days_since_buy}일 소요"
                                 except Exception as e_dt:
                                     print(f"[{nick}] {i_code} 날짜 파싱 오류: {e_dt}")
@@ -542,10 +542,10 @@ if _is_business:
                             reason = None
                             if i_cur > 0:
                                 if i_exit > 0 and i_cur < i_exit:
-                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_exit):,}원 최종이탈가 하회"
                                 elif i_basic > 0 and i_cur < i_basic:
-                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_basic):,}원 매수가 하회"
                             if reason:
                                 replace_candidates.append({
@@ -567,10 +567,10 @@ if _is_business:
                             reason = None
                             if i_cur > 0:
                                 if i_exit > 0 and i_cur < i_exit:
-                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"최종이탈가({int(i_exit):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_exit):,}원 최종이탈가 하회"
                                 elif i_basic > 0 and i_cur < i_basic:
-                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가:{int(i_cur):,}원)"
+                                    reason = f"매수가({int(i_basic):,}원) 하회(현재가: {int(i_cur):,}원)"
                                     plain = f"{int(i_basic):,}원 매수가 하회"
                             if reason:
                                 replace_candidates.append({
@@ -597,9 +597,8 @@ if _is_business:
                     f"미생성 : {skipped_count}건)"
                 )
                 if replace_candidates:
-                    message += "\n\n[종목 교체 고려 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
+                    message += "\n\n[종목교체 대상]\n" + "\n".join(c['display'] for c in replace_candidates)
 
-                # i/h 제외 종목 요약 및 교체 고려 대상 매도 후 현금비율 계산 : 트레이딩현금 = LEAST((20,000,000 - filtered_scts_evlu), u_prvs_rcdl_excc_amt)
                 try:
                     b_all = stock_balance(access_token, app_key, app_secret, acct_no, "all")
                     u_prvs_rcdl_excc_amt = 0
@@ -624,6 +623,65 @@ if _is_business:
                         if row_mrv:
                             market_ratio_v = float(row_mrv[0])
 
+                    # 시장관리 정보(매매금액/리스크금액/허용종목/시장흐름) 및 진행가능 종목수/잔여리스크 금액
+                    market_mng_str = ""
+                    with conn.cursor() as cur_mng:
+                        cur_mng.execute(
+                            """SELECT total_asset, risk_sum, risk_rate, item_number, market_level_num, aply_start_dt
+                            FROM public."stockMarketMng_stock_market_mng"
+                            WHERE acct_no = %s AND aply_end_dt = '99991231'""",
+                            (str(acct_no),)
+                        )
+                        row_mng = cur_mng.fetchone()
+
+                    if row_mng:
+                        mng_total_asset, mng_risk_sum, mng_risk_rate, mng_item_number, mng_market_level_num, mng_aply_start_dt = row_mng
+                        mng_total_asset = int(mng_total_asset or 0)
+                        mng_risk_sum = int(mng_risk_sum or 0)
+                        mng_risk_rate = float(mng_risk_rate or 0)
+                        mng_item_number = int(mng_item_number or 0)
+                        mng_level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(str(mng_market_level_num), str(mng_market_level_num))
+
+                        # 진행가능 종목수 = 허용종목 - 진행중(trail_tp '1','2') 종목수
+                        with conn.cursor() as cur_prog:
+                            cur_prog.execute(
+                                """SELECT DISTINCT code FROM trading_trail
+                                WHERE acct_no = %s AND trail_day = %s AND trail_tp IN ('1','2')""",
+                                (str(acct_no), trail_day)
+                            )
+                            progressing_codes = [row[0] for row in cur_prog.fetchall()]
+                        available_item_number = mng_item_number - len(progressing_codes)
+
+                        # 잔여리스크 금액 = 리스크금액 - 손절금액(진행중 종목 합산)
+                        loss_amt_sum = 0
+                        if progressing_codes:
+                            with conn.cursor() as cur_loss:
+                                cur_loss.execute(
+                                    """SELECT COALESCE(SUM((purchase_price - end_loss_price) * purchase_amount), 0)
+                                    FROM public."stockBalance_stock_balance"
+                                    WHERE acct_no = %s AND proc_yn = 'Y' AND purchase_amount > 0 AND end_loss_price > 0
+                                    AND code = ANY(%s)""",
+                                    (str(acct_no), progressing_codes)
+                                )
+                                loss_amt_sum = int(cur_loss.fetchone()[0] or 0)
+                        remaining_risk = mng_risk_sum - loss_amt_sum
+
+                        mng_aply_start_dt_str = str(mng_aply_start_dt)
+                        if len(mng_aply_start_dt_str) == 8:
+                            mng_aply_start_dt_str = f"{mng_aply_start_dt_str[:4]}-{mng_aply_start_dt_str[4:6]}-{mng_aply_start_dt_str[6:8]}"
+
+                        # 마이너스인 경우 괄호로 표시
+                        available_item_number_str = f"({abs(available_item_number)})" if available_item_number < 0 else f"{available_item_number}"
+                        remaining_risk_str = f"({format(abs(remaining_risk), ',d')})" if remaining_risk < 0 else format(remaining_risk, ',d')
+
+                        market_mng_str = (
+                            f"* {mng_level_label}({mng_aply_start_dt_str}), 매매금액: {format(mng_total_asset, ',d')}원\n"
+                            f"* 허용종목: {mng_item_number}개, "
+                            f"리스크금액: {format(mng_risk_sum, ',d')}원({mng_risk_rate:.1f}%)\n"
+                            f"* 추가종목: {available_item_number_str}개, "
+                            f"잔여리스크: {remaining_risk_str}원\n\n"
+                        )
+
                     filtered_scts_evlu = sum(
                         int(c['evlu_amt'][i])
                         for i, _ in enumerate(c.index)
@@ -637,13 +695,13 @@ if _is_business:
                     if market_ratio_v is not None and filtered_tot_evlu > 0:
                         current_ratio_v = 100 - (trading_cash / filtered_tot_evlu * 100)
                         convert_cash = int(filtered_tot_evlu * (current_ratio_v - market_ratio_v) / 100) if current_ratio_v - market_ratio_v > 0 else 0
-                        mr_str = (
-                            f", 시장비율:{market_ratio_v:.0f}%, 현재비율:{current_ratio_v:.1f}%, "
-                            f"트레이딩 현금전환:{format(convert_cash, ',d')}원"
-                        )
+                        
                     message += (
-                        f"\n\n* 총 트레이딩 평가:{format(filtered_tot_evlu, ',d')}원, 트레이딩 잔고:{format(filtered_scts_evlu, ',d')}원, "
-                        f"트레이딩 현금:{format(trading_cash, ',d')}원{mr_str}"
+                        "\n\n" + market_mng_str +
+                        f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 현금: {format(trading_cash, ',d')}원\n"
+                        f"시장비율: {market_ratio_v:.0f}%({format(int(filtered_tot_evlu * market_ratio_v / 100), ',d')}원), "
+                        f"현재비율: {current_ratio_v:.1f}%({format(filtered_scts_evlu, ',d')}원)\n"
+                        f" → 트레이딩 현금전환: {format(convert_cash, ',d')}원"
                     )
 
                     if replace_candidates and filtered_tot_evlu > 0:
@@ -652,10 +710,10 @@ if _is_business:
                             int(rc['current_price']) * c_qty_map.get(rc['code'], 0)
                             for rc in replace_candidates
                         )
-                        cash_after_sell = u_prvs_rcdl_excc_amt + replace_sell_amt
+                        cash_after_sell = trading_cash + replace_sell_amt
                         message += (
-                            f"\n* 교체대상 매도금액:{format(replace_sell_amt, ',d')}원 → "
-                            f"합산현금:{format(cash_after_sell, ',d')}원"
+                            f"\n* 종목교체 매도금액: {format(replace_sell_amt, ',d')}원 → "
+                            f"합산현금: {format(cash_after_sell, ',d')}원"
                         )
                 except Exception as e_summary:
                     print(f"[{nick}] 요약 계산 오류: {e_summary}")
@@ -676,7 +734,7 @@ if _is_business:
                     ]
                     bot.send_message(
                         chat_id=chat_id,
-                        text="[종목 교체 고려 대상] 종목을 선택하세요:",
+                        text="[종목교체 대상] 종목을 선택하세요:",
                         reply_markup=InlineKeyboardMarkup(tp_buttons)
                     )
 

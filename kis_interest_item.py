@@ -530,7 +530,7 @@ def fundTrail_proc():
 
                 # 자산정보 생성
                 cur601 = conn.cursor()
-                insert_query001 = "insert into stockFundMngHist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
+                insert_query001 = "insert into stockfundmnghist(asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, last_chg_date, market_ratio) select asset_num, acct_no, cash_rate, tot_evlu_amt, cash_rate_amt, dnca_tot_amt, prvs_rcdl_excc_amt, nass_amt, scts_evlu_amt, asset_icdc_amt, sell_plan_amt, buy_plan_amt, now(), market_ratio from \"stockFundMng_stock_fund_mng\" where acct_no = %s and asset_num = %s"
                 # insert 인자값 설정
                 record_to_insert001 = ([acct_no, asset_num])
                 # DB 연결된 커서의 쿼리 수행
