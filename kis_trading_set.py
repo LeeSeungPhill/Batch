@@ -698,7 +698,7 @@ if _is_business:
                         
                     message += (
                         "\n\n" + market_mng_str +
-                        f"* 총 트레이딩 평가: {format(filtered_tot_evlu, ',d')}원, 현금: {format(trading_cash, ',d')}원\n"
+                        f"* 총 트레이딩: {format(filtered_tot_evlu, ',d')}원, 현금: {format(trading_cash, ',d')}원\n"
                         f"시장비율: {market_ratio_v:.0f}%({format(int(filtered_tot_evlu * market_ratio_v / 100), ',d')}원), "
                         f"현재비율: {current_ratio_v:.1f}%({format(filtered_scts_evlu, ',d')}원)\n"
                         f" → 트레이딩 현금전환: {format(convert_cash, ',d')}원"
