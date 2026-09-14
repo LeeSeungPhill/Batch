@@ -534,7 +534,7 @@ def inquire_price(access_token, app_key, app_secret, code):
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-                'FID_COND_MRKT_DIV_CODE': "J" if '0900' <= t < '1530' else "NX",  # J:KRX, NX:NXT, UN:통합
+                'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
                 'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
@@ -720,11 +720,6 @@ def order_cancel_proc(access_token, app_key, app_secret, acct_no, code, sell_buy
     
     return final_message   
 
-def get_excg_id():
-    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
-    t = datetime.now().strftime('%H%M')
-    return "KRX" if '0900' <= t < '1530' else "NXT"
-
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
 
@@ -740,7 +735,6 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "tr_id": tr_id,
                "custtype": "P"
     }
-    _excg = excg_id if excg_id is not None else get_excg_id()
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
@@ -748,7 +742,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": _excg         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -758,11 +752,6 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     URL = f"{URL_BASE}/{PATH}"
     res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
     ar = resp.APIResp(res)
-    # NXT 미상장 종목(APBK3026)이면 KRX로 자동 재시도
-    if not ar.isOK() and _excg == "NXT" and getattr(ar.getBody(), 'msg_cd', '') == "APBK3026":
-        params["EXCG_ID_DVSN_CD"] = "KRX"
-        res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
-        ar = resp.APIResp(res)
     if not ar.isOK():
         raise Exception(f"[{ar.getBody().msg_cd}] {ar.getBody().msg1}")
     return ar.getBody().output
@@ -821,7 +810,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
                "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
@@ -951,7 +940,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'N',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
                 'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
                 'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
                 'UNPR_DVSN': '01',              # 단가구분 : 01 기본값

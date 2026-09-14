@@ -152,7 +152,7 @@ def inquire_price(access_token, app_key, app_secret, code):
         "tr_id": "FHKST01010100"
     }
     params = {
-        'FID_COND_MRKT_DIV_CODE': "J" if '0900' <= t < '1530' else "NX",
+        'FID_COND_MRKT_DIV_CODE': "J",
         'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
