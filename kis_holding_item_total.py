@@ -255,7 +255,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N' ,            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
+                'AFHR_FLPR_YN': 'Y' ,            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
                 'FNCG_AMT_AUTO_RDPT_YN': 'N',
                 'FUND_STTL_ICLD_YN': 'N',
                 'INQR_DVSN': '01',
