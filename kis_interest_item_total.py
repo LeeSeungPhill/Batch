@@ -123,7 +123,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'N',            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
                 'FNCG_AMT_AUTO_RDPT_YN': 'N',
                 'FUND_STTL_ICLD_YN': 'N',
                 'INQR_DVSN': '01',

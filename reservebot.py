@@ -717,8 +717,13 @@ def order_cancel_proc(access_token, app_key, app_secret, acct_no, code, sell_buy
         result_msgs.append(msg)
 
     final_message = result_msgs if result_msgs else "success"
-    
-    return final_message   
+
+    return final_message
+
+# 애프터마켓(시간외단일가, 16:00~20:00) 여부
+def is_after_market_hours():
+    t = datetime.now().strftime('%H%M')
+    return '1600' <= t < '2000'
 
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
@@ -735,17 +740,19 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "tr_id": tr_id,
                "custtype": "P"
     }
+    after_market = is_after_market_hours()
+    final_ord_dvsn = "41" if after_market else ord_dvsn   # 41 : 시간외단일가(16:00~20:00)
     params = {
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "PDNO": stock_code,
-               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
+               "ORD_DVSN": final_ord_dvsn,      # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가, 41 : 시간외단일가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
                "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
-    # 스톱지정가일 때만 조건가격 추가
-    if ord_dvsn == "22":
+    # 스톱지정가일 때만 조건가격 추가 (애프터마켓 시간외단일가 적용 시 미해당)
+    if ord_dvsn == "22" and not after_market:
         params["CNDT_PRIC"] = str(cndt_price)
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
@@ -805,7 +812,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ACNT_PRDT_CD": "01",
                "KRX_FWDG_ORD_ORGNO": "06010",
                "ORGN_ODNO": order_no,
-               "ORD_DVSN": "00" if int(order_price) > 0 else "01",  # 지정가 : 00, 시장가 : 01
+               "ORD_DVSN": "41" if is_after_market_hours() else ("00" if int(order_price) > 0 else "01"),  # 지정가 : 00, 시장가 : 01, 시간외단일가 : 41
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
@@ -930,8 +937,6 @@ def order_reserve_complete(access_token, app_key, app_secret, reserve_strt_dt, r
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
    
-    t = datetime.now().strftime('%H%M')
-
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
@@ -940,7 +945,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'Y',            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
                 'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
                 'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
                 'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
