@@ -221,11 +221,6 @@ def account(nickname, conn):
         'chat_id': chat_id
     }
 
-def get_excg_id():
-    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
-    t = datetime.now().strftime('%H%M')
-    return "KRX" if '0900' <= t < '1530' else "NXT"
-
 # 주식현재가 시세
 def inquire_price(access_token, app_key, app_secret, code):
 
@@ -237,7 +232,7 @@ def inquire_price(access_token, app_key, app_secret, code):
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-            'FID_COND_MRKT_DIV_CODE': "J" if '0900' <= t < '1530' else "NX",  # J:KRX, NX:NXT, UN:통합
+            'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
             'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
@@ -260,7 +255,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'Y' ,            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
                 'FNCG_AMT_AUTO_RDPT_YN': 'N',
                 'FUND_STTL_ICLD_YN': 'N',
                 'INQR_DVSN': '01',
@@ -391,7 +386,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": ord_dvsn,
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     if ord_dvsn == "22":
         params["CNDT_PRIC"] = str(cndt_price)
@@ -617,8 +612,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no, conn):
     # 주문체결 처리
     order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balance_map)
 
-
-# 주문체결정보 처리 (NXT 시간대에서도 단독 호출 가능)
+# 주문체결정보 처리
 def order_complete_proc(access_token, app_key, app_secret, acct_no, conn, balance_map=None):
     if balance_map is None:
         balance_map = {}

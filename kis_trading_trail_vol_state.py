@@ -77,11 +77,6 @@ def account(nickname, conn):
         'chat_id': chat_id
     }
 
-def get_excg_id():
-    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
-    t = datetime.now().strftime('%H%M')
-    return "KRX" if '0900' <= t < '1530' else "NXT"
-
 # 일별주문체결조회
 def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
 
@@ -146,7 +141,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
                "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{BASE_URL}/{PATH}"
@@ -224,7 +219,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     # 스톱지정가일 때만 조건가격 추가
     if ord_dvsn == "22":
@@ -253,7 +248,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'N',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
                 'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
                 'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
                 'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
