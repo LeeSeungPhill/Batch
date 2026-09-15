@@ -544,9 +544,9 @@ def inquire_price(access_token, app_key, app_secret, code):
 
     return ar.getBody().output
 
-# 상품기본조회 (종목의 NXT 거래정지여부 등 확인용)
-def is_nxt_able(access_token, app_key, app_secret, code):
-    """해당 종목의 NXT 거래가능 여부 반환 (nxt_tr_stop_yn == 'N' and tr_stop_yn == 'N')"""
+# 상품기본조회 (종목의 KRX 애프터마켓(시간외단일가) 거래가능 여부 확인용)
+def is_after_market_able(access_token, app_key, app_secret, code):
+    """해당 종목의 KRX 애프터마켓(시간외단일가) 거래가능 여부 반환 (거래정지 아님 + 대용거래 가능)"""
     try:
         headers = {"Content-Type": "application/json",
                    "authorization": f"Bearer {access_token}",
@@ -565,7 +565,7 @@ def is_nxt_able(access_token, app_key, app_secret, code):
         if not ar.isOK():
             return False
         output = ar.getBody().output
-        return output.get('nxt_tr_stop_yn') == 'N' and output.get('tr_stop_yn') == 'N' and output.get("cptt_trad_tr_psbl_yn") == 'Y'
+        return output.get('tr_stop_yn') == 'N' and output.get("cptt_trad_tr_psbl_yn") == 'Y'
     except Exception:
         return False
 
@@ -3929,7 +3929,7 @@ def callback_get(update, context) :
             # AFTER 버튼: 15:20 이후 trail_tp '1','2' 대상 중 애프터마켓 거래가능 + 당일 미등록 종목만
             nxt_targets = [
                 (c, n) for c, n in nxt_targets
-                if c not in registered_nxt_codes and is_nxt_able(access_token, app_key, app_secret, c)
+                if c not in registered_nxt_codes and is_after_market_able(access_token, app_key, app_secret, c)
             ]
             if nxt_targets:
                 global g_nxt_pending
