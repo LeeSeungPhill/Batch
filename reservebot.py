@@ -546,7 +546,7 @@ def inquire_price(access_token, app_key, app_secret, code):
 
 # 상품기본조회 (종목의 KRX 애프터마켓(시간외단일가) 거래가능 여부 확인용)
 def is_after_market_able(access_token, app_key, app_secret, code):
-    """해당 종목의 KRX 애프터마켓(시간외단일가) 거래가능 여부 반환 (거래정지 아님 + 대용거래 가능)"""
+    """해당 종목의 KRX 애프터마켓(시간외단일가) 거래가능 여부 반환 (거래정지 여부만 확인)"""
     try:
         headers = {"Content-Type": "application/json",
                    "authorization": f"Bearer {access_token}",
@@ -563,10 +563,15 @@ def is_after_market_able(access_token, app_key, app_secret, code):
         res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
         ar = resp.APIResp(res)
         if not ar.isOK():
+            print(f"[애프터마켓 가능여부] {code} API 오류: {ar.getErrorCode()} {ar.getErrorMessage()}")
             return False
         output = ar.getBody().output
-        return output.get('tr_stop_yn') == 'N' and output.get("cptt_trad_tr_psbl_yn") == 'Y'
-    except Exception:
+        tr_stop_yn = output.get('tr_stop_yn')
+        able = tr_stop_yn == 'N'
+        print(f"[애프터마켓 가능여부] {code} tr_stop_yn={tr_stop_yn} cptt_trad_tr_psbl_yn={output.get('cptt_trad_tr_psbl_yn')} → {able}")
+        return able
+    except Exception as e:
+        print(f"[애프터마켓 가능여부] {code} 오류: {e}")
         return False
 
 # 추적삭제/추적등록/추적변경/추적상태 처리 대상 테이블 (15:30 이후 trading_trail_nxt, 그 외 trading_trail)
@@ -3926,7 +3931,7 @@ def callback_get(update, context) :
             registered_nxt_codes = {r[0] for r in cur_nxt_chk.fetchall()}
             cur_nxt_chk.close()
 
-            # AFTER 버튼: 15:20 이후 trail_tp '1','2' 대상 중 애프터마켓 거래가능 + 당일 미등록 종목만
+            # AFTER 버튼: 15:30 이후 trail_tp '1','2' 대상 중 애프터마켓 거래가능 + 당일 미등록 종목만
             nxt_targets = [
                 (c, n) for c, n in nxt_targets
                 if c not in registered_nxt_codes and is_after_market_able(access_token, app_key, app_secret, c)
