@@ -77,11 +77,6 @@ def account(nickname, conn):
         'chat_id': chat_id
     }
 
-def get_excg_id():
-    """정규시장(09:00~15:30)이면 KRX, 그 외 시간이면 NXT 반환"""
-    t = datetime.now().strftime('%H%M')
-    return "KRX" if '0900' <= t < '1530' else "NXT"
-
 # 일별주문체결조회
 def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
 
@@ -107,7 +102,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
             'INQR_DVSN': "01",                                  # 조회구분 00 역순, 01 정순
             'INQR_DVSN_1': "",                                  # 조회구분1 없음: 전체, 1: ELW, 2: 프리보드
             'INQR_DVSN_3': "00",                                # 조회구분3 00 전체, 01 현금, 02 신용, 03 담보, 04 대주, 05 대여, 06 자기융자신규/상환, 07 유통융자신규/상환
-            'EXCG_ID_DVSN_CD': "NXT",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT, SOR (Smart Order Routing) : SOR, ALL : 전체
+            'EXCG_ID_DVSN_CD': "KRX",                           # 거래소ID구분코드 KRX : KRX, NXT : NXT, SOR (Smart Order Routing) : SOR, ALL : 전체
             'CTX_AREA_NK100': "",
             'CTX_AREA_FK100': ""
     }
@@ -127,7 +122,7 @@ def get_my_complete(access_token, app_key, app_secret, acct_no, code, order_no):
         return []
 
 # 주식주문(정정취소)
-def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price, excg_id=None):
+def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price):
 
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
@@ -141,12 +136,12 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ACNT_PRDT_CD": "01",
                "KRX_FWDG_ORD_ORGNO": "06010",
                "ORGN_ODNO": order_no,
-               "ORD_DVSN": "00" if int(order_price) > 0 else "01",  # 지정가 : 00, 시장가 : 01
+               "ORD_DVSN": "41",                # 지정가 : 00, 시장가 : 01, 시간외단일가 : 41
                "RVSE_CNCL_DVSN_CD": cncl_dv,    # 정정 : 01, 취소 : 02
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
                "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{BASE_URL}/{PATH}"
@@ -184,7 +179,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
                         ord_excg_id = d['excg_id_dvsn_cd'][i] if 'excg_id_dvsn_cd' in d.columns else None
 
                         # 주문취소
-                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0", ord_excg_id)
+                        c = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", str(order_no), "0", "0")
                         if c is not None and c['ODNO'] != "":
                             print("매도주문취소 완료")
 
@@ -203,7 +198,7 @@ def sell_order_cancel_proc(access_token, app_key, app_secret, acct_no, code):
     return final_message
 
 # 주식주문(현금)
-def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
+def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, order_qty, order_price):
 
     if buy_flag:
         tr_id = "TTTC0012U"                     #buy : TTTC0012U[실전투자], VTTC0012U[모의투자]
@@ -221,14 +216,11 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "CANO": acct_no,
                "ACNT_PRDT_CD": "01",
                "PDNO": stock_code,
-               "ORD_DVSN": ord_dvsn,            # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가
+               "ORD_DVSN": "41",                # 지정가 : 00, 시장가 : 01, 시간외단일가 : 41
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else get_excg_id()   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
-    # 스톱지정가일 때만 조건가격 추가
-    if ord_dvsn == "22":
-        params["CNDT_PRIC"] = str(cndt_price)
 
     PATH = "uapi/domestic-stock/v1/trading/order-cash"
     URL = f"{BASE_URL}/{PATH}"
@@ -243,8 +235,6 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
 # 계좌잔고 조회
 def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
 
-    t = datetime.now().strftime('%H%M')
-
     headers = {"Content-Type": "application/json",
                "authorization": f"Bearer {access_token}",
                "appKey": app_key,
@@ -253,7 +243,7 @@ def stock_balance(access_token, app_key, app_secret, acct_no, rtFlag):
     params = {
                 "CANO": acct_no,
                 'ACNT_PRDT_CD': '01',
-                'AFHR_FLPR_YN': 'N' if '0900' <= t < '1530' else 'X',            # N : 기본값, Y : 시간외단일가, X : NXT 정규장 (프리마켓, 메인, 애프터마켓) NXT 거래종목만 시세 등 정보가 NXT 기준으로 변동됩니다. KRX 종목들은 그대로 유지
+                'AFHR_FLPR_YN': 'Y',            # N : KRX정규장종가, X : NXT, Y : KRX+NXT 통합시세
                 'OFL_YN': '',                   # 오프라인여부 : 공란(Default)
                 'INQR_DVSN': '02',              # 조회구분 : 01 대출일별, 02 종목별
                 'UNPR_DVSN': '01',              # 단가구분 : 01 기본값
@@ -292,7 +282,7 @@ def get_kis_daily_chart(
         access_token: str,
         app_key: str,
         app_secret: str,
-        market_code: str = "NX",          # J:KRX, NX:NXT, UN:통합
+        market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
         period: str = "D",                # D:최근30거래일, W:최근30주, M:최근30개월
         adjust_price: str = "1",          # 0:수정주가미반영, 1:수정주가반영
         verbose: bool = True              # 출력 제어 옵션
@@ -364,7 +354,7 @@ def get_kis_1min_dailychart(
     access_token: str,
     app_key: str,
     app_secret: str,
-    market_code: str = "NX",          # J:KRX, NX:NXT, UN:통합
+    market_code: str = "J",           # J:KRX, NX:NXT, UN:통합
     include_past: str = "Y",          # 과거 데이터 포함
     include_fake_tick: str = "N" ,    # 허봉 제외
     verbose: bool = True              # 출력 제어 옵션
@@ -514,7 +504,7 @@ def get_kis_daily_chart_full(stock_code, access_token, app_key, app_secret):
         "custtype": "P"
     }
     params = {
-        "FID_COND_MRKT_DIV_CODE": "NX",      # J:KRX, NX:NXT, UN:통합
+        "FID_COND_MRKT_DIV_CODE": "J",      # J:KRX, NX:NXT, UN:통합
         "FID_INPUT_ISCD": stock_code,
         "FID_PERIOD_DIV_CODE": "D",
         "FID_ORG_ADJ_PRC": "1",
@@ -581,7 +571,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
             result_msgs = []
             try:
                 # 매도 : 지정가 주문
-                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, "00", str(int(trail_qty)), str(int(trail_price)))
+                c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, str(int(trail_qty)), str(int(trail_price)))
 
                 if c is not None and c['ODNO'] != "":
                     # 일별주문체결 조회
@@ -728,12 +718,12 @@ def get_kis_1min_full_day(
         prev_oldest_dt = oldest_dt
         all_df.append(df)
 
-        # 장 시작 도달 시 종료 : 1월 2일 / 11월 19일 16시 40분 시작
+        # 장 시작 도달 시 종료 : 1월 2일 / 11월 19일 17시 시작
         if trade_date.endswith("0102") or trade_date.endswith("1119"):
-            if oldest_time <= "164000":
+            if oldest_time <= "170000":
                 break
         else:
-            if oldest_time <= "154000":
+            if oldest_time <= "160000":
                 break
 
         # 다음 조회는 1분 이전
@@ -994,11 +984,11 @@ def get_kis_1min_from_datetime(
     # 입력 시간 기준 1분 이후부터만 허용
     df = df[df["dt"] >= loop_start_dt]
 
-    # 날짜별 시작 시간 설정 : 11월 19일 16시 40분 시작
+    # 날짜별 시작 시간 설정 : 11월 19일 17시 시작
     if trade_date.endswith("1119"):
-        start_t = dt_time(16, 40)
+        start_t = dt_time(17, 00)
     else:
-        start_t = dt_time(15, 40)
+        start_t = dt_time(16, 00)
 
     # 시간 필터
     df = df[(df["dt"].dt.time >= start_t) & (df["dt"].dt.time <= dt_time(20, 0))]
