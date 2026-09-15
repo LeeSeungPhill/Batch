@@ -3926,7 +3926,7 @@ def callback_get(update, context) :
             registered_nxt_codes = {r[0] for r in cur_nxt_chk.fetchall()}
             cur_nxt_chk.close()
 
-            # NXT 버튼: 15:20 이후 trail_tp '1','2' 대상 중 NXT 거래가능 + 당일 미등록 종목만
+            # AFTER 버튼: 15:20 이후 trail_tp '1','2' 대상 중 애프터마켓 거래가능 + 당일 미등록 종목만
             nxt_targets = [
                 (c, n) for c, n in nxt_targets
                 if c not in registered_nxt_codes and is_nxt_able(access_token, app_key, app_secret, c)
@@ -3941,13 +3941,13 @@ def callback_get(update, context) :
                     'trail_day':    trail_day,
                 }
                 nxt_buttons = [
-                    InlineKeyboardButton(f"{name} NXT", callback_data=f"trail_nxt:{code}")
+                    InlineKeyboardButton(f"{name} AFTER", callback_data=f"trail_nxt:{code}")
                     for code, name in nxt_targets
                 ]
                 nxt_markup = InlineKeyboardMarkup(build_menu(nxt_buttons, 2))
                 context.bot.send_message(
                     chat_id=query.message.chat_id,
-                    text="NXT 매매추적 등록",
+                    text="AFTER 매매추적 등록",
                     reply_markup=nxt_markup
                 )
 
