@@ -3502,7 +3502,7 @@ def callback_get(update, context) :
                         for i in range(len(c)):
                             if c['pdno'][i] == trnxt_code and int(c['hldg_qty'][i]) > 0:
                                 balance_rows.append((
-                                    str(t_acct_no),
+                                    int(t_acct_no),  # trading_trail.acct_no(integer)와 타입 일치 — text로 두면 JOIN 시 형변환 오류 발생
                                     c['pdno'][i],
                                     c['prdt_name'][i],
                                     float(c['pchs_avg_pric'][i]),
