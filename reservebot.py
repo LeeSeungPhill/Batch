@@ -156,6 +156,10 @@ g_trail_state_acct_no = ""
 g_trail_state_accounts = []   # trail_resume_ 콜백에서 조회된 (acct_no, nick_name, name, stop, target, exit) 리스트
 g_trail_state_table = "trading_trail"   # 버튼 클릭 시점에 확정된 처리 대상 테이블(trading_trail/trading_trail_nxt)
 
+# 매매추적 AFTER(NXT) 등록 → 다중계좌 선택 공유 상태
+g_trnxt_code = ""       # 등록 대상 종목코드
+g_trnxt_trail_day = ""  # 등록 대상 trail_day
+
 g_fibo_code = ""   # 피보나치매도 선택 종목코드
 g_fibo_name = ""   # 피보나치매도 선택 종목명
 
@@ -1113,6 +1117,7 @@ def callback_get(update, context) :
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
     global g_hchg_code, g_hchg_name
     global g_mktm_level
+    global g_trnxt_code, g_trnxt_trail_day
 
     print("command : ", command)
     if command.startswith("interest_confirm_"):
@@ -3479,6 +3484,188 @@ def callback_get(update, context) :
                 text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
                 reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
             )
+        elif menu_num == "TRNXT":
+            # 매매추적 AFTER 등록 — 선택계좌 각각에 대해 잔고 조회 후 trading_trail_nxt 등록
+            menuNum = "0"
+            trnxt_code = g_trnxt_code
+            trnxt_trail_day = g_trnxt_trail_day
+            trnxt_user_id = query.message.chat_id
+            query.edit_message_text(text="[매매추적 NXT] 등록 처리 중...")
+
+            def process_nick_trnxt(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+                t_nick_label = nick if nick else arguments[1]
+                try:
+                    c = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+
+                    balance_rows = []
+                    if c is not None:
+                        for i in range(len(c)):
+                            if c['pdno'][i] == trnxt_code and int(c['hldg_qty'][i]) > 0:
+                                balance_rows.append((
+                                    str(t_acct_no),
+                                    c['pdno'][i],
+                                    c['prdt_name'][i],
+                                    float(c['pchs_avg_pric'][i]),
+                                    int(c['hldg_qty'][i])
+                                ))
+
+                    if len(balance_rows) == 0:
+                        context.bot.send_message(chat_id=trnxt_user_id, text=f"-{t_nick_label}-[매매추적 NXT] 잔고 조회 결과가 없습니다.")
+                        return
+
+                    balance_sql_tmpl = """
+                        WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
+                            VALUES %%s
+                        ),
+                        sim AS (
+                            SELECT *
+                            FROM (
+                                SELECT
+                                    acct_no,
+                                    name,
+                                    code,
+                                    trail_day,
+                                    trail_dtm,
+                                    trail_tp,
+                                    basic_price,
+                                    basic_qty,
+                                    stop_price,
+                                    target_price,
+                                    trade_tp,
+                                    trail_plan,
+                                    exit_price
+                                FROM trading_trail
+                                WHERE acct_no = %s
+                                AND trail_day = %s
+                                AND trail_tp IN ('1','2')
+                            ) t
+                        )
+                    """
+
+                    insert_query_tmpl = """
+                        INSERT INTO trading_trail_nxt (
+                            acct_no,
+                            name,
+                            code,
+                            trail_day,
+                            trail_dtm,
+                            trail_tp,
+                            basic_price,
+                            basic_qty,
+                            basic_amt,
+                            stop_price,
+                            target_price,
+                            proc_min,
+                            trade_tp,
+                            trail_plan,
+                            exit_price,
+                            loss_amt,
+                            crt_dt,
+                            mod_dt
+                        )
+                        SELECT
+                            BAL.acct_no,
+                            BAL.name,
+                            BAL.code,
+                            S.trail_day AS trail_day,
+                            %s AS trail_dtm,
+                            S.trail_tp AS trail_tp,
+                            COALESCE(BAL.purchase_price, 0) AS basic_price,
+                            COALESCE(BAL.purchase_qty, 0) AS basic_qty,
+                            COALESCE(BAL.purchase_price*BAL.purchase_qty, 0) AS basic_amt,
+                            COALESCE(S.stop_price, 0) AS stop_price,
+                            COALESCE(S.target_price, 0) AS target_price,
+                            %s AS proc_min,
+                            S.trade_tp AS trade_tp,
+                            S.trail_plan AS trail_plan,
+                            COALESCE(S.exit_price, 0) AS exit_price,
+                            COALESCE((BAL.purchase_price-S.exit_price)*BAL.purchase_qty, 0) AS loss_amt,
+                            now(),
+                            now()
+                        FROM balance BAL
+                        JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM trading_trail_nxt T
+                            WHERE T.acct_no = BAL.acct_no
+                            AND T.code = BAL.code
+                            AND T.trail_day = S.trail_day
+                            AND T.trail_dtm >= S.trail_dtm
+                        )
+                    """
+
+                    conn_tx = get_conn()
+                    cur_tx = conn_tx.cursor()
+
+                    # 실제 삽입될 종목명 사전 조회 (trading_trail 매칭 + NOT EXISTS 조건)
+                    balance_codes = [row[1] for row in balance_rows]
+                    cur_tx.execute("""
+                        SELECT t.name
+                        FROM trading_trail t
+                        WHERE t.acct_no = %s
+                        AND t.trail_day = %s
+                        AND t.trail_tp IN ('1','2')
+                        AND t.code = ANY(%s)
+                        AND NOT EXISTS (
+                            SELECT 1 FROM trading_trail_nxt n
+                            WHERE n.acct_no = t.acct_no
+                            AND n.code = t.code
+                            AND n.trail_day = t.trail_day
+                            AND n.trail_dtm >= t.trail_dtm
+                        )
+                    """, (int(t_acct_no), trnxt_trail_day, balance_codes))
+                    insert_names = [row[0] for row in cur_tx.fetchall()]
+
+                    full_query = cur_tx.mogrify(
+                        balance_sql_tmpl + insert_query_tmpl,
+                        (int(t_acct_no), trnxt_trail_day, datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
+                    ).decode()
+
+                    execute_values(
+                        cur_tx,
+                        full_query,
+                        balance_rows,
+                        template="(%s, %s, %s, %s, %s)"
+                    )
+                    inserted = cur_tx.rowcount
+                    conn_tx.commit()
+                    cur_tx.close()
+
+                    if inserted > 0:
+                        name_list = ", ".join(insert_names) if insert_names else f"{inserted}건"
+                        context.bot.send_message(chat_id=trnxt_user_id, text=f"-{t_nick_label}-[매매추적 NXT] {name_list} 등록 완료")
+                    else:
+                        context.bot.send_message(chat_id=trnxt_user_id, text=f"-{t_nick_label}-[매매추적 NXT] 등록 대상이 없습니다.")
+                except Exception as e:
+                    context.bot.send_message(chat_id=trnxt_user_id, text=f"-{t_nick_label}-[매매추적 NXT] 오류 : {str(e)}")
+
+            target_nicks_trnxt = g_selected_accounts[:] if g_selected_accounts else [None]
+            threads_trnxt = []
+            for nick in target_nicks_trnxt:
+                if nick is not None:
+                    try:
+                        ac_trnxt = account(nick)
+                    except Exception as e:
+                        context.bot.send_message(chat_id=trnxt_user_id, text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_trnxt = ac_trnxt['acct_no']; t_tok_trnxt = ac_trnxt['access_token']
+                    t_key_trnxt  = ac_trnxt['app_key']; t_sec_trnxt = ac_trnxt['app_secret']
+                else:
+                    try:
+                        ac_trnxt_def = account(arguments[1])
+                    except Exception as e:
+                        context.bot.send_message(chat_id=trnxt_user_id, text=f"계좌조회 오류: {str(e)}")
+                        continue
+                    t_acct_trnxt = ac_trnxt_def['acct_no']; t_tok_trnxt = ac_trnxt_def['access_token']
+                    t_key_trnxt  = ac_trnxt_def['app_key']; t_sec_trnxt = ac_trnxt_def['app_secret']
+                t = threading.Thread(target=process_nick_trnxt,
+                                     args=(nick, t_acct_trnxt, t_tok_trnxt, t_key_trnxt, t_sec_trnxt))
+                threads_trnxt.append(t)
+                t.start()
+                time.sleep(0.5)
+            for t in threads_trnxt:
+                t.join()
+            return
         else:
             query.edit_message_text(text=f"[선택계좌: {selected_str}]\n{prompt}")
 
@@ -3989,162 +4176,16 @@ def callback_get(update, context) :
         except Exception:
             pass
 
-        try:
-            pending = g_nxt_pending.get(query.message.chat_id)
-            if pending is None:
-                context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 세션 정보가 없습니다. 매매추적을 다시 조회해주세요.")
-                return
+        pending = g_nxt_pending.get(query.message.chat_id)
+        if pending is None:
+            context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 세션 정보가 없습니다. 매매추적을 다시 조회해주세요.")
+            return
 
-            acct_no      = pending['acct_no']
-            access_token = pending['access_token']
-            app_key      = pending['app_key']
-            app_secret   = pending['app_secret']
-            trail_day    = pending['trail_day']
-
-            c = stock_balance(access_token, app_key, app_secret, acct_no, "")
-
-            balance_rows = []
-            if c is not None:
-                for i in range(len(c)):
-                    if c['pdno'][i] == clicked_code and int(c['hldg_qty'][i]) > 0:
-                        balance_rows.append((
-                            acct_no,
-                            c['pdno'][i],
-                            c['prdt_name'][i],
-                            float(c['pchs_avg_pric'][i]),
-                            int(c['hldg_qty'][i])
-                        ))
-
-            if len(balance_rows) > 0:
-                balance_sql_tmpl = """
-                    WITH balance(acct_no, code, name, purchase_price, purchase_qty) AS (
-                        VALUES %%s
-                    ),
-                    sim AS (
-                        SELECT *
-                        FROM (
-                            SELECT
-                                acct_no,
-                                name,
-                                code,
-                                trail_day,
-                                trail_dtm,
-                                trail_tp,
-                                basic_price,
-                                basic_qty,
-                                stop_price,
-                                target_price,
-                                trade_tp,
-                                trail_plan,
-                                exit_price
-                            FROM trading_trail
-                            WHERE acct_no = %s
-                            AND trail_day = %s
-                            AND trail_tp IN ('1','2')
-                        ) t
-                    )
-                """
-
-                insert_query_tmpl = """
-                    INSERT INTO trading_trail_nxt (
-                        acct_no,
-                        name,
-                        code,
-                        trail_day,
-                        trail_dtm,
-                        trail_tp,
-                        basic_price,
-                        basic_qty,
-                        basic_amt,
-                        stop_price,
-                        target_price,
-                        proc_min,
-                        trade_tp,
-                        trail_plan,
-                        exit_price,
-                        loss_amt,
-                        crt_dt,
-                        mod_dt
-                    )
-                    SELECT
-                        BAL.acct_no,
-                        BAL.name,
-                        BAL.code,
-                        S.trail_day AS trail_day,
-                        %s AS trail_dtm,
-                        S.trail_tp AS trail_tp,
-                        COALESCE(BAL.purchase_price, 0) AS basic_price,
-                        COALESCE(BAL.purchase_qty, 0) AS basic_qty,
-                        COALESCE(BAL.purchase_price*BAL.purchase_qty, 0) AS basic_amt,
-                        COALESCE(S.stop_price, 0) AS stop_price,
-                        COALESCE(S.target_price, 0) AS target_price,
-                        %s AS proc_min,
-                        S.trade_tp AS trade_tp,
-                        S.trail_plan AS trail_plan,
-                        COALESCE(S.exit_price, 0) AS exit_price,
-                        COALESCE((BAL.purchase_price-S.exit_price)*BAL.purchase_qty, 0) AS loss_amt,
-                        now(),
-                        now()
-                    FROM balance BAL
-                    JOIN sim S ON S.acct_no = BAL.acct_no AND S.code = BAL.code
-                    WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM trading_trail_nxt T
-                        WHERE T.acct_no = BAL.acct_no
-                        AND T.code = BAL.code
-                        AND T.trail_day = S.trail_day
-                        AND T.trail_dtm >= S.trail_dtm
-                    )
-                """
-
-                conn200 = get_conn()
-                cur200 = conn200.cursor()
-
-                # 실제 삽입될 종목명 사전 조회 (trading_trail 매칭 + NOT EXISTS 조건)
-                balance_codes = [row[1] for row in balance_rows]
-                cur200.execute("""
-                    SELECT t.name
-                    FROM trading_trail t
-                    WHERE t.acct_no = %s
-                    AND t.trail_day = %s
-                    AND t.trail_tp IN ('1','2')
-                    AND t.code = ANY(%s)
-                    AND NOT EXISTS (
-                        SELECT 1 FROM trading_trail_nxt n
-                        WHERE n.acct_no = t.acct_no
-                        AND n.code = t.code
-                        AND n.trail_day = t.trail_day
-                        AND n.trail_dtm >= t.trail_dtm
-                    )
-                """, (int(acct_no), trail_day, balance_codes))
-                insert_names = [row[0] for row in cur200.fetchall()]
-
-                full_query = cur200.mogrify(
-                    balance_sql_tmpl + insert_query_tmpl,
-                    (int(acct_no), trail_day, datetime.now().strftime('%H%M%S'), datetime.now().strftime('%H%M%S'))
-                ).decode()
-
-                execute_values(
-                    cur200,
-                    full_query,
-                    balance_rows,
-                    template="(%s, %s, %s, %s, %s)"
-                )
-                inserted = cur200.rowcount
-                conn200.commit()
-                cur200.close()
-
-                if inserted > 0:
-                    name_list = ", ".join(insert_names) if insert_names else f"{inserted}건"
-                    context.bot.send_message(chat_id=user_id, text=f"[매매추적 NXT] {name_list} 등록 완료")
-                else:
-                    context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 등록 대상이 없습니다.")
-            else:
-                context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 잔고 조회 결과가 없습니다.")
-
-        except Exception as e:
-            print('매매추적 NXT 오류.', e)
-            context.bot.send_message(chat_id=user_id, text="[매매추적 NXT] 오류 : " + str(e))
+        # 등록 대상 종목/거래일 저장 → 다중계좌 선택 진행
+        g_trnxt_code = clicked_code
+        g_trnxt_trail_day = pending['trail_day']
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "TRNXT", send_new=True, chat_id=user_id, bot=context.bot)
 
     elif command.startswith("trail_resume_"):
         ts_code = command[len("trail_resume_"):]
