@@ -806,6 +806,62 @@ def daily_order_complete(access_token, app_key, app_secret, acct_no, code, order
     #ar.printAll()
     return ar.getBody().output1
 
+# 매도주문 체결정보 조회 (일별주문체결 조회에서 order_* 필드만 추출)
+def fetch_order_complete_info(access_token, app_key, app_secret, acct_no, code, order_no):
+    """매도주문 접수 직후 daily_order_complete 1회 조회 결과에서 order_* 필드 dict 반환 (조회 실패/결과없음 시 None)"""
+    try:
+        output1 = daily_order_complete(access_token, app_key, app_secret, acct_no, code, order_no, '01')
+        tdf = pd.DataFrame(output1)
+        if tdf.empty:
+            return None
+        d = tdf[['odno', 'ord_dt', 'ord_tmd', 'sll_buy_dvsn_cd_name', 'ord_qty', 'ord_unpr', 'avg_prvs', 'tot_ccld_qty', 'rmn_qty']]
+        row = d.iloc[0]
+        order_price = row['avg_prvs'] if int(row['avg_prvs']) > 0 else row['ord_unpr']
+        return {
+            'order_no': str(int(row['odno'])),
+            'order_type': row['sll_buy_dvsn_cd_name'],
+            'order_dt': row['ord_dt'],
+            'order_tmd': row['ord_tmd'],
+            'order_price': int(order_price),
+            'order_amount': int(row['ord_qty']),
+            'complete_qty': int(row['tot_ccld_qty']),
+            'remain_qty': int(row['rmn_qty']),
+        }
+    except Exception as e:
+        print(f"[매매추적 갱신] 체결정보 조회 오류 {code} {order_no}: {e}")
+        return None
+
+# 매도 주문 후 매매추적정보(trading_trail/trading_trail_nxt) 갱신
+# 매도물량이 매도 전 보유수량 전체이면 trail_tp='4'(전량매도), 일부면 '3'(부분매도)
+def update_trading_trail_after_sell(acct_no, code, sell_qty, held_qty_before, order_info):
+    """WHERE acct_no/code/trail_day(오늘)/trail_tp IN ('1','2','L') 매칭 로우 전부 일괄 갱신. (갱신건수, trail_tp) 반환"""
+    tbl = trail_table_name()
+    trail_day = datetime.now().strftime("%Y%m%d")
+    new_trail_tp = '4' if sell_qty >= held_qty_before else '3'
+    try:
+        conn_u = get_conn()
+        with conn_u.cursor() as cur_u:
+            cur_u.execute(
+                f"""UPDATE {tbl}
+                    SET trail_tp = %s,
+                        order_no = %s, order_type = %s, order_dt = %s, order_tmd = %s,
+                        order_price = %s, order_amount = %s, complete_qty = %s, remain_qty = %s,
+                        mod_dt = now()
+                    WHERE acct_no = %s AND code = %s AND trail_day = %s AND trail_tp IN ('1','2','L')""",
+                (
+                    new_trail_tp,
+                    order_info['order_no'], order_info['order_type'], order_info['order_dt'], order_info['order_tmd'],
+                    order_info['order_price'], order_info['order_amount'], order_info['complete_qty'], order_info['remain_qty'],
+                    int(acct_no), code, trail_day
+                )
+            )
+            updated = cur_u.rowcount
+        conn_u.commit()
+        return updated, new_trail_tp
+    except Exception as e:
+        print(f"[매매추적 갱신] {code} 오류: {e}")
+        return 0, new_trail_tp
+
 # 주식주문(정정취소)
 def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, order_no, order_qty, order_price, excg_id=None):
 
@@ -1779,19 +1835,45 @@ def callback_get(update, context) :
                         text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 기존 매도주문 취소 실패 → 중단")
                     return
                 time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
+                # 실제 매도 직전 보유/주문가능수량 재확인 (버튼 생성 시점 값은 최신이 아닐 수 있음)
+                e_tms = stock_balance(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
+                                      str(ac_tms['acct_no']), "")
+                tms_psbl_qty = 0
+                for j, _ in enumerate(e_tms.index):
+                    if e_tms['pdno'][j] == tm_sell_code:
+                        tms_psbl_qty = int(e_tms['ord_psbl_qty'][j])
+                        break
+                if tms_psbl_qty <= 0:
+                    context.bot.send_message(chat_id=query.message.chat_id,
+                        text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 매도가능수량 없음")
+                    return
+                tms_sell_qty = min(tm_sell_qty, tms_psbl_qty)
+
                 ap_tms = inquire_price(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'], tm_sell_code)
                 tms_price = int(ap_tms['stck_prpr'])
                 tms_price = round_to_valid_price(tms_price, get_tick_size(tms_price))
                 c_ord_tms = order_cash(False, ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
-                                       str(ac_tms['acct_no']), tm_sell_code, "00", str(tm_sell_qty), str(tms_price))
+                                       str(ac_tms['acct_no']), tm_sell_code, "00", str(tms_sell_qty), str(tms_price))
                 if c_ord_tms is not None and c_ord_tms['ODNO'] != "":
                     context.bot.send_message(
                         chat_id=query.message.chat_id,
                         text=(f"-{tm_nick}-[트레이딩 시장][{tms_name}(<code>{tm_sell_code}</code>)] "
                               f"현재가매도 주문 완료 | 가격: {format(tms_price, ',d')}원 | "
-                              f"수량: {format(tm_sell_qty, ',d')}주 | 주문번호: <code>{str(int(c_ord_tms['ODNO']))}</code>"),
+                              f"수량: {format(tms_sell_qty, ',d')}주 | 주문번호: <code>{str(int(c_ord_tms['ODNO']))}</code>"),
                         parse_mode='HTML'
                     )
+                    time.sleep(0.5)
+                    order_info = fetch_order_complete_info(ac_tms['access_token'], ac_tms['app_key'], ac_tms['app_secret'],
+                                                            str(ac_tms['acct_no']), tm_sell_code, c_ord_tms['ODNO'])
+                    if order_info is not None:
+                        updated, new_tp = update_trading_trail_after_sell(
+                            ac_tms['acct_no'], tm_sell_code, tms_sell_qty, tms_psbl_qty, order_info
+                        )
+                        if updated > 0:
+                            tp_label = "전량매도" if new_tp == '4' else "부분매도"
+                            context.bot.send_message(chat_id=query.message.chat_id,
+                                text=f"-{tm_nick}-[{tms_name}] 매매추적정보 {tp_label} 갱신 {updated}건")
                 else:
                     context.bot.send_message(chat_id=query.message.chat_id,
                         text=f"-{tm_nick}-[{tms_name}({tm_sell_code})] 매도 주문 실패")
@@ -2989,9 +3071,10 @@ def callback_get(update, context) :
                                     parse_mode='HTML'
                                 )
                                 try:
+                                    tbl_52n = trail_table_name()
                                     with get_conn().cursor() as cur_52n:
-                                        cur_52n.execute("""
-                                            UPDATE trading_trail SET trail_tp = %s, mod_dt = %s
+                                        cur_52n.execute(f"""
+                                            UPDATE {tbl_52n} SET trail_tp = %s, mod_dt = %s
                                             WHERE acct_no = %s AND code = %s
                                             AND trail_day = %s AND order_no = %s
                                         """, ("C", datetime.now(), t_acct_no, cn_code,
@@ -3221,6 +3304,17 @@ def callback_get(update, context) :
                                       f"수량: {format(ta_qty, ',d')}주 | 주문번호: <code>{str(int(c_ord_ta['ODNO']))}</code>"),
                                 parse_mode='HTML'
                             )
+                            time.sleep(0.5)
+                            order_info = fetch_order_complete_info(t_access_token, t_app_key, t_app_secret,
+                                                                    str(t_acct_no), ta_code, c_ord_ta['ODNO'])
+                            if order_info is not None:
+                                # 트레이딩 전체는 항상 보유수량 전량 매도
+                                updated, new_tp = update_trading_trail_after_sell(
+                                    t_acct_no, ta_code, ta_qty, ta_qty, order_info
+                                )
+                                if updated > 0:
+                                    context.bot.send_message(chat_id=query.message.chat_id,
+                                        text=f"-{t_nick_label}-[{ta_name}] 매매추적정보 전량매도 갱신 {updated}건")
                         else:
                             context.bot.send_message(chat_id=query.message.chat_id,
                                 text=f"-{t_nick_label}-[트레이딩 전체][{ta_name}({ta_code})] 매도 주문 실패")
@@ -5799,9 +5893,10 @@ def echo(update, context):
                                 parse_mode='HTML'
                             )
                             try:
+                                tbl_51n = trail_table_name()
                                 with get_conn().cursor() as cur_51n:
-                                    cur_51n.execute("""
-                                        UPDATE trading_trail SET trail_tp = %s, mod_dt = %s
+                                    cur_51n.execute(f"""
+                                        UPDATE {tbl_51n} SET trail_tp = %s, mod_dt = %s
                                         WHERE acct_no = %s AND code = %s
                                         AND trail_day = %s AND order_no = %s
                                     """, ("U", datetime.now(), t_acct_no, c51n_code,
@@ -5899,24 +5994,28 @@ def echo(update, context):
                                    s3x_code, "00", str(t_sell_qty), str(t_sell_price))
                 if c_s3x is not None and c_s3x['ODNO'] != "":
                     time.sleep(0.5)
-                    output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret,
-                                                   t_acct_no, s3x_code, c_s3x['ODNO'], '01')
-                    tdf = pd.DataFrame(output1)
-                    d = tdf[['odno', 'avg_prvs', 'ord_unpr', 'tot_ccld_qty', 'tot_ccld_amt']]
-                    for k, _ in enumerate(d.index):
-                        d_order_no    = int(d['odno'][k])
-                        d_order_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
-                        d_ccld_qty    = d['tot_ccld_qty'][k]
-                        d_ccld_amt    = d['tot_ccld_amt'][k]
+                    order_info = fetch_order_complete_info(t_access_token, t_app_key, t_app_secret,
+                                                            str(t_acct_no), s3x_code, c_s3x['ODNO'])
+                    if order_info is not None:
                         context.bot.send_message(
                             chat_id=user_id,
                             text=(f"-{t_nick_label}-[{s3x_company}(<code>{s3x_code}</code>)] "
-                                  f"매도가:{format(int(d_order_price), ',d')}원 "
-                                  f"체결량:{format(int(d_ccld_qty), ',d')}주 "
-                                  f"체결금액:{format(int(d_ccld_amt), ',d')}원 "
-                                  f"주문번호:<code>{d_order_no}</code>"),
+                                  f"매도가:{format(order_info['order_price'], ',d')}원 "
+                                  f"체결량:{format(order_info['complete_qty'], ',d')}주 "
+                                  f"잔량:{format(order_info['remain_qty'], ',d')}주 "
+                                  f"주문번호:<code>{order_info['order_no']}</code>"),
                             parse_mode='HTML'
                         )
+                        updated, new_tp = update_trading_trail_after_sell(
+                            t_acct_no, s3x_code, t_sell_qty, ord_psbl_qty_s3x, order_info
+                        )
+                        if updated > 0:
+                            tp_label = "전량매도" if new_tp == '4' else "부분매도"
+                            context.bot.send_message(chat_id=user_id,
+                                text=f"-{t_nick_label}-[{s3x_company}] 매매추적정보 {tp_label} 갱신 {updated}건")
+                    else:
+                        context.bot.send_message(chat_id=user_id,
+                            text=f"-{t_nick_label}-[{s3x_company}] 매도주문 완료, 체결정보 조회 실패")
                 else:
                     context.bot.send_message(chat_id=user_id,
                         text=f"-{t_nick_label}-[{s3x_company}] {format(t_sell_price, ',d')}원 매도주문 실패")
@@ -6041,6 +6140,18 @@ def echo(update, context):
                           f"매도금액:{format(sell_amt, ',d')}원 | 주문번호:<code>{sell_ord_no}</code>"),
                     parse_mode='HTML'
                 )
+
+                time.sleep(0.5)
+                order_info = fetch_order_complete_info(t_access_token, t_app_key, t_app_secret,
+                                                        t_acct_no, hc_sell_code, c_s['ODNO'])
+                if order_info is not None:
+                    updated, new_tp = update_trading_trail_after_sell(
+                        t_acct_no, hc_sell_code, sell_qty, sell_psbl_qty, order_info
+                    )
+                    if updated > 0:
+                        tp_label = "전량매도" if new_tp == '4' else "부분매도"
+                        context.bot.send_message(chat_id=user_id,
+                            text=f"-{t_nick_label}-[{hc_sell_name}] 매매추적정보 {tp_label} 갱신 {updated}건")
 
                 # 매수종목 미지정(0) → 매수 생략
                 if not hc_buy_code:

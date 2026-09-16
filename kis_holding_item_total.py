@@ -999,11 +999,12 @@ def process_account(nick):
                 if len(result_four) > 0:
                     continue
 
-                # trading_plan ='h' 대상 trading_trail 레코드 생성
+                # trading_plan ='h' 대상 trading_trail 레코드 생성 (15시 30분 이전에만 변경/생성)
                 #  - 이탈가(08) : 시장비율 허용금액 초과(market_ratio_excess) 시 → 초과금액 기준 매도수량(allocate)
                 #  - 최종이탈가(10) : 해당 종목 시장(코스피/코스닥)의 단기 하락(short_market_signal=='D') 시 → 전량 매도수량
-                _trigger_excess = i[12] == 'h' and trail_signal_code == '08' and market_ratio_excess > 0
-                _trigger_short  = i[12] == 'h' and trail_signal_code == '10' and short_market_signal == 'D'
+                _before_1530    = datetime.now().strftime('%H%M') < '1530'
+                _trigger_excess = i[12] == 'h' and trail_signal_code == '08' and market_ratio_excess > 0 and _before_1530
+                _trigger_short  = i[12] == 'h' and trail_signal_code == '10' and short_market_signal == 'D' and _before_1530
                 if _trigger_excess or _trigger_short:
                     _base_qty   = int(i[6])          if i[6]  is not None else 0
                     _base_price = int(float(i[14]))  if i[14] is not None else 0
