@@ -232,7 +232,7 @@ def inquire_price(access_token, app_key, app_secret, code):
                "appSecret": app_secret,
                "tr_id": "FHKST01010100"}
     params = {
-            'FID_COND_MRKT_DIV_CODE': "J",  # J:KRX, NX:NXT, UN:통합
+            'FID_COND_MRKT_DIV_CODE': "UN",  # J:KRX, NX:NXT, UN:통합
             'FID_INPUT_ISCD': code
     }
     PATH = "uapi/domestic-stock/v1/quotations/inquire-price"
