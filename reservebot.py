@@ -734,6 +734,17 @@ def is_after_market_hours():
     t = datetime.now().strftime('%H%M')
     return '1600' <= t < '2000'
 
+# 프리마켓(NXT, 08:00~08:50) 여부
+def is_pre_market_nxt_hours():
+    t = datetime.now().strftime('%H%M')
+    return '0800' <= t < '0850'
+
+# 거래소구분코드(EXCG_ID_DVSN_CD) 결정 — 08:00~08:50 NXT, 그 외 KRX
+def resolve_excg_id(excg_id=None):
+    if excg_id is not None:
+        return excg_id
+    return "NXT" if is_pre_market_nxt_hours() else "KRX"
+
 # 주식주문(현금)
 def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code, ord_dvsn, order_qty, order_price, cndt_price=None, excg_id=None):
 
@@ -758,7 +769,7 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
                "ORD_DVSN": final_ord_dvsn,      # 00 : 지정가, 01 : 시장가, 22 : 스톱지정가, 41 : 시간외단일가
                "ORD_QTY": order_qty,
                "ORD_UNPR": order_price,         # 시장가 등 주문시, "0"으로 입력
-               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": resolve_excg_id(excg_id)   # 08:00~08:50 NXT, 그 외 KRX
     }
     # 스톱지정가일 때만 조건가격 추가 (애프터마켓 시간외단일가 적용 시 미해당)
     if ord_dvsn == "22" and not after_market:
@@ -882,7 +893,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
                "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
-               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": resolve_excg_id(excg_id)   # 08:00~08:50 NXT, 그 외 KRX
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{URL_BASE}/{PATH}"
@@ -3055,11 +3066,11 @@ def callback_get(update, context) :
                         order_no     = row['odno']
                         ord_price    = int(row['ord_unpr'])
                         ord_qty      = int(row['ord_qty'])
-                        ord_excg_id  = row.get('excg_id_dvsn_cd', None)
                         try:
+                            # excg_id 미지정 → order_cancel_revice 내부에서 시간대 기준(08:00~08:50 NXT) 자동 결정
                             c_52n = order_cancel_revice(
                                 t_access_token, t_app_key, t_app_secret, t_acct_no,
-                                "02", order_no, "0", "0", ord_excg_id
+                                "02", order_no, "0", "0"
                             )
                             if c_52n is not None and c_52n['ODNO'] != "":
                                 context.bot.send_message(
