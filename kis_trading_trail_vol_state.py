@@ -141,7 +141,7 @@ def order_cancel_revice(access_token, app_key, app_secret, acct_no, cncl_dv, ord
                "ORD_QTY": str(order_qty),
                "ORD_UNPR": str(order_price),
                "QTY_ALL_ORD_YN": "Y",           # 전량 : Y, 일부 : N
-               "EXCG_ID_DVSN_CD": "KRX"         # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
+               "EXCG_ID_DVSN_CD": excg_id if excg_id is not None else "KRX"   # 한국거래소 : KRX, 대체거래소 (넥스트레이드) : NXT, SOR (Smart Order Routing) : SOR
     }
     PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
     URL = f"{BASE_URL}/{PATH}"
@@ -2425,6 +2425,62 @@ def get_kis_1min_from_datetime(
     return signals
 
 
+def cancel_nxt_pending_orders(nick, ac, bot, chat_id):
+    """
+    09:00~09:03 수행
+    계좌 전체의 NXT 매수/매도 미체결 주문을 전량 취소 (trading_trail 추적 여부 무관)
+    """
+    acct_no      = ac['acct_no']
+    access_token = ac['access_token']
+    app_key      = ac['app_key']
+    app_secret   = ac['app_secret']
+
+    try:
+        output_all = get_my_complete(access_token, app_key, app_secret, acct_no, '', '')
+        if not output_all:
+            return
+
+        df_nxt = pd.DataFrame(output_all)
+        target_cols = ['odno', 'pdno', 'prdt_name', 'sll_buy_dvsn_cd_name', 'rmn_qty', 'cncl_yn', 'excg_id_dvsn_cd']
+        df_nxt = df_nxt[[c for c in target_cols if c in df_nxt.columns]]
+
+        for i in df_nxt.index:
+            excg_id = str(df_nxt.loc[i, 'excg_id_dvsn_cd']) if 'excg_id_dvsn_cd' in df_nxt.columns else ''
+            if excg_id != 'NXT':
+                continue
+
+            sll_buy_name = str(df_nxt.loc[i, 'sll_buy_dvsn_cd_name']) if 'sll_buy_dvsn_cd_name' in df_nxt.columns else ''
+            rmn_qty      = int(df_nxt.loc[i, 'rmn_qty'])               if 'rmn_qty'              in df_nxt.columns else 0
+            cncl_yn      = str(df_nxt.loc[i, 'cncl_yn'])               if 'cncl_yn'              in df_nxt.columns else ''
+            odno         = str(df_nxt.loc[i, 'odno'])                  if 'odno'                 in df_nxt.columns else ''
+            nxt_code     = str(df_nxt.loc[i, 'pdno'])                  if 'pdno'                 in df_nxt.columns else ''
+            nxt_name     = str(df_nxt.loc[i, 'prdt_name'])             if 'prdt_name'            in df_nxt.columns else ''
+
+            # 정정/취소 echo 행 제외, 이미 취소된 주문 제외, 잔량 없는 건 제외
+            if sll_buy_name.startswith(('매도정정', '매도취소', '매수정정', '매수취소')):
+                continue
+            if rmn_qty <= 0 or cncl_yn == 'Y':
+                continue
+
+            nxt_cancel = order_cancel_revice(
+                access_token, app_key, app_secret, acct_no,
+                "02", odno, "0", "0", "NXT"
+            )
+
+            if nxt_cancel is not None and nxt_cancel.get('ODNO', '') != '':
+                msg = f"-{nick}- {nxt_name}[<code>{nxt_code}</code>] NXT {sll_buy_name} 미체결({rmn_qty}주) 전량 취소 완료"
+            else:
+                msg = f"-{nick}- {nxt_name}[<code>{nxt_code}</code>] NXT {sll_buy_name} 미체결 취소 실패 (주문번호:{odno}, 잔량:{rmn_qty}주)"
+            print(msg)
+            try:
+                bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+            except Exception as te:
+                print(f"텔레그램 발송 실패: {te}")
+
+            time.sleep(0.3)
+    except Exception as e:
+        print(f"[{nick}] NXT 미체결 주문 전량 취소 처리 오류: {e}")
+
 def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
     """
     15:20 이전 미체결 매도주문 정리
@@ -2760,11 +2816,18 @@ def process_account(nick):
             result_two00 = _filtered_two00
 
         _now_hhmm = datetime.now().strftime('%H%M')
-        if today.endswith("1119"): 
+
+        if today.endswith("1119"):
+            # 수능일인 경우, 10:00~10:02 NXT 매수/매도 미체결 주문 전량 취소 (종목별 처리와 별개로 수행)
+            if '1000' <= _now_hhmm < '1003':
+                cancel_nxt_pending_orders(nick, ac, bot, chat_id)
             # 수능일인 경우, 16:20~16:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
             if '1620' <= _now_hhmm < '1623':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
         else:
+            # 09:00~09:02 NXT 매수/매도 미체결 주문 전량 취소 (종목별 처리와 별개로 수행)
+            if '0900' <= _now_hhmm < '0903':
+                cancel_nxt_pending_orders(nick, ac, bot, chat_id)
             # 15:20~15:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
             if '1520' <= _now_hhmm < '1523':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
