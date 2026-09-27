@@ -911,11 +911,12 @@ def _get_invest_point_fields(code):
     run_at이 현재일 기준 _INVEST_POINT_STALE_DAYS일보다 오래된 종목이면 그때만
     invest_point(mvp_graph.run) 를 실행해 새로 생성한다(수 분 소요 가능).
     반환: {price, sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point,
-           invest_risk, corp_name, run_at, from_cache} 또는 {'error': str} 단독."""
+           invest_risk, corp_name, run_at, from_cache, remain_rate_eligible,
+           value_check_eligible} 또는 {'error': str} 단독."""
     try:
         analysis_history = _import_analysis_history()
     except Exception as e:
-        return {'error': f'analysis_history 모듈 로드 실패: {e}'}
+        return {'error': f'투자분석 이력 모듈 로드 실패: {e}'}
 
     try:
         rows = analysis_history.get_recent(code, limit=1)
@@ -940,15 +941,15 @@ def _get_invest_point_fields(code):
         try:
             mvp_graph = _import_mvp_graph()
         except Exception as e:
-            return {'error': f'invest_point 모듈 로드 실패: {e}'}
+            return {'error': f'투자분석 모듈 로드 실패: {e}'}
         try:
             mvp_graph.run(code)
         except Exception as e:
-            return {'error': f'invest_point 분석 실행 오류: {e}'}
+            return {'error': f'투자 분석 실행 오류: {e}'}
         try:
             rows = analysis_history.get_recent(code, limit=1)
         except Exception as e:
-            return {'error': f'투자분석 이력 조회 오류: {e}'}
+            return {'error': f'최근 투자분석 이력 조회 오류: {e}'}
         if not rows:
             return {'error': '투자분석 결과 저장 실패(이력 없음)'}
 
@@ -980,6 +981,10 @@ def _get_invest_point_fields(code):
     listed_5y = row.get('매출액-5') is not None
     remain_rate_eligible = listed_5y and sales_grew_or_similar
 
+    # 가치주 체크 사항 입력 활성화 여부: analysis_history.value_signal이 True인 종목만.
+    # False(가치시그널 미충족)나 NULL(미산출)은 모두 비활성화.
+    value_check_eligible = row.get('value_signal') is True
+
     return {
         'corp_name':     row.get('corp_name'),
         'price':         price,
@@ -987,6 +992,8 @@ def _get_invest_point_fields(code):
         'ep_sales_amt':  row.get('매출액+1'),      # 내년(최근 추정) 매출액
         'dividend_rate': dividend_rate,            # DPS-5~DPS-1 평균 배당금 / 현재가
         'remain_rate_eligible': remain_rate_eligible,
+        'value_check_eligible': value_check_eligible,
+        'value_invest':  row.get('value_invest'),  # 가치투자 검토(analysis_history 최신 이력 기준)
         'report_dt':     row.get('rcept_dt'),      # 공시접수일자
         'invest_issue':  parsed['invest_issue'],
         'invest_point':  parsed['invest_point'],
@@ -1015,7 +1022,7 @@ def invest_mng_list():
         cur = conn.cursor()
         cur.execute("""
             SELECT code, name, main_business, high_price, market, size, industry, mktcap,
-                   sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point, invest_risk,
+                   sales_amt, ep_sales_amt, report_dt,
                    dividend_rate, sales_rate,
                    value_check, dividend_check, growth_check, check_dt, proc_yn, down_range, up_range
             FROM public.invest_mng WHERE proc_yn = 'Y' ORDER BY code
@@ -1037,7 +1044,7 @@ def invest_mng_list():
 
     def _enrich(r):
         (code, name, main_business, high_price, market, size, industry, mktcap,
-         sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point, invest_risk,
+         sales_amt, ep_sales_amt, report_dt,
          dividend_rate, sales_rate, value_check, dividend_check, growth_check,
          check_dt, proc_yn, down_range, up_range) = r
 
@@ -1050,14 +1057,32 @@ def invest_mng_list():
                 except (TypeError, ValueError):
                     price = None
 
-        # 상승잔존율: 실시간 현재가 기준 계산, 매출액-1→+1 증가/유사(단일 lookup과
-        # 동일 게이트) 조건을 만족할 때만 값을 채운다(analysis_history 단순 조회라
-        # side-effect 없음).
-        remain_rate = None
-        if analysis_history and price and high_price is not None:
+        # analysis_history 최신 이력 1건 조회(side-effect 없는 단순 조회) — 상승잔존율,
+        # 가치주 체크 사항 입력 가능 여부(value_signal이 True), 가치투자 검토(value_invest)
+        # 표시에 함께 사용한다.
+        ah_rows = None
+        if analysis_history:
             try:
                 ah_rows = analysis_history.get_recent(code, limit=1)
-                if ah_rows and _grew_or_similar(ah_rows[0].get('매출액-1'), ah_rows[0].get('매출액+1')):
+            except Exception:
+                ah_rows = None
+
+        # False(가치시그널 미충족)나 NULL(미산출) 모두 비활성화 — True인 경우만 입력 허용.
+        value_check_eligible = bool(ah_rows) and ah_rows[0].get('value_signal') is True
+        value_invest         = ah_rows[0].get('value_invest') if ah_rows else None
+
+        # 핵심이슈/투자포인트/리스크: invest_mng 저장 컬럼이 아니라 analysis_history 최신
+        # 이력의 investment_summary를 단일 lookup(_get_invest_point_fields)과 동일하게 파싱.
+        parsed_summary = _parse_investment_summary(ah_rows[0].get('investment_summary') if ah_rows else None)
+        invest_issue, invest_point, invest_risk = (
+            parsed_summary['invest_issue'], parsed_summary['invest_point'], parsed_summary['invest_risk'])
+
+        # 상승잔존율: 실시간 현재가 기준 계산, 매출액-1→+1 증가/유사(단일 lookup과
+        # 동일 게이트) 조건을 만족할 때만 값을 채운다.
+        remain_rate = None
+        if ah_rows and price and high_price is not None:
+            try:
+                if _grew_or_similar(ah_rows[0].get('매출액-1'), ah_rows[0].get('매출액+1')):
                     remain_rate = round((float(high_price) - price) / price * 100, 1)
             except Exception:
                 remain_rate = None
@@ -1073,6 +1098,7 @@ def invest_mng_list():
             'remain_rate': remain_rate, 'dividend_rate': _num_or_none(dividend_rate), 'sales_rate': _num_or_none(sales_rate),
             'value_check': value_check, 'dividend_check': dividend_check, 'growth_check': growth_check,
             'check_dt': check_dt, 'proc_yn': proc_yn, 'down_range': down_range, 'up_range': up_range,
+            'value_invest': value_invest, 'value_check_eligible': value_check_eligible,
         }
 
     with ThreadPoolExecutor(max_workers=min(len(rows), 8)) as ex:
@@ -1096,8 +1122,7 @@ def invest_mng_info():
         cur = conn.cursor()
         cur.execute("""
             SELECT code, name, main_business, high_price, market, size, industry, mktcap,
-                   price, sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point,
-                   invest_risk, check_dt, proc_yn,
+                   price, sales_amt, ep_sales_amt, report_dt, check_dt, proc_yn,
                    remain_rate, dividend_rate, sales_rate,
                    value_check, dividend_check, growth_check, down_range, up_range
             FROM public.invest_mng WHERE code = %s AND proc_yn = 'Y' ORDER BY check_dt DESC NULLS LAST LIMIT 1
@@ -1115,10 +1140,9 @@ def invest_mng_info():
             'code': row[0], 'name': row[1], 'main_business': row[2], 'high_price': row[3],
             'market': row[4], 'size': row[5], 'industry': row[6], 'mktcap': row[7],
             'price': row[8], 'sales_amt': row[9], 'ep_sales_amt': row[10],
-            'report_dt': row[11], 'invest_issue': row[12], 'invest_point': row[13],
-            'invest_risk': row[14], 'check_dt': row[15], 'proc_yn': row[16],
-            'remain_rate': row[17], 'dividend_rate': row[18], 'sales_rate': row[19],
-            'value_check': row[20], 'dividend_check': row[21], 'growth_check': row[22], 'down_range': row[23], 'up_range': row[24],
+            'report_dt': row[11], 'check_dt': row[12], 'proc_yn': row[13],
+            'remain_rate': row[14], 'dividend_rate': row[15], 'sales_rate': row[16],
+            'value_check': row[17], 'dividend_check': row[18], 'growth_check': row[19], 'down_range': row[20], 'up_range': row[21],
         }
 
     market_meta, market_meta_error = None, ''
@@ -1166,6 +1190,7 @@ def invest_mng_apply():
     value_check     = (data.get('value_check') or '').strip() or None
     dividend_check  = (data.get('dividend_check') or '').strip() or None
     growth_check    = (data.get('growth_check') or '').strip() or None
+    value_invest    = (data.get('value_invest') or '').strip() or None
     check_dt      = datetime.now().strftime('%Y%m%d')
     exclude       = bool(data.get('exclude'))
     proc_yn       = 'N' if exclude else 'Y'
@@ -1185,13 +1210,13 @@ def invest_mng_apply():
                     industry = %s, mktcap = %s, price = %s, sales_amt = %s, ep_sales_amt = %s,
                     report_dt = %s, invest_issue = %s, invest_point = %s, invest_risk = %s,
                     remain_rate = %s, dividend_rate = %s, sales_rate = %s,
-                    value_check = %s, dividend_check = %s, growth_check = %s,
+                    value_check = %s, dividend_check = %s, growth_check = %s, value_invest = %s,
                     check_dt = %s, proc_yn = %s, mod_dt = %s, down_range = %s, up_range = %s
                 WHERE code = %s AND proc_yn = 'Y'
             """, (name, main_business, high_price, market, size, industry, mktcap, price,
                   sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point, invest_risk,
                   remain_rate, dividend_rate, sales_rate,
-                  value_check, dividend_check, growth_check,
+                  value_check, dividend_check, growth_check, value_invest,
                   check_dt, proc_yn, datetime.now(), down_range, up_range, code))
         else:
             cur.execute("""
@@ -1199,13 +1224,13 @@ def invest_mng_apply():
                     (code, name, main_business, high_price, market, size, industry, mktcap,
                      price, sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point,
                      invest_risk, remain_rate, dividend_rate, sales_rate,
-                     value_check, dividend_check, growth_check,
+                     value_check, dividend_check, growth_check, value_invest,
                      check_dt, proc_yn, crt_dt, mod_dt, down_range, up_range)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (code, name, main_business, high_price, market, size, industry, mktcap, price,
                   sales_amt, ep_sales_amt, report_dt, invest_issue, invest_point, invest_risk,
                   remain_rate, dividend_rate, sales_rate,
-                  value_check, dividend_check, growth_check,
+                  value_check, dividend_check, growth_check, value_invest,
                   check_dt, proc_yn, datetime.now(), datetime.now(), down_range, up_range))
         conn.commit()
         cur.close()
@@ -2508,11 +2533,16 @@ def _dart_exec_voting_map(corp_code: str) -> dict:
 
 _INVEST_POINT_SH      = os.environ.get('INVEST_POINT_SH', '/home/terra/bin/run_invest_point.sh')
 _INVEST_POINT_SSH_HOST = os.environ.get('INVEST_POINT_SSH_HOST', '')  # 원격 실행 시 Tailscale IP (비어있으면 로컬 실행)
-_INVEST_ANALYSIS_TIMEOUT = 1800  # mvp_graph.py 1건당 최대 대기(초) — LLM 체인 특성상 넉넉히
+_INVEST_ANALYSIS_TIMEOUT = 600   # mvp_graph.py 1건당 최대 대기(초) — 평균 180초 기준 3배 이상 여유(과거 1800초는 멈춘 건이 대기열을 30분씩 막아 너무 길었음)
+_INVEST_ANALYSIS_WARN_SEC = 300  # 이 시간(초) 넘게 실행 중이면 경고 로그 시작 — 평균(180초)의 약 1.7배
+_INVEST_ANALYSIS_WATCHDOG_INTERVAL = 60  # 워치독 점검 주기(초)
 
 _invest_analysis_queue:   "queue.Queue[str]" = queue.Queue()
 _invest_analysis_pending: set              = set()   # 대기열 등록 + 실행 중 종목 (중복 등록 방지)
 _invest_analysis_lock     = _threading.Lock()
+_invest_analysis_queued_at: dict = {}   # code → 대기열 등록 시각 (대기 중인 것만; 실행 시작하면 제거)
+_invest_analysis_current:  dict = {'code': None, 'started_at': None}   # 현재 실행 중인 1건 (없으면 code=None)
+_invest_analysis_last_error: dict = {}  # code → {'at': datetime, 'msg': str} (조회용, 최근 실패만 보관)
 
 def _enqueue_invest_analysis(code: str):
     """mvp_graph.py 분석을 백그라운드 대기열에 등록 (입력 순서대로 워커가 1건씩 순차 실행)."""
@@ -2520,6 +2550,7 @@ def _enqueue_invest_analysis(code: str):
         if code in _invest_analysis_pending:
             return
         _invest_analysis_pending.add(code)
+        _invest_analysis_queued_at[code] = datetime.now()
     _invest_analysis_queue.put(code)
     print(f"[투자분석] {code} 백그라운드 분석 대기열 등록")
 
@@ -2529,6 +2560,10 @@ def _invest_analysis_worker():
     동시 실행을 막아 로컬 LLM(Ollama) 부하를 피하고, 조회 순서(입력 순서)를 보장한다."""
     while True:
         code = _invest_analysis_queue.get()
+        with _invest_analysis_lock:
+            _invest_analysis_queued_at.pop(code, None)
+            _invest_analysis_current['code'] = code
+            _invest_analysis_current['started_at'] = datetime.now()
         try:
             print(f"[투자분석] {code} mvp_graph 실행 시작")
             if _INVEST_POINT_SSH_HOST:
@@ -2545,19 +2580,85 @@ def _invest_analysis_worker():
             if result.returncode != 0:
                 err = result.stderr.decode('utf-8', errors='replace')[-2000:]
                 print(f"[투자분석] {code} 실행 실패(rc={result.returncode}): {err}")
+                _invest_analysis_last_error[code] = {'at': datetime.now(), 'msg': f'rc={result.returncode}: {err[-300:]}'}
             else:
-                print(f"[투자분석] {code} 실행 완료 — 다음 조회부터 반영")
+                print(f"[투자분석] {code} 실행 완료 - 다음 조회부터 반영")
         except subprocess.TimeoutExpired:
             print(f"[투자분석] {code} 실행 시간 초과 ({_INVEST_ANALYSIS_TIMEOUT}초)")
+            _invest_analysis_last_error[code] = {'at': datetime.now(), 'msg': f'{_INVEST_ANALYSIS_TIMEOUT}초 시간 초과'}
         except Exception as e:
             print(f"[투자분석] {code} 실행 오류: {e}")
+            _invest_analysis_last_error[code] = {'at': datetime.now(), 'msg': str(e)}
         finally:
             with _invest_analysis_lock:
                 _invest_analysis_pending.discard(code)
+                _invest_analysis_current['code'] = None
+                _invest_analysis_current['started_at'] = None
             _invest_analysis_queue.task_done()
 
 
-_threading.Thread(target=_invest_analysis_worker, daemon=True).start()
+def _invest_analysis_watchdog():
+    """현재 실행 중인 mvp_graph 가 _INVEST_ANALYSIS_WARN_SEC(기본 5분)를 넘게 걸리면
+    _INVEST_ANALYSIS_WATCHDOG_INTERVAL(기본 60초)마다 경고 로그를 반복 출력한다.
+    타임아웃(_INVEST_ANALYSIS_TIMEOUT, 기본 600초)까지 기다리지 않고도 지연/멈춤 상황을
+    서버 콘솔에서 빨리 알아채기 위함 — mvp_graph 평균 소요시간은 약 180초."""
+    while True:
+        time.sleep(_INVEST_ANALYSIS_WATCHDOG_INTERVAL)
+        try:
+            with _invest_analysis_lock:
+                cur_code    = _invest_analysis_current['code']
+                cur_started = _invest_analysis_current['started_at']
+                waiting_cnt = len(_invest_analysis_queued_at)
+            if not cur_code or not cur_started:
+                continue
+            elapsed = (datetime.now() - cur_started).total_seconds()
+            if elapsed >= _INVEST_ANALYSIS_WARN_SEC:
+                print(f"[투자분석][경고] {cur_code} 실행 {int(elapsed)}초째 진행 중 "
+                      f"(평균 180초, 타임아웃 {_INVEST_ANALYSIS_TIMEOUT}초) - 대기 {waiting_cnt}건 밀림")
+        except Exception as e:
+            # 워치독 스레드가 여기서 죽으면 이후 경고가 영구히 끊기므로, 어떤 예외가 나도 삼키고
+            # 다음 점검 주기에 계속 돈다(예: 콘솔 인코딩이 이모지/특수문자를 못 받는 환경 등).
+            try:
+                print(f"[투자분석][워치독 오류] {e}")
+            except Exception:
+                pass
+
+
+_threading.Thread(target=_invest_analysis_worker,   daemon=True).start()
+_threading.Thread(target=_invest_analysis_watchdog, daemon=True).start()
+
+
+@app.route('/api/invest-analysis/queue')
+def invest_analysis_queue():
+    """투자분석(mvp_graph/Ollama) 백그라운드 대기열 상태 조회 — 디버그/모니터링용.
+    현재 실행 중인 종목과 경과시간, 대기 중인 종목 목록(등록 순서)과 대기시간,
+    최근 실패 이력(종목당 마지막 1건)을 반환한다."""
+    now = datetime.now()
+    with _invest_analysis_lock:
+        cur_code = _invest_analysis_current['code']
+        cur_started = _invest_analysis_current['started_at']
+        current = None
+        if cur_code:
+            current = {
+                'code': cur_code,
+                'started_at': cur_started.strftime('%Y-%m-%d %H:%M:%S') if cur_started else None,
+                'elapsed_sec': int((now - cur_started).total_seconds()) if cur_started else None,
+            }
+        waiting = [
+            {'code': c, 'queued_at': t.strftime('%Y-%m-%d %H:%M:%S'), 'wait_sec': int((now - t).total_seconds())}
+            for c, t in _invest_analysis_queued_at.items()
+        ]
+        errors = [
+            {'code': c, 'at': v['at'].strftime('%Y-%m-%d %H:%M:%S'), 'msg': v['msg']}
+            for c, v in sorted(_invest_analysis_last_error.items(), key=lambda kv: kv[1]['at'], reverse=True)[:20]
+        ]
+    return jsonify({
+        'current': current,
+        'waiting': waiting,
+        'queue_size': len(waiting),
+        'recent_errors': errors,
+        'timeout_sec': _INVEST_ANALYSIS_TIMEOUT,
+    })
 
 
 def _extract_bracket_points(text: str, tag: str) -> list:
@@ -3568,7 +3669,7 @@ def dart_company_info():
     # stock_code(6) → corp_code(8) 변환 (corpCode.xml 불일치 시 종목명으로 fallback)
     corp_code = _dart_stock_to_corp(code, stock_name)
     if not corp_code:
-        return jsonify({'error': f'DART corp_code 없음 ({code})'}), 404
+        return jsonify({'error': f'DART 종목코드 없음 ({code})'}), 404
 
     # 기업 기본정보 + 병렬 데이터 수집
     cls_map = {'Y': '유가증권', 'K': '코스닥', 'N': '코넥스', 'E': '기타'}
