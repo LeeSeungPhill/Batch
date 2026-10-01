@@ -6810,8 +6810,8 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_item_loss_21, ',d') + "원"
-                        + stock_info_str
                         + short_sec_21
+                        + stock_info_str
                     )
                     button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_21 > 0 else []) + ["다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
@@ -7015,8 +7015,8 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
-                        + stock_info_str
                         + short_sec_71
+                        + stock_info_str
                         + mr_warn71
                     )
                     button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_71 > 0 else []) + ["다시계산", "취소"], "trail71")
@@ -7245,8 +7245,8 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준 (제안: " + format(input_buy_amt_73, ',d') + "원)\n"
                         "  매수금액: " + format(amt_buy_amt_73, ',d') + "원 | 매수량: " + format(amt_buy_qty_73, ',d') + "주 | 손실금액: " + format(amt_item_loss_73, ',d') + "원"
-                        + stock_info_str
                         + short_sec_73
+                        + stock_info_str
                     )
                     button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_73 > 0 else []) + ["다시계산", "취소"], "trail73")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
