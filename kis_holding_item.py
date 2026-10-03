@@ -869,7 +869,7 @@ def balance_proc(access_token, app_key, app_secret, acct_no):
                         cur401.execute("""
                             SELECT hold_price FROM "stockOrderComplete_stock_order_complete" A
                             WHERE acct_no = %s AND order_no = %s AND order_dt = %s
-                        """, (str(acct_no), item['원주문번호'], today_str))
+                        """, (str(acct_no), str(int(item['원주문번호'])), today_str))
                         result_one41 = cur401.fetchone()
                         cur401.close()
 

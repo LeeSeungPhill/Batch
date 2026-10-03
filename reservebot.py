@@ -125,6 +125,7 @@ g_buy21_loss_buy_qty = 0     # 손절금액 기준 매수량
 g_buy21_loss_buy_amt = 0     # 손절금액 기준 매수금액
 g_buy21_amt_buy_qty = 0      # 매수금액 기준 매수량
 g_buy21_amt_buy_amt = 0      # 매수금액 기준 매수금액
+g_buy21_short_buy_qty = 0    # 단기시장 기준 매수량
 
 # 보유종목 매도 수량
 g_holding_sell_qty = 0
@@ -204,6 +205,7 @@ g_trail71_loss_buy_qty = 0   # 손절금액 기준 매수량
 g_trail71_loss_buy_amt = 0   # 손절금액 기준 매수금액
 g_trail71_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail71_amt_buy_amt = 0    # 매수금액 기준 매수금액
+g_trail71_short_buy_qty = 0  # 단기시장 기준 매수량
 _trail71_from_signal = False  # 신호 버튼에서 진입 시 True → acc_71_confirm에서 입력 단계 생략
 
 # 매수자동등록(73) 미리보기 → 진행 콜백 공유 상태
@@ -220,6 +222,7 @@ g_trail73_loss_buy_qty = 0   # 손절금액 기준 매수량
 g_trail73_loss_buy_amt = 0   # 손절금액 기준 매수금액
 g_trail73_amt_buy_qty = 0    # 매수금액 기준 매수량
 g_trail73_amt_buy_amt = 0    # 매수금액 기준 매수금액
+g_trail73_short_buy_qty = 0  # 단기시장 기준 매수량
 
 # 보유종목 교체(HCHG) → 보유종목 선택(다중계좌 선택 이전) 후 전량 매도·대체 매수 공유 상태
 g_hchg_code = ""    # 매도 대상 보유종목코드
@@ -2048,10 +2051,12 @@ def callback_get(update, context) :
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "21")
 
-    elif command in ("손절금액", "매수금액") and "buy21" in data_selected:
+    elif command in ("손절금액", "매수금액", "단기시장") and "buy21" in data_selected:
         # 매수주문 미리보기 → 실제 주문 처리
         if command == "손절금액":
             g_buy21_buy_qty = g_buy21_loss_buy_qty
+        elif command == "단기시장":
+            g_buy21_buy_qty = g_buy21_short_buy_qty
         else:
             g_buy21_buy_qty = g_buy21_amt_buy_qty
 
@@ -2640,10 +2645,12 @@ def callback_get(update, context) :
             g_selected_accounts.clear()
             show_account_selection_keyboard(query, "73")    
 
-    elif command in ("손절금액", "매수금액") and "trail71" in data_selected:
+    elif command in ("손절금액", "매수금액", "단기시장") and "trail71" in data_selected:
         # 손절금액/매수금액 선택에 따라 매수량·매수금액 설정
         if command == "손절금액":
             g_trail71_buy_qty = g_trail71_loss_buy_qty
+        elif command == "단기시장":
+            g_trail71_buy_qty = g_trail71_short_buy_qty
         else:
             g_trail71_buy_qty = g_trail71_amt_buy_qty
 
@@ -2792,10 +2799,12 @@ def callback_get(update, context) :
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
         query.edit_message_text(text="[선택계좌: " + selected_str + "]\n종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.")
 
-    elif command in ("손절금액", "매수금액") and "trail73" in data_selected:
+    elif command in ("손절금액", "매수금액", "단기시장") and "trail73" in data_selected:
         # 손절금액/매수금액 선택에 따라 매수량·매수금액 설정
         if command == "손절금액":
             g_trail73_buy_qty = g_trail73_loss_buy_qty
+        elif command == "단기시장":
+            g_trail73_buy_qty = g_trail73_short_buy_qty
         else:
             g_trail73_buy_qty = g_trail73_amt_buy_qty
 
@@ -4927,6 +4936,20 @@ def initMenuNum():
     menuNum = "0"
     chartReq = "0"
 
+# 단기시장 기준 미리보기 섹션 (매수금액·매수량·손실금액) 생성 → (표시문자열, 매수량)
+def build_short_market_section(buy_price, loss_price, short_amt, short_label):
+    if short_amt <= 0 or buy_price <= 0:
+        return "", 0
+    qty = int(round(short_amt / buy_price))
+    amt = buy_price * qty
+    loss = (buy_price - loss_price) * qty
+    text = (
+        "\n─────────────────\n"
+        f"  단기시장 기준 (제안: {format(short_amt, ',d')}원 | {short_label})\n"
+        f"  매수금액: {format(amt, ',d')}원 | 매수량: {format(qty, ',d')}주 | 손실금액: {format(loss, ',d')}원"
+    )
+    return text, qty
+
 def echo(update, context):
     user_id = update.effective_chat.id
     user_text = update.message.text
@@ -6678,8 +6701,13 @@ def echo(update, context):
         # 종목 기본정보 (시장구분·업종·규모·매수금액 제안·손절금액 제안)
         stock_info_str = ""
         suggest_buy_amt = 0
+        suggest_short_amt = 0     # 단기시장 기준 제안 매수금액 (단기 상승/하락 아닐 땐 0)
+        short_label = ""          # 예) 단기 코스닥 상승
         _suggest_loss = 50_000
         _mr_si = 0
+        _short_val = None
+        _mkt_str = str(market_kor)
+        _stk_mkt = 'KOSPI' if ('ETF' in _mkt_str.upper() or 'KOSPI' in _mkt_str.upper() or '코스피' in _mkt_str) else 'KOSDAQ'
         try:
             try:
                 _mktcap = int(str(hts_avls).replace(',', ''))
@@ -6691,13 +6719,15 @@ def echo(update, context):
             try:
                 with get_conn().cursor() as _cur_si:
                     _cur_si.execute(
-                        'SELECT market_ratio FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
+                        'SELECT market_ratio, kospi_short, kosdak_short FROM public."stockFundMng_stock_fund_mng" WHERE acct_no = %s',
                         (str(acct_no),)
                     )
                     _si_row = _cur_si.fetchone()
-                    if _si_row and _si_row[0]:
-                        _mr_si = float(_si_row[0])
-                        _suggest_loss = int(max(50_000, min(250_000, 50_000 + (_mr_si / 100) * 200_000)))
+                    if _si_row:
+                        if _si_row[0]:
+                            _mr_si = float(_si_row[0])
+                            _suggest_loss = int(max(50_000, min(250_000, 50_000 + (_mr_si / 100) * 200_000)))
+                        _short_val = _si_row[1] if _stk_mkt == 'KOSPI' else _si_row[2]
             except Exception:
                 pass
 
@@ -6707,11 +6737,16 @@ def echo(update, context):
                 ))
             ) if _mr_si > 0 else _amt_min
 
+            # 단기시장 기준 제안금액: 단기 상승('01') 0.5, 단기 하락('02') 0.25 (그 외 값은 단기시장 기준 미적용)
+            _short_factor = {'01': 0.5, '02': 0.25}.get(str(_short_val).strip()) if _short_val is not None else None
+            if _short_factor is not None:
+                suggest_short_amt = int(max(_amt_min, min(_amt_max, _amt_min + _short_factor * (_amt_max - _amt_min))))
+                short_label = f"단기 {'코스피' if _stk_mkt == 'KOSPI' else '코스닥'} {'상승' if str(_short_val).strip() == '01' else '하락'}"
+
             stock_info_str = (
                 "\n─────────────────\n"
-                f"  [{market_kor}] {_size} | 업종: {industry_kor} | 시총: {format(_mktcap, ',d')}억원 | 시장비율: {_mr_si:.0f}%\n"
-                f"  매수금액 권장: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})\n"
-                f"  매수금액 제안: {format(suggest_buy_amt, ',d')}원 | 손절금액 제안: {format(_suggest_loss, ',d')}원"
+                f"  [{market_kor}] {_size} | 업종: {industry_kor} | 시총: {format(_mktcap, ',d')}억원 | 시장비율: {_mr_si:.0f}%" + (f" | {short_label}" if short_label else "") + "\n"
+                f"  매수금액 권장: {format(_amt_min, ',d')}~{format(_amt_max, ',d')}원 ({_amt_desc})"
             )
         except Exception as _e_si:
             print(f"[stock_info] 조회 오류: {_e_si}")
@@ -6750,7 +6785,9 @@ def echo(update, context):
                     global g_buy21_code, g_buy21_company, g_buy21_buy_price, g_buy21_loss_price
                     global g_buy21_buy_qty, g_buy21_buy_amt
                     global g_buy21_loss_buy_qty, g_buy21_loss_buy_amt
-                    global g_buy21_amt_buy_qty, g_buy21_amt_buy_amt
+                    global g_buy21_amt_buy_qty, g_buy21_amt_buy_amt, g_buy21_short_buy_qty
+                    short_sec_21, short_qty_21 = build_short_market_section(buy_price_21, loss_price_21, suggest_short_amt, short_label)
+                    g_buy21_short_buy_qty = short_qty_21
                     g_buy21_code = code
                     g_buy21_company = company
                     g_buy21_buy_price = buy_price_21
@@ -6773,9 +6810,10 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_21, ',d') + "원 | 매수량: " + format(amt_buy_qty_21, ',d') + "주 | 손실금액: " + format(amt_item_loss_21, ',d') + "원"
+                        + short_sec_21
                         + stock_info_str
                     )
-                    button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "buy21")
+                    button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_21 > 0 else []) + ["다시계산", "취소"], "buy21")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')         
 
@@ -6915,7 +6953,9 @@ def echo(update, context):
                     global g_trail71_item_loss_sum, g_trail71_buy_qty, g_trail71_buy_amt
                     global g_trail71_year_day, g_trail71_hour_minute
                     global g_trail71_loss_buy_qty, g_trail71_loss_buy_amt
-                    global g_trail71_amt_buy_qty, g_trail71_amt_buy_amt
+                    global g_trail71_amt_buy_qty, g_trail71_amt_buy_amt, g_trail71_short_buy_qty
+                    short_sec_71, short_qty_71 = build_short_market_section(buy_price_71, loss_price_71, suggest_short_amt, short_label)
+                    g_trail71_short_buy_qty = short_qty_71
                     g_trail71_code = code
                     g_trail71_company = company
                     g_trail71_buy_price = buy_price_71
@@ -6975,10 +7015,11 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준\n"
                         "  매수금액: " + format(amt_buy_amt_71, ',d') + "원 | 매수량: " + format(amt_buy_qty_71, ',d') + "주 | 손실금액: " + format(amt_item_loss_71, ',d') + "원"
+                        + short_sec_71
                         + stock_info_str
                         + mr_warn71
                     )
-                    button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail71")
+                    button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_71 > 0 else []) + ["다시계산", "취소"], "trail71")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
                     
@@ -7176,7 +7217,9 @@ def echo(update, context):
                     global g_trail73_item_loss_sum, g_trail73_buy_qty, g_trail73_buy_amt
                     global g_trail73_year_day, g_trail73_hour_minute
                     global g_trail73_loss_buy_qty, g_trail73_loss_buy_amt
-                    global g_trail73_amt_buy_qty, g_trail73_amt_buy_amt
+                    global g_trail73_amt_buy_qty, g_trail73_amt_buy_amt, g_trail73_short_buy_qty
+                    short_sec_73, short_qty_73 = build_short_market_section(buy_price_73, loss_price_73, suggest_short_amt, short_label)
+                    g_trail73_short_buy_qty = short_qty_73
                     g_trail73_code = code
                     g_trail73_company = company
                     g_trail73_buy_price = buy_price_73
@@ -7202,9 +7245,10 @@ def echo(update, context):
                         "─────────────────\n"
                         "  매수금액 기준 (제안: " + format(input_buy_amt_73, ',d') + "원)\n"
                         "  매수금액: " + format(amt_buy_amt_73, ',d') + "원 | 매수량: " + format(amt_buy_qty_73, ',d') + "주 | 손실금액: " + format(amt_item_loss_73, ',d') + "원"
+                        + short_sec_73
                         + stock_info_str
                     )
-                    button_list = build_button(["손절금액", "매수금액", "다시계산", "취소"], "trail73")
+                    button_list = build_button(["손절금액", "매수금액"] + (["단기시장"] if short_qty_73 > 0 else []) + ["다시계산", "취소"], "trail73")
                     show_markup = InlineKeyboardMarkup(build_menu(button_list, 2))
                     context.bot.send_message(chat_id=user_id, text=preview_text, reply_markup=show_markup, parse_mode='HTML')
 
