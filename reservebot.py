@@ -1132,13 +1132,13 @@ def _do_interest_register(chat_id, context, pending):
                     trend_high_price = %s,
                     trend_low_price  = %s,
                     last_chg_date    = %s
-                WHERE acct_no = %s AND code = %s AND interest_day = %s AND proc_yn = 'Y'
+                WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             """, (pending['name'],
                   pending['through_price'], pending['leave_price'],
                   pending['d20_high'], pending['d20_low'],
                   pending['y1_high'], pending['y1_low'],
                   now,
-                  pending['acct_reg'], pending['code'], interest_day))
+                  pending['acct_reg'], pending['code']))
             if cur_reg.rowcount == 0:
                 cur_reg.execute("""
                     INSERT INTO public."interestItem_interest_item"
@@ -1623,7 +1623,7 @@ def callback_get(update, context) :
                 cur_ie.execute("""
                     SELECT name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
                     FROM public."interestItem_interest_item"
-                    WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    WHERE code = %s AND proc_yn = 'Y' AND length(code) > 4
                 """, (ii_code,)
                 )
                 row_ie = cur_ie.fetchone()
@@ -1663,7 +1663,7 @@ def callback_get(update, context) :
                     cur_exc.execute(
                         """UPDATE public."interestItem_interest_item"
                            SET proc_yn = 'N'
-                           WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE)""",
+                           WHERE code = %s AND proc_yn = 'Y'""",
                         (g_interest_edit_code,)
                     )
                 get_conn().commit()
@@ -5240,7 +5240,7 @@ def echo(update, context):
                 cur_r.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" '
-                    "WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4",
+                    "WHERE code = %s AND proc_yn = 'Y' AND length(code) > 4",
                     (g_interest_edit_code,)
                 )
                 cur_row = cur_r.fetchone()
