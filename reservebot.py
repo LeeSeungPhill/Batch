@@ -379,7 +379,7 @@ def _show_interest_edit_keyboard(query):
                 FROM public."interestItem_interest_item"
                 WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                 ORDER BY name
-            """, (ac['acct_no']),)
+            """, (ac['acct_no'],))
             rows = cur_ii.fetchall()
         ii_buttons = [
             InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
@@ -7033,8 +7033,9 @@ def echo(update, context):
                             cur71.execute(
                                 """UPDATE public."interestItem_interest_item"
                                    SET proc_yn = 'N', last_chg_date = now()
-                                   WHERE code = %s AND proc_yn = 'Y'""",
-                                (code)
+                                   WHERE code = %s AND proc_yn = 'Y'
+                                   AND acct_no IN (SELECT acct_no FROM public."stockAccount_stock_account" WHERE nick_name = 'phills2')""",
+                                (code,)
                             )
                         c71.commit()
                     except Exception as e71:
