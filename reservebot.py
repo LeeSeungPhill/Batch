@@ -370,15 +370,16 @@ def _show_holding_edit_keyboard(query, context_bot=None):
 
 def _show_interest_edit_keyboard(query):
     """관심종목 변경 종목 선택 키보드 표시 (관심종목_변경 / 뒤로가기 공용)"""
+    ac = account(arguments[1])
     try:
         query.edit_message_text(text="[관심종목 변경] 조회 중...")
         with get_conn().cursor() as cur_ii:
             cur_ii.execute("""
                 SELECT DISTINCT name, code
                 FROM public."interestItem_interest_item"
-                WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                 ORDER BY name
-            """)
+            """, (ac['acct_no']),)
             rows = cur_ii.fetchall()
         ii_buttons = [
             InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
@@ -1503,9 +1504,10 @@ def callback_get(update, context) :
             query.edit_message_text(text="[관심종목 조회] 조회 중...")
             with get_conn().cursor() as cur_ii:
                 cur_ii.execute("""
-                    SELECT MAX(name), MAX(code), MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
+                    SELECT name, code, MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
                     WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    GROUP BY name, code
                     ORDER BY name
                 """)
                 rows = cur_ii.fetchall()
@@ -1583,15 +1585,15 @@ def callback_get(update, context) :
                     message_id=query.message.message_id
                 )
 
+            ac_interest = account(arguments[1])
             with get_conn().cursor() as cur_del:
                 cur_del.execute(
                     """SELECT name FROM public."interestItem_interest_item"
-                       WHERE code = %s AND proc_yn = 'Y'""",
-                    (del_code,)
+                       WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                    (ac_interest['acct_no'], del_code,)
                 )
                 row_del = cur_del.fetchone()
             del_name = row_del[0] if row_del else del_code
-            ac_interest = account(arguments[1])
 
             with get_conn().cursor() as cur_upd:
                 cur_upd.execute(
