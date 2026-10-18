@@ -374,7 +374,7 @@ def _show_interest_edit_keyboard(query):
         query.edit_message_text(text="[관심종목 변경] 조회 중...")
         with get_conn().cursor() as cur_ii:
             cur_ii.execute("""
-                SELECT name, code
+                SELECT DISTINCT name, code
                 FROM public."interestItem_interest_item"
                 WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                 ORDER BY name
@@ -1503,8 +1503,7 @@ def callback_get(update, context) :
             query.edit_message_text(text="[관심종목 조회] 조회 중...")
             with get_conn().cursor() as cur_ii:
                 cur_ii.execute("""
-                    SELECT name, code, through_price, leave_price, resist_price, support_price,
-                           trend_high_price, trend_low_price
+                    SELECT MAX(name), MAX(code), MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
                     WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                     ORDER BY name
@@ -1592,13 +1591,14 @@ def callback_get(update, context) :
                 )
                 row_del = cur_del.fetchone()
             del_name = row_del[0] if row_del else del_code
+            ac_interest = account(arguments[1])
 
             with get_conn().cursor() as cur_upd:
                 cur_upd.execute(
                     """UPDATE public."interestItem_interest_item"
                        SET proc_yn = 'N'
-                       WHERE code = %s AND proc_yn = 'Y'""",
-                    (del_code,)
+                       WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                    (ac_interest['acct_no'], del_code,)
                 )
             get_conn().commit()
             context.bot.send_message(
@@ -1621,7 +1621,7 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_ie:
                 cur_ie.execute("""
-                    SELECT name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
+                    SELECT MAX(name), MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
                     WHERE code = %s AND proc_yn = 'Y' AND length(code) > 4
                 """, (ii_code,)
@@ -1659,12 +1659,14 @@ def callback_get(update, context) :
         g_interest_edit_field = command[len("interest_edit_field_"):]
         if g_interest_edit_field == "관심제외":
             try:
+                ac_interest = account(arguments[1])
+
                 with get_conn().cursor() as cur_exc:
                     cur_exc.execute(
                         """UPDATE public."interestItem_interest_item"
                            SET proc_yn = 'N'
-                           WHERE code = %s AND proc_yn = 'Y'""",
-                        (g_interest_edit_code,)
+                           WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                        (ac_interest['acct_no'], g_interest_edit_code,)
                     )
                 get_conn().commit()
                 query.edit_message_text(
