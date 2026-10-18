@@ -1502,14 +1502,16 @@ def callback_get(update, context) :
     elif command == "관심종목_조회":
         try:
             query.edit_message_text(text="[관심종목 조회] 조회 중...")
+            ac_interest = account(arguments[1])
+
             with get_conn().cursor() as cur_ii:
                 cur_ii.execute("""
                     SELECT name, code, MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
-                    WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                     GROUP BY name, code
                     ORDER BY name
-                """)
+                """, (ac_interest['acct_no'],))
                 rows = cur_ii.fetchall()
             if not rows:
                 query.edit_message_text(text="[관심종목 조회] 조회된 종목이 없습니다.")
