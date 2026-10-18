@@ -370,15 +370,16 @@ def _show_holding_edit_keyboard(query, context_bot=None):
 
 def _show_interest_edit_keyboard(query):
     """관심종목 변경 종목 선택 키보드 표시 (관심종목_변경 / 뒤로가기 공용)"""
+    ac = account(arguments[1])
     try:
         query.edit_message_text(text="[관심종목 변경] 조회 중...")
         with get_conn().cursor() as cur_ii:
             cur_ii.execute("""
-                SELECT name, code
+                SELECT DISTINCT name, code
                 FROM public."interestItem_interest_item"
-                WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
                 ORDER BY name
-            """)
+            """, (ac['acct_no'],))
             rows = cur_ii.fetchall()
         ii_buttons = [
             InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"menu,interest_edit_{r[1]}")
@@ -1132,13 +1133,13 @@ def _do_interest_register(chat_id, context, pending):
                     trend_high_price = %s,
                     trend_low_price  = %s,
                     last_chg_date    = %s
-                WHERE acct_no = %s AND code = %s AND interest_day = %s AND proc_yn = 'Y'
+                WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             """, (pending['name'],
                   pending['through_price'], pending['leave_price'],
                   pending['d20_high'], pending['d20_low'],
                   pending['y1_high'], pending['y1_low'],
                   now,
-                  pending['acct_reg'], pending['code'], interest_day))
+                  pending['acct_reg'], pending['code']))
             if cur_reg.rowcount == 0:
                 cur_reg.execute("""
                     INSERT INTO public."interestItem_interest_item"
@@ -1501,14 +1502,16 @@ def callback_get(update, context) :
     elif command == "관심종목_조회":
         try:
             query.edit_message_text(text="[관심종목 조회] 조회 중...")
+            ac_interest = account(arguments[1])
+
             with get_conn().cursor() as cur_ii:
                 cur_ii.execute("""
-                    SELECT name, code, through_price, leave_price, resist_price, support_price,
-                           trend_high_price, trend_low_price
+                    SELECT name, code, MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
-                    WHERE proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    WHERE acct_no = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    GROUP BY name, code
                     ORDER BY name
-                """)
+                """, (ac_interest['acct_no'],))
                 rows = cur_ii.fetchall()
             if not rows:
                 query.edit_message_text(text="[관심종목 조회] 조회된 종목이 없습니다.")
@@ -1584,11 +1587,12 @@ def callback_get(update, context) :
                     message_id=query.message.message_id
                 )
 
+            ac_interest = account(arguments[1])
             with get_conn().cursor() as cur_del:
                 cur_del.execute(
                     """SELECT name FROM public."interestItem_interest_item"
-                       WHERE code = %s AND proc_yn = 'Y'""",
-                    (del_code,)
+                       WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                    (ac_interest['acct_no'], del_code,)
                 )
                 row_del = cur_del.fetchone()
             del_name = row_del[0] if row_del else del_code
@@ -1597,8 +1601,8 @@ def callback_get(update, context) :
                 cur_upd.execute(
                     """UPDATE public."interestItem_interest_item"
                        SET proc_yn = 'N'
-                       WHERE code = %s AND proc_yn = 'Y'""",
-                    (del_code,)
+                       WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                    (ac_interest['acct_no'], del_code,)
                 )
             get_conn().commit()
             context.bot.send_message(
@@ -1621,9 +1625,9 @@ def callback_get(update, context) :
         try:
             with get_conn().cursor() as cur_ie:
                 cur_ie.execute("""
-                    SELECT name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
+                    SELECT MAX(name), MAX(through_price), MAX(leave_price), MAX(resist_price), MAX(support_price), MAX(trend_high_price), MAX(trend_low_price)
                     FROM public."interestItem_interest_item"
-                    WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4
+                    WHERE code = %s AND proc_yn = 'Y' AND length(code) > 4
                 """, (ii_code,)
                 )
                 row_ie = cur_ie.fetchone()
@@ -1659,12 +1663,14 @@ def callback_get(update, context) :
         g_interest_edit_field = command[len("interest_edit_field_"):]
         if g_interest_edit_field == "관심제외":
             try:
+                ac_interest = account(arguments[1])
+
                 with get_conn().cursor() as cur_exc:
                     cur_exc.execute(
                         """UPDATE public."interestItem_interest_item"
                            SET proc_yn = 'N'
-                           WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE)""",
-                        (g_interest_edit_code,)
+                           WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'""",
+                        (ac_interest['acct_no'], g_interest_edit_code,)
                     )
                 get_conn().commit()
                 query.edit_message_text(
@@ -5240,7 +5246,7 @@ def echo(update, context):
                 cur_r.execute(
                     'SELECT through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price '
                     'FROM public."interestItem_interest_item" '
-                    "WHERE code = %s AND proc_yn = 'Y' AND interest_day >= prev_business_day_char(CURRENT_DATE) AND length(code) > 4",
+                    "WHERE code = %s AND proc_yn = 'Y' AND length(code) > 4",
                     (g_interest_edit_code,)
                 )
                 cur_row = cur_r.fetchone()
@@ -7029,8 +7035,9 @@ def echo(update, context):
                             cur71.execute(
                                 """UPDATE public."interestItem_interest_item"
                                    SET proc_yn = 'N', last_chg_date = now()
-                                   WHERE code = %s AND proc_yn = 'Y'""",
-                                (code)
+                                   WHERE code = %s AND proc_yn = 'Y'
+                                   AND acct_no IN (SELECT acct_no FROM public."stockAccount_stock_account" WHERE nick_name = 'phills2')""",
+                                (code,)
                             )
                         c71.commit()
                     except Exception as e71:
