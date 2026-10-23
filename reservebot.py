@@ -231,6 +231,13 @@ g_hchg_name = ""    # 매도 대상 보유종목명
 # 시장관리(MKTM) → 선택 시장레벨 공유 상태
 g_mktm_level = ""   # "1":시장상승, "2":시장하락, "3":시장패턴
 
+# 분할매수(SPB)/분할매도(SPS) 공유 상태
+g_split_code = ""        # 대상 종목코드
+g_split_company = ""     # 대상 종목명
+g_split_total = 0        # 분할매수: 전체 매수금액(원) / 분할매도: 전체 매도비율(%)
+g_split_count = 0        # 분할 횟수
+g_split_base_qty = {}    # 분할매도: {계좌닉네임: 전체 매도수량} (계좌 확인 시점 보유수량 기준)
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 INVEST_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong']  # 선택 가능 계좌 목록
@@ -446,16 +453,18 @@ def build_button(text_list, callback_header = "") : # make button list
 
     return button_list
 
-def get_command(update, context) :
+def build_main_menu_markup():
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
                                  "전체예약", "예약주문", "예약정정", "예약취소", 
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "반등매도", "시장관리", "코스피", "코스닥"], callback_header="menu")
+                                 "반등매도", "시장관리", "코스피", "코스닥",
+                                 "분할매수", "분할매도"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
-    show_markup = InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
-    
-    update.message.reply_text("메뉴를 선택하세요", reply_markup=show_markup) # reply text with markup
+    return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
+
+def get_command(update, context) :
+    update.message.reply_text("메뉴를 선택하세요", reply_markup=build_main_menu_markup()) # reply text with markup
 
 def start(update, context) :
     chat_id = update.effective_chat.id
@@ -1110,7 +1119,10 @@ def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=Non
             row = []
     if row:
         buttons.append(row)
-    buttons.append([InlineKeyboardButton("✔ 확인", callback_data=f"acc_{menu_num}_confirm")])
+    buttons.append([
+        InlineKeyboardButton("✔ 확인", callback_data=f"acc_{menu_num}_confirm"),
+        InlineKeyboardButton("◀ 뒤로가기", callback_data=f"acc_{menu_num}_back"),
+    ])
     if send_new and bot and chat_id:
         bot.send_message(chat_id=chat_id, text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
     else:
@@ -2984,6 +2996,35 @@ def callback_get(update, context) :
         except Exception as e:
             query.edit_message_text(text=f"[추적변경] 오류: {str(e)}")
 
+    elif command.startswith("acc_") and command.endswith("_back"):
+        # 계좌 선택 뒤로가기: 직전 단계 화면으로 복귀 (직전 단계 콜백을 다시 실행)
+        back_num = command.split("_")[1]
+        menuNum = "0"
+        back_parent = {
+            "71": "menu,추적등록", "72": "menu,추적등록", "73": "menu,추적등록",
+            "SL": "menu,매도주문",
+            "51N": f"corr_type_{g_corr_dvsn}",
+            "52N": f"cncl_type_{g_cncl_dvsn}",
+            "61B": "menu,예약주문", "61S": "rsv_type_sell",
+            "62N": f"rsv_corr_type_{g_rsv_corr_dvsn}",
+            "63N": f"rsv_cncl_type_{g_rsv_cncl_dvsn}",
+            "01": "menu,보유종목_조회",
+            "TRALL": "menu,종목관리", "TRMAR": "menu,종목관리",
+            "HCHG": "menu,보유종목_교체",
+            "SPB": "menu,분할매수", "SPS": "menu,분할매도",
+        }.get(back_num)
+        if back_parent:
+            query.data = back_parent
+            callback_get(update, context)
+        elif back_num in ("TRNXT", "FB"):
+            try:
+                context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+            except Exception:
+                query.edit_message_text(text="취소하였습니다.")
+        else:
+            query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
+        return
+
     elif command.startswith("acc_") and command.endswith("_all"):
         # 전체선택/해제: callback_data = "acc_{menu_num}_all"
         menu_num = command.split("_")[1]
@@ -3604,6 +3645,41 @@ def callback_get(update, context) :
                 text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
                 reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
             )
+        elif menu_num in ("SPB", "SPS"):
+            # 분할매수/분할매도 — 차수 선택 버튼 표시
+            menuNum = "0"
+            sp_is_buy = menu_num == "SPB"
+            sp_word = "매수" if sp_is_buy else "매도"
+            head = f"[선택계좌: {selected_str}]\n[{g_split_company}(<code>{g_split_code}</code>)] "
+            if sp_is_buy:
+                head += (f"전체 {format(g_split_total, ',d')}원 / {g_split_count}회 분할 "
+                         f"(회당 {format(g_split_total // g_split_count, ',d')}원)")
+            else:
+                g_split_base_qty.clear()
+                lines = []
+                for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+                    label = nick if nick else arguments[1]
+                    try:
+                        ac_x = account(nick) if nick else account(arguments[1])
+                        e_x = stock_balance(ac_x['access_token'], ac_x['app_key'], ac_x['app_secret'], str(ac_x['acct_no']), "")
+                        held = 0
+                        for j, _ in enumerate(e_x.index):
+                            if e_x['pdno'][j] == g_split_code:
+                                held = int(e_x['ord_psbl_qty'][j])
+                                break
+                        total_sell = int(held * g_split_total / 100)
+                        g_split_base_qty[label] = total_sell
+                        lines.append(f"  {label}: 보유 {format(held, ',d')}주 → 총 {format(total_sell, ',d')}주 (회당 {format(total_sell // g_split_count, ',d')}주)")
+                    except Exception as e:
+                        lines.append(f"  {label}: 보유수량 조회 오류 {str(e)}")
+                    time.sleep(0.3)
+                head += f"전체 {g_split_total}% / {g_split_count}회 분할\n" + "\n".join(lines)
+            sp_btns = [InlineKeyboardButton(f"{i}차 {sp_word}", callback_data=f"split_{'buy' if sp_is_buy else 'sell'}:{g_split_code}:{i}")
+                       for i in range(1, g_split_count + 1)]
+            sp_rows = build_menu(sp_btns, 2)
+            sp_rows.append([InlineKeyboardButton("뒤로가기", callback_data=f"split_back:{menu_num}")])
+            query.edit_message_text(text=head + f"\n{sp_word}할 차수를 선택하세요:",
+                                    reply_markup=InlineKeyboardMarkup(sp_rows), parse_mode='HTML')
         elif menu_num == "TRNXT":
             # 매매추적 AFTER 등록 — 선택계좌 각각에 대해 잔고 조회 후 trading_trail_nxt 등록
             menuNum = "0"
@@ -4845,6 +4921,110 @@ def callback_get(update, context) :
         for t in threads_fo:
             t.join()
 
+    elif command == "분할매수":
+        menuNum = "SPB"
+        query.edit_message_text(text="[분할매수] 종목명(종목코드), 전체 매수금액, 분할 매수 횟수(2~20)를 입력하세요.\n예) 005930,3000000,3")
+
+    elif command == "분할매도":
+        menuNum = "SPS"
+        query.edit_message_text(text="[분할매도] 종목명(종목코드), 전체 매도비율(1~100), 분할 매도 횟수(2~20)를 입력하세요.\n예) 005930,100,3")
+
+    elif command.startswith("split_back:"):
+        # 분할 차수 선택 → 계좌 선택으로 되돌아가기 (선택된 계좌는 유지)
+        menuNum = "0"
+        show_account_selection_keyboard(query, command.split(":")[1])
+
+    elif command.startswith("split_buy:") or command.startswith("split_sell:"):
+        is_buy = command.startswith("split_buy:")
+        sp_label = "매수" if is_buy else "매도"
+        _, sp_code, sp_n = command.split(":")
+        sp_n = int(sp_n)
+        sp_chat = query.message.chat_id
+
+        if sp_code != g_split_code or g_split_count <= 0:
+            context.bot.send_message(chat_id=sp_chat, text=f"[분할{sp_label}] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            return
+
+        # 클릭된 차수 버튼만 제거 (나머지·뒤로가기 유지)
+        try:
+            remaining = [btn for row in query.message.reply_markup.inline_keyboard for btn in row if btn.callback_data != command]
+            context.bot.edit_message_reply_markup(
+                chat_id=sp_chat, message_id=query.message.message_id,
+                reply_markup=InlineKeyboardMarkup(build_menu(remaining, 2))
+            )
+        except Exception:
+            pass
+
+        sp_company = g_split_company
+        sp_total = g_split_total
+        sp_count = g_split_count
+        sp_base = dict(g_split_base_qty)
+        sp_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
+
+        def process_split(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            t_label = nick if nick else arguments[1]
+            tag = f"-{t_label}-[{sp_company}(<code>{sp_code}</code>)] {sp_n}차 {sp_label}"
+            try:
+                if is_buy:
+                    sp_amt = split_tranche(sp_total, sp_count, sp_n)
+                    b = int(inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no))
+                    if b < sp_amt:
+                        context.bot.send_message(chat_id=sp_chat, parse_mode='HTML',
+                            text=f"{tag} 불가 — 매수금액 {format(sp_amt, ',d')}원이 매수가능금액 {format(b, ',d')}원을 초과")
+                        return
+                    ap = inquire_price(t_access_token, t_app_key, t_app_secret, sp_code)
+                    sp_price = int(ap['stck_prpr'])
+                    sp_price = round_to_valid_price(sp_price, get_tick_size(sp_price))
+                    sp_qty = sp_amt // sp_price if sp_price > 0 else 0
+                    if sp_qty <= 0:
+                        context.bot.send_message(chat_id=sp_chat, parse_mode='HTML',
+                            text=f"{tag} 불가 — 매수금액 {format(sp_amt, ',d')}원으로 매수 가능한 수량 없음 (현재가 {format(sp_price, ',d')}원)")
+                        return
+                else:
+                    sp_plan_qty = split_tranche(sp_base.get(t_label, 0), sp_count, sp_n)
+                    if sp_plan_qty <= 0:
+                        context.bot.send_message(chat_id=sp_chat, parse_mode='HTML', text=f"{tag} 불가 — 분할 매도수량 0주")
+                        return
+                    e_sp = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                    sp_psbl = 0
+                    for j, _ in enumerate(e_sp.index):
+                        if e_sp['pdno'][j] == sp_code:
+                            sp_psbl = int(e_sp['ord_psbl_qty'][j])
+                            break
+                    if sp_psbl <= 0:
+                        context.bot.send_message(chat_id=sp_chat, parse_mode='HTML', text=f"{tag} 불가 — 매도가능수량 없음")
+                        return
+                    sp_qty = min(sp_plan_qty, sp_psbl)
+                    ap = inquire_price(t_access_token, t_app_key, t_app_secret, sp_code)
+                    sp_price = int(ap['stck_prpr'])
+                    sp_price = round_to_valid_price(sp_price, get_tick_size(sp_price))
+
+                c_sp = order_cash(is_buy, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
+                                  sp_code, "00", str(sp_qty), str(sp_price))
+                if c_sp is not None and c_sp['ODNO'] != "":
+                    context.bot.send_message(chat_id=sp_chat, parse_mode='HTML',
+                        text=(f"{tag} 주문 완료 | 가격: {format(sp_price, ',d')}원 | 수량: {format(sp_qty, ',d')}주 | "
+                              f"금액: {format(sp_price * sp_qty, ',d')}원 | 주문번호: <code>{str(int(c_sp['ODNO']))}</code>"))
+                else:
+                    context.bot.send_message(chat_id=sp_chat, parse_mode='HTML', text=f"{tag} 주문 실패")
+            except Exception as e:
+                context.bot.send_message(chat_id=sp_chat, parse_mode='HTML', text=f"{tag} 오류: {str(e)}")
+
+        sp_threads = []
+        for nick in sp_nicks:
+            try:
+                ac_sp = account(nick) if nick else account(arguments[1])
+            except Exception as e:
+                context.bot.send_message(chat_id=sp_chat, text=f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(target=process_split,
+                                 args=(nick, ac_sp['acct_no'], ac_sp['access_token'], ac_sp['app_key'], ac_sp['app_secret']))
+            sp_threads.append(t)
+            t.start()
+            time.sleep(0.5)
+        for t in sp_threads:
+            t.join()
+
     elif command == "시장관리":
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "MKTM")
@@ -4956,6 +5136,11 @@ def build_short_market_section(buy_price, loss_price, short_amt, short_label):
     )
     return text, qty
 
+# 분할 n차 몫 계산 (마지막 차수에 나머지 포함)
+def split_tranche(total, count, n):
+    base = total // count
+    return base + (total - base * count) if n == count else base
+
 def echo(update, context):
     user_id = update.effective_chat.id
     user_text = update.message.text
@@ -4992,6 +5177,7 @@ def echo(update, context):
     global g_rsv_cncl_code, g_rsv_cncl_name, g_rsv_cncl_dvsn
     global g_hchg_code, g_hchg_name
     global g_mktm_level
+    global g_split_code, g_split_company, g_split_total, g_split_count
 
     # 관심종목 가격 직접입력 대기 처리
     pending = _pending_register.get(user_id)
@@ -7178,6 +7364,29 @@ def echo(update, context):
                     t.start()
                 for t in threads_72:
                     t.join()
+
+        elif menuNum in ('SPB', 'SPS'):
+            # 입력: 종목명(종목코드), 전체 매수금액(분할매수) / 전체 매도비율(분할매도), 분할 횟수
+            sp_is_buy_in = menuNum == 'SPB'
+            parts_sp = [x.strip() for x in user_text.split(',')]
+            sp_val_ok = len(parts_sp) >= 3 and parts_sp[1].isdecimal() and parts_sp[2].isdecimal()
+            sp_val = int(parts_sp[1]) if sp_val_ok else 0
+            sp_cnt = int(parts_sp[2]) if sp_val_ok else 0
+            if (not sp_val_ok or not (2 <= sp_cnt <= 20)
+                    or (sp_is_buy_in and sp_val <= 0) or (not sp_is_buy_in and not (1 <= sp_val <= 100))):
+                context.bot.send_message(chat_id=user_id, text=(
+                    "[" + company + "] 입력 형식 오류 — 종목명(종목코드), "
+                    + ("전체 매수금액(원), " if sp_is_buy_in else "전체 매도비율(1~100), ")
+                    + "분할 횟수(2~20)"))
+            else:
+                sp_menu = "SPB" if sp_is_buy_in else "SPS"
+                initMenuNum()
+                g_split_code = code
+                g_split_company = company
+                g_split_total = sp_val
+                g_split_count = sp_cnt
+                g_selected_accounts.clear()
+                show_account_selection_keyboard(None, sp_menu, send_new=True, chat_id=user_id, bot=context.bot)
 
         elif menuNum == '73':
             # 입력: 종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)
