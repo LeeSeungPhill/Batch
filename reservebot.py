@@ -3967,7 +3967,7 @@ def callback_get(update, context) :
                     WHERE SB.acct_no = BAL.acct_no
                     AND SB.code = BAL.code
                     AND SB.proc_yn = 'Y'
-                    AND SB.trading_plan IN ('i', 'h')
+                    AND SB.trading_plan IN ('i')
                 );
                 """
 

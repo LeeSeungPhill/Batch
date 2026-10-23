@@ -397,6 +397,33 @@ def order_cash(buy_flag, access_token, app_key, app_secret, acct_no, stock_code,
     ar = resp.APIResp(res)
     return ar.getBody().output
 
+# 주식주문(전량취소)
+def order_cancel(access_token, app_key, app_secret, acct_no, order_no, ord_gno_brno):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "TTTC0013U",
+               "custtype": "P"
+    }
+    params = {
+               "CANO": acct_no,
+               "ACNT_PRDT_CD": "01",
+               "KRX_FWDG_ORD_ORGNO": ord_gno_brno,
+               "ORGN_ODNO": order_no,
+               "ORD_DVSN": "00",
+               "RVSE_CNCL_DVSN_CD": "02",       # 정정 : 01, 취소 : 02
+               "ORD_QTY": "0",
+               "ORD_UNPR": "0",
+               "QTY_ALL_ORD_YN": "Y"            # 전량 : Y, 일부 : N
+    }
+    PATH = "uapi/domestic-stock/v1/trading/order-rvsecncl"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.post(URL, data=json.dumps(params), headers=headers, verify=False, timeout=10)
+    ar = resp.APIResp(res)
+    return ar.getBody().output
+
 def fetch_candles_with_base(access_token, app_key, app_secret, code, base_dtm):
     headers = {
         "Content-Type": "application/json",
@@ -940,8 +967,58 @@ def process_account(nick):
             short_market_signal = 'U'
             if mkt == 'KOSPI' and kospi_short_v == '02':
                 short_market_signal = 'D'
-            elif mkt == 'KOSDAQ' and kosdak_short_v == '02':    
+            elif mkt == 'KOSDAQ' and kosdak_short_v == '02':
                 short_market_signal = 'D'
+
+            # trading_plan = 'h' 보유종목 : 장중 현재가가 매입단가(purchase_price) 이탈시 손절
+            #  - 기존 미체결 매도주문 전량 취소 후, 보유수량 전량을 현재가로 지정가 매도주문
+            _pp_amount = int(i[6]) if i[6] is not None else 0
+            _pp_price  = float(i[14]) if i[14] is not None else 0
+            if (i[12] == 'h' and _pp_amount > 0 and _pp_price > 0
+                    and int(a['stck_prpr']) < _pp_price
+                    and '0900' <= datetime.now().strftime('%H%M') < '1520'):
+                try:
+                    _sell_price = int(a['stck_prpr'])
+                    _open_sell = [
+                        o for o in get_my_complete(access_token, app_key, app_secret, acct_no, i[0], "")
+                        if o.get('sll_buy_dvsn_cd') == '01' and int(float(o.get('rmn_qty') or 0)) > 0
+                    ]
+
+                    # 현재가 이하 매도주문이 이미 보유수량 전량으로 걸려 있으면 재주문하지 않음 (매 사이클 취소/재주문 반복 방지)
+                    _already = sum(int(float(o['rmn_qty'])) for o in _open_sell
+                                   if 0 < int(float(o.get('ord_unpr') or 0)) <= _sell_price) >= _pp_amount
+
+                    if not _already:
+                        _cancel_ok = True
+                        for o in _open_sell:
+                            cc = order_cancel(access_token, app_key, app_secret, str(acct_no), o['odno'], o.get('ord_gno_brno', ''))
+                            if cc and cc.get('ODNO'):
+                                print(f"기존 매도주문 취소: {i[1]}[{i[0]}] 주문번호:{o['odno']} {int(float(o['rmn_qty']))}주 @ {int(float(o['ord_unpr']))}")
+                            else:
+                                _cancel_ok = False
+                                print(f"기존 매도주문 취소 실패: {i[1]}[{i[0]}] 주문번호:{o['odno']} {cc}")
+
+                        if not _cancel_ok:
+                            bot.send_message(chat_id=chat_id,
+                                             text=f"[매입단가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                             parse_mode='HTML')
+                        else:
+                            if _open_sell:
+                                time.sleep(0.5)
+                            c = order_cash(False, access_token, app_key, app_secret, str(acct_no), i[0], "00", str(_pp_amount), str(_sell_price))
+                            if c and c.get('ODNO'):
+                                print(f"매입단가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 @ {_sell_price}")
+                                bot.send_message(
+                                    chat_id=chat_id,
+                                    text=(f"[매입단가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {int(a['stck_prpr']):,}원, "
+                                          f"매입단가 : {int(_pp_price):,}원, 매도가(현재가) : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
+                                          f"기존주문취소 : {len(_open_sell)}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                    parse_mode='HTML')
+                            else:
+                                print(f"매입단가 이탈 손절 매도주문 실패: {i[1]}[{i[0]}] {c}")
+                except Exception as _ppe:
+                    print(f"매입단가 이탈 손절 매도주문 에러: {i[1]}[{i[0]}] {_ppe}")
+
             signals = []
 
             if i[2] is not None and i[2] > 0 and int(a['stck_prpr']) > i[2]:
