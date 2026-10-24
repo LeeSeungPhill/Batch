@@ -4923,11 +4923,11 @@ def callback_get(update, context) :
 
     elif command == "분할매수":
         menuNum = "SPB"
-        query.edit_message_text(text="[분할매수] 종목명(종목코드), 전체 매수금액, 분할 매수 횟수(2~20)를 입력하세요.\n예) 005930,3000000,3")
+        query.edit_message_text(text="[분할매수] 종목명(종목코드), 전체 매수금액, 분할 매수 횟수(2~20)를 입력하세요.")
 
     elif command == "분할매도":
         menuNum = "SPS"
-        query.edit_message_text(text="[분할매도] 종목명(종목코드), 전체 매도비율(1~100), 분할 매도 횟수(2~20)를 입력하세요.\n예) 005930,100,3")
+        query.edit_message_text(text="[분할매도] 종목명(종목코드), 전체 매도비율(1~100), 분할 매도 횟수(2~20)를 입력하세요.")
 
     elif command.startswith("split_back:"):
         # 분할 차수 선택 → 계좌 선택으로 되돌아가기 (선택된 계좌는 유지)
