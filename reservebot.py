@@ -237,6 +237,7 @@ g_split_company = ""     # 대상 종목명
 g_split_total = 0        # 분할매수: 전체 매수금액(원) / 분할매도: 전체 매도비율(%)
 g_split_count = 0        # 분할 횟수
 g_split_base_qty = {}    # 분할매도: {계좌닉네임: 전체 매도수량} (계좌 확인 시점 보유수량 기준)
+g_split_blocked = set()  # 분할매수: 전체 매수금액이 매수가능금액을 초과해 제외된 계좌
 
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
@@ -3651,9 +3652,29 @@ def callback_get(update, context) :
             sp_is_buy = menu_num == "SPB"
             sp_word = "매수" if sp_is_buy else "매도"
             head = f"[선택계좌: {selected_str}]\n[{g_split_company}(<code>{g_split_code}</code>)] "
+            sp_all_blocked = False
             if sp_is_buy:
+                # 전체 매수금액 기준 계좌별 매수가능금액 한도 체크 (한도 초과 계좌는 분할매수에서 제외)
+                g_split_blocked.clear()
+                lines = []
+                sp_acct_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
+                for nick in sp_acct_nicks:
+                    label = nick if nick else arguments[1]
+                    try:
+                        ac_x = account(nick) if nick else account(arguments[1])
+                        psbl_x = int(inquire_psbl_order(ac_x['access_token'], ac_x['app_key'], ac_x['app_secret'], ac_x['acct_no']))
+                        if psbl_x >= g_split_total:
+                            lines.append(f"  {label}: 매수가능 {format(psbl_x, ',d')}원 ≥ 전체 {format(g_split_total, ',d')}원 (가능)")
+                        else:
+                            g_split_blocked.add(label)
+                            lines.append(f"  {label}: 매수가능 {format(psbl_x, ',d')}원 < 전체 {format(g_split_total, ',d')}원 (한도 초과 → 제외)")
+                    except Exception as e:
+                        g_split_blocked.add(label)
+                        lines.append(f"  {label}: 매수가능금액 조회 오류 → 제외 ({str(e)})")
+                    time.sleep(0.3)
+                sp_all_blocked = len(g_split_blocked) >= len(sp_acct_nicks)
                 head += (f"전체 {format(g_split_total, ',d')}원 / {g_split_count}회 분할 "
-                         f"(회당 {format(g_split_total // g_split_count, ',d')}원)")
+                         f"(회당 {format(g_split_total // g_split_count, ',d')}원)\n" + "\n".join(lines))
             else:
                 g_split_base_qty.clear()
                 lines = []
@@ -3661,6 +3682,12 @@ def callback_get(update, context) :
                     label = nick if nick else arguments[1]
                     try:
                         ac_x = account(nick) if nick else account(arguments[1])
+                        # 해당 종목의 기존 미체결 매도주문 취소 후 매도가능수량 산정
+                        if order_cancel_proc(ac_x['access_token'], ac_x['app_key'], ac_x['app_secret'], str(ac_x['acct_no']), g_split_code, '01') != 'success':
+                            g_split_base_qty[label] = 0
+                            lines.append(f"  {label}: 기존 미체결 매도주문 취소 실패 → 제외")
+                            continue
+                        time.sleep(0.5)
                         e_x = stock_balance(ac_x['access_token'], ac_x['app_key'], ac_x['app_secret'], str(ac_x['acct_no']), "")
                         held = 0
                         for j, _ in enumerate(e_x.index):
@@ -3674,11 +3701,12 @@ def callback_get(update, context) :
                         lines.append(f"  {label}: 보유수량 조회 오류 {str(e)}")
                     time.sleep(0.3)
                 head += f"전체 {g_split_total}% / {g_split_count}회 분할\n" + "\n".join(lines)
-            sp_btns = [InlineKeyboardButton(f"{i}차 {sp_word}", callback_data=f"split_{'buy' if sp_is_buy else 'sell'}:{g_split_code}:{i}")
-                       for i in range(1, g_split_count + 1)]
+            sp_btns = [] if sp_all_blocked else [
+                InlineKeyboardButton(f"{i}차 {sp_word}", callback_data=f"split_{'buy' if sp_is_buy else 'sell'}:{g_split_code}:{i}")
+                for i in range(1, g_split_count + 1)]
             sp_rows = build_menu(sp_btns, 2)
             sp_rows.append([InlineKeyboardButton("뒤로가기", callback_data=f"split_back:{menu_num}")])
-            query.edit_message_text(text=head + f"\n{sp_word}할 차수를 선택하세요:",
+            query.edit_message_text(text=head + ("\n매수 가능한 계좌가 없습니다." if sp_all_blocked else f"\n{sp_word}할 차수를 선택하세요:"),
                                     reply_markup=InlineKeyboardMarkup(sp_rows), parse_mode='HTML')
         elif menu_num == "TRNXT":
             # 매매추적 AFTER 등록 — 선택계좌 각각에 대해 잔고 조회 후 trading_trail_nxt 등록
@@ -4959,12 +4987,17 @@ def callback_get(update, context) :
         sp_total = g_split_total
         sp_count = g_split_count
         sp_base = dict(g_split_base_qty)
+        sp_blocked = set(g_split_blocked)
         sp_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
 
         def process_split(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             t_label = nick if nick else arguments[1]
             tag = f"-{t_label}-[{sp_company}(<code>{sp_code}</code>)] {sp_n}차 {sp_label}"
             try:
+                if is_buy and t_label in sp_blocked:
+                    context.bot.send_message(chat_id=sp_chat, parse_mode='HTML',
+                        text=f"{tag} 제외 — 전체 매수금액이 매수가능금액 한도를 초과")
+                    return
                 if is_buy:
                     sp_amt = split_tranche(sp_total, sp_count, sp_n)
                     b = int(inquire_psbl_order(t_access_token, t_app_key, t_app_secret, t_acct_no))
