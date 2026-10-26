@@ -3087,7 +3087,7 @@ def callback_get(update, context) :
             "03": "매도가를 입력하세요. (현재가:0)",
             "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
             "71": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
-            "72": "종목코드(종목명), 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
+            "72": "종목코드(종목명), 이탈가(현재가:0), 목표가(보유단가5% 또는 현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요.",
             "73": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0)를 입력하세요.",
         }
         selected_str = ", ".join(g_selected_accounts) if g_selected_accounts else "선택 없음(현재계좌)"
@@ -5072,7 +5072,7 @@ def callback_get(update, context) :
             # 버튼 메시지는 그대로 유지 — 새 메시지로 입력 요청
             context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"[{_tp_name}] 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요."
+                text=f"[{_tp_name}] 이탈가(현재가:0), 목표가(보유단가5% 또는 현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0)을 입력하세요."
             )
 
 get_handler = CommandHandler('reserve', get_command)
@@ -6008,7 +6008,7 @@ def echo(update, context):
         if len(val_text) < 4 or not val_text[0].isdecimal() or not val_text[1].isdecimal() or not val_text[2].isdecimal() or not val_text[3].isdigit() or not (1 <= int(val_text[3]) <= 100):
             context.bot.send_message(
                 chat_id=user_id,
-                text="이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0) 미존재 또는 부적합"
+                text="이탈가(현재가:0), 목표가(보유단가5% 또는 현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0) 미존재 또는 부적합"
             )
             return
         initMenuNum()
@@ -7238,21 +7238,18 @@ def echo(update, context):
             initMenuNum()
             
             if len(val_text) < 4 or not val_text[1].isdecimal() or not val_text[2].isdecimal() or not val_text[3].isdecimal() or not val_text[4].isdigit() or not (1 <= int(val_text[4]) <= 100):
-                context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가(현재가:0), 목표가(현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0) 미존재 또는 부적합")
+                context.bot.send_message(chat_id=user_id, text="[" + company + "] 이탈가(현재가:0), 목표가(보유단가5% 또는 현재가5%:0), 최종이탈가(저가:0), 매도비율(취소:0) 미존재 또는 부적합")
                 return
 
             trail_plan = str(int(val_text[4]))
             stop_price = int(stck_prpr) if val_text[1].strip() == '0' else int(val_text[1].strip())
             stop_price = round_to_valid_price(stop_price, get_tick_size(stop_price))
-            target_price = int(int(stck_prpr) + int(stck_prpr) * 0.05) if val_text[2].strip() == '0' else int(val_text[2].strip())
-            target_price = round_to_valid_price(target_price, get_tick_size(target_price))
+            # 목표가: 0 입력 시 계좌별로 보유단가 5% 상승(보유단가 미존재 시 현재가 5% 상승), 이후 계좌별 처리부에서 산정/검증
+            target_auto = val_text[2].strip() == '0'
+            target_in = int(val_text[2].strip())
             exit_price = int(stck_lwpr) if val_text[3].strip() == '0' else int(val_text[3].strip())
             exit_price = round_to_valid_price(exit_price, get_tick_size(exit_price))
-            if target_price <= stop_price:
-                context.bot.send_message(chat_id=user_id, text="목표가(" + format(target_price, ',d') + ")가 이탈가(" + format(stop_price, ',d') + ") 이하입니다.")
-            elif target_price <= exit_price:
-                context.bot.send_message(chat_id=user_id, text="목표가(" + format(target_price, ',d') + ")가 최종이탈가(" + format(exit_price, ',d') + ") 이하입니다.")
-            elif stop_price < exit_price:
+            if stop_price < exit_price:
                 context.bot.send_message(chat_id=user_id, text="이탈가(" + format(stop_price, ',d') + ")가 최종이탈가(" + format(exit_price, ',d') + ") 미만입니다.")
             else:  
 
@@ -7284,6 +7281,21 @@ def echo(update, context):
 
                         if sell_qty > 0:
                             try:
+                                # 목표가 산정 (0 입력: 보유단가 존재 시 보유단가 5% 상승, 미존재 시 현재가 5% 상승)
+                                if target_auto:
+                                    target_base = hold_price if hold_price > 0 else int(stck_prpr)
+                                    target_price = int(target_base + target_base * 0.05)
+                                else:
+                                    target_price = target_in
+                                target_price = round_to_valid_price(target_price, get_tick_size(target_price))
+
+                                if target_price <= stop_price:
+                                    context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 목표가(" + format(target_price, ',d') + ")가 이탈가(" + format(stop_price, ',d') + ") 이하입니다.")
+                                    return
+                                if target_price <= exit_price:
+                                    context.bot.send_message(chat_id=user_id, text="-"+ nick +"-[" + company + "] 목표가(" + format(target_price, ',d') + ")가 최종이탈가(" + format(exit_price, ',d') + ") 이하입니다.")
+                                    return
+
                                 with thread_conn.cursor() as cur:
 
                                     # 보유가
