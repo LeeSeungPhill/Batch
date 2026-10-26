@@ -531,6 +531,27 @@ def process_account(nick):
         result_three = cur03.fetchall()
         cur03.close()
 
+        # 관심종목 중 보유잔고(proc_yn = 'Y', 매입수량 > 0) 대상 종목은 관심종목 proc_yn = 'N' 변경 처리
+        interest_codes = [i[0] for i in result_three if len(i[0]) == 6]
+        if interest_codes:
+            cur031 = conn_acct.cursor()
+            cur031.execute("""
+                UPDATE "interestItem_interest_item" SET proc_yn = 'N', last_chg_date = now()
+                WHERE acct_no = %s AND interest_day = TO_CHAR(now(), 'YYYYMMDD') AND proc_yn = 'Y' AND code = ANY(%s)
+                AND code IN (SELECT code FROM "stockBalance_stock_balance"
+                             WHERE acct_no = %s AND proc_yn = 'Y' AND purchase_amount::int > 0)
+                RETURNING code, name
+            """, (str(acct_no), interest_codes, str(acct_no)))
+            holding_codes = set()
+            for r in cur031.fetchall():
+                holding_codes.add(r[0])
+                print(f"관심종목 proc_yn = 'N' 변경(보유종목) : {r[1]}[{r[0]}]")
+            conn_acct.commit()
+            cur031.close()
+
+            # proc_yn = 'N' 변경된 종목은 추적신호 대상에서 제외
+            result_three = [i for i in result_three if i[0] not in holding_codes]
+
         # 관심종목 이탈가, 돌파가, 지지가, 저항가, 추세하단가, 추세상단가를 각각 실시간 종목시세의 최고가와 최저가 비교
         for i in result_three:
             # print("종목명 : " + i[1])
