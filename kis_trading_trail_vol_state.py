@@ -2748,6 +2748,25 @@ def process_account(nick):
             conn_acct.commit()
             cur199.close()
 
+        # 잔고정보(stockBalance_stock_balance) 사용중(proc_yn='Y') 종목의 purchase_amount가 0인 경우
+        # 매매추적(trail_tp 1, 2, L) 대상건 → trail_tp = '4' 처리
+        cur_zero = conn_acct.cursor()
+        cur_zero.execute("""
+            UPDATE public.trading_trail tt
+            SET trail_tp = '4', mod_dt = %s
+            WHERE tt.acct_no = %s AND tt.trail_day = %s AND tt.trail_tp IN ('1', '2', 'L')
+              AND EXISTS (
+                  SELECT 1
+                  FROM public."stockBalance_stock_balance" sb
+                  WHERE sb.acct_no = tt.acct_no
+                    AND sb.code = tt.code
+                    AND sb.proc_yn = 'Y'
+                    AND COALESCE(sb.purchase_amount, 0) = 0
+              )
+        """, (datetime.now(), acct_no, today))
+        conn_acct.commit()
+        cur_zero.close()
+
         # 매매추적 동일종목 중복건 정리 및 잔고 현행화
         # 1) 동일 종목 중복건 중 trail_dtm 최종건을 제외한 나머지 trail_tp = 'Y' 처리
         cur_dedup = conn_acct.cursor()
