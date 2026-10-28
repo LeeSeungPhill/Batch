@@ -1046,6 +1046,14 @@ def process_account(nick):
                                           f"매입단가 : {int(_pp_price):,}원, 매도가 : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
                                           f"기존주문취소 : {len(_open_sell)}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
                                     parse_mode='HTML')
+
+                                # 손절 매도주문 완료 후 매매계획 해제 (trading_plan = NULL)
+                                with conn.cursor() as cur_tp:
+                                    cur_tp.execute("""
+                                        UPDATE "stockBalance_stock_balance" SET trading_plan = NULL
+                                        WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
+                                    """, (str(acct_no), i[0]))
+                                conn.commit()
                             else:
                                 print(f"매입단가 이탈 손절 매도주문 실패: {i[1]}[{i[0]}] {c}")
                 except Exception as _ppe:
