@@ -424,6 +424,22 @@ def order_cancel(access_token, app_key, app_secret, acct_no, order_no, ord_gno_b
     ar = resp.APIResp(res)
     return ar.getBody().output
 
+# 해당 종목 당일 미체결 매도주문 전량 취소 → (전체 취소 성공 여부, 취소 대상 건수)
+def cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, code, name):
+    open_sell = [
+        o for o in get_my_complete(access_token, app_key, app_secret, acct_no, code, "")
+        if o.get('sll_buy_dvsn_cd') == '01' and int(float(o.get('rmn_qty') or 0)) > 0
+    ]
+    all_ok = True
+    for o in open_sell:
+        cc = order_cancel(access_token, app_key, app_secret, str(acct_no), o['odno'], o.get('ord_gno_brno', ''))
+        if cc and cc.get('ODNO'):
+            print(f"기존 매도주문 취소: {name}[{code}] 주문번호:{o['odno']} {int(float(o['rmn_qty']))}주 @ {int(float(o['ord_unpr']))}")
+        else:
+            all_ok = False
+            print(f"기존 매도주문 취소 실패: {name}[{code}] 주문번호:{o['odno']} {cc}")
+    return all_ok, len(open_sell)
+
 # KRX 호가단위 기준 올림 (매입단가 이상 가격으로 매도하기 위함)
 def ceil_to_tick(price):
     p = int(-(-price // 1))
@@ -989,71 +1005,116 @@ def process_account(nick):
             elif mkt == 'KOSDAQ' and kosdak_short_v == '02':
                 short_market_signal = 'D'
 
-            # trading_plan = 'h' 보유종목 : 장중 현재가가 매입단가(purchase_price) 이탈시 손절
-            #  - 기존 미체결 매도주문 전량 취소 후, 보유수량 전량을 이탈 시점 10분봉 고가(고가 <= 매입단가이면 매입단가)로 지정가 매도주문
+            # trading_plan = 'h' 보유종목 장중(09:00~15:20) 손절 처리
+            #  ① 지지가(sign_support_price) 이탈 : 기존 미체결 매도주문 전량 취소 → 보유수량 전량 최유리지정가 매도 → trading_plan = NULL
+            #  ② 매입단가(purchase_price) 이탈 (①에 해당하지 않을 때) : 당일 최초 1회만 기존 매도주문 취소 후
+            #     이탈 시점 10분봉 고가(고가 <= 매입단가이면 매입단가)로 지정가 대기 매도 → 이후 주문가 고정 (trail_signal '11' 기록으로 재주문 방지)
+            _cur_price = int(a['stck_prpr'])
             _pp_amount = int(i[6]) if i[6] is not None else 0
             _pp_price  = float(i[14]) if i[14] is not None else 0
-            if (i[12] == 'h' and _pp_amount > 0 and _pp_price > 0
-                    and int(a['stck_prpr']) < _pp_price
-                    and '0900' <= datetime.now().strftime('%H%M') < '1520'):
+            _support   = int(i[3]) if i[3] else 0
+            _hold_target   = i[12] == 'h' and _pp_amount > 0 and '0900' <= datetime.now().strftime('%H%M') < '1520'
+            _support_break = _hold_target and _support > 0 and _cur_price < _support
+
+            if _support_break:
                 try:
-                    # 이탈 시점 10분봉(현재 10분 구간)의 고가 = 1분봉 stck_hgpr 최대값
-                    _now_dt = datetime.now()
-                    _c10_start = _now_dt.replace(minute=(_now_dt.minute // 10) * 10, second=0, microsecond=0).strftime('%H%M%S')
-                    _c10_highs = [
-                        int(float(cd['stck_hgpr']))
-                        for cd in fetch_candles_with_base(access_token, app_key, app_secret, i[0], _now_dt)
-                        if cd['stck_cntg_hour'] >= _c10_start
-                    ]
-                    if not _c10_highs:
-                        raise ValueError("10분봉 고가 조회 실패")
-                    _sell_price = max(_c10_highs)
-                    # 10분봉 고가가 매입단가 이하이면 매입단가(호가단위 올림)로 매도
-                    if _sell_price <= _pp_price:
-                        _sell_price = ceil_to_tick(_pp_price)
-                    _open_sell = [
-                        o for o in get_my_complete(access_token, app_key, app_secret, acct_no, i[0], "")
-                        if o.get('sll_buy_dvsn_cd') == '01' and int(float(o.get('rmn_qty') or 0)) > 0
-                    ]
-
-                    # 10분봉 고가 이하 매도주문이 이미 보유수량 전량으로 걸려 있으면 재주문하지 않음 (매 사이클 취소/재주문 반복 방지)
-                    _already = sum(int(float(o['rmn_qty'])) for o in _open_sell
-                                   if 0 < int(float(o.get('ord_unpr') or 0)) <= _sell_price) >= _pp_amount
-
-                    if not _already:
-                        _cancel_ok = True
-                        for o in _open_sell:
-                            cc = order_cancel(access_token, app_key, app_secret, str(acct_no), o['odno'], o.get('ord_gno_brno', ''))
-                            if cc and cc.get('ODNO'):
-                                print(f"기존 매도주문 취소: {i[1]}[{i[0]}] 주문번호:{o['odno']} {int(float(o['rmn_qty']))}주 @ {int(float(o['ord_unpr']))}")
-                            else:
-                                _cancel_ok = False
-                                print(f"기존 매도주문 취소 실패: {i[1]}[{i[0]}] 주문번호:{o['odno']} {cc}")
-
-                        if not _cancel_ok:
+                    _cancel_ok, _cancel_cnt = cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, i[0], i[1])
+                    if not _cancel_ok:
+                        try:
                             bot.send_message(chat_id=chat_id,
-                                             text=f"[매입단가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                             text=f"[지지가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
                                              parse_mode='HTML')
+                        except Exception as te:
+                            print(f"텔레그램 발송 실패: {te}")
+                    else:
+                        if _cancel_cnt:
+                            time.sleep(0.5)
+                        # 최유리지정가(03) : 주문단가 0
+                        c = order_cash(False, access_token, app_key, app_secret, str(acct_no), i[0], "03", str(_pp_amount), "0")
+                        if c and c.get('ODNO'):
+                            with conn.cursor() as cur_tp:
+                                cur_tp.execute("""
+                                    UPDATE "stockBalance_stock_balance" SET trading_plan = NULL
+                                    WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
+                                """, (str(acct_no), i[0]))
+                            conn.commit()
+                            print(f"지지가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 최유리지정가")
+                            try:
+                                bot.send_message(
+                                    chat_id=chat_id,
+                                    text=(f"[지지가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
+                                          f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매도가 : 최유리지정가, 매도량 : {_pp_amount:,}주, "
+                                          f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                    parse_mode='HTML')
+                            except Exception as te:
+                                print(f"텔레그램 발송 실패: {te}")
                         else:
-                            if _open_sell:
+                            print(f"지지가 이탈 손절 매도주문 실패: {i[1]}[{i[0]}] {c}")
+                except Exception as _spe:
+                    print(f"지지가 이탈 손절 매도주문 에러: {i[1]}[{i[0]}] {_spe}")
+
+            elif _hold_target and _pp_price > 0 and _cur_price < _pp_price:
+                try:
+                    with conn.cursor() as cur_ts:
+                        cur_ts.execute("""
+                            SELECT 1 FROM trail_signal
+                            WHERE acct = %s AND code = %s AND trail_day = %s AND trail_signal_code = '11'
+                        """, (str(acct_no), i[0], today))
+                        _pp_ordered = cur_ts.fetchone() is not None
+
+                    # 당일 매입단가 이탈 주문을 이미 낸 경우 : 처음 주문가 고정 (취소/재주문 하지 않음)
+                    if not _pp_ordered:
+                        # 이탈 시점 10분봉(현재 10분 구간)의 고가 = 1분봉 stck_hgpr 최대값
+                        _now_dt = datetime.now()
+                        _c10_start = _now_dt.replace(minute=(_now_dt.minute // 10) * 10, second=0, microsecond=0).strftime('%H%M%S')
+                        _c10_highs = [
+                            int(float(cd['stck_hgpr']))
+                            for cd in fetch_candles_with_base(access_token, app_key, app_secret, i[0], _now_dt)
+                            if cd['stck_cntg_hour'] >= _c10_start
+                        ]
+                        if not _c10_highs:
+                            raise ValueError("10분봉 고가 조회 실패")
+                        _sell_price = max(_c10_highs)
+                        # 10분봉 고가가 매입단가 이하이면 매입단가(호가단위 올림)로 매도
+                        if _sell_price <= _pp_price:
+                            _sell_price = ceil_to_tick(_pp_price)
+
+                        _cancel_ok, _cancel_cnt = cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, i[0], i[1])
+                        if not _cancel_ok:
+                            try:
+                                bot.send_message(chat_id=chat_id,
+                                                 text=f"[매입단가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                                 parse_mode='HTML')
+                            except Exception as te:
+                                print(f"텔레그램 발송 실패: {te}")
+                        else:
+                            if _cancel_cnt:
                                 time.sleep(0.5)
                             c = order_cash(False, access_token, app_key, app_secret, str(acct_no), i[0], "00", str(_pp_amount), str(_sell_price))
                             if c and c.get('ODNO'):
-                                print(f"매입단가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 @ {_sell_price}")
-                                bot.send_message(
-                                    chat_id=chat_id,
-                                    text=(f"[매입단가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {int(a['stck_prpr']):,}원, "
-                                          f"매입단가 : {int(_pp_price):,}원, 매도가 : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
-                                          f"기존주문취소 : {len(_open_sell)}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
-                                    parse_mode='HTML')
-
-                                # 손절 매도주문 완료 후 매매계획 해제 (trading_plan = NULL)
-                                with conn.cursor() as cur_tp:
-                                    cur_tp.execute("""
-                                        UPDATE "stockBalance_stock_balance" SET trading_plan = NULL
-                                        WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
-                                    """, (str(acct_no), i[0]))
+                                _pp_sig_name = format(int(_pp_price), ',d') + "원 {매입단가 이탈}"
+                                _pp_rec = [today, cur_time, '11', _pp_sig_name, i[0], i[1], _cur_price, int(a['stck_hgpr']), int(a['stck_lwpr']),
+                                           int(a['acml_vol']), a['prdy_vrss_vol_rate'], datetime.now(), _pp_amount, _pp_amount * _sell_price]
+                                with conn.cursor() as cur_ts:
+                                    cur_ts.execute("""
+                                        INSERT INTO trail_signal(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    """, [str(acct_no)] + _pp_rec)
+                                    cur_ts.execute("""
+                                        INSERT INTO trail_signal_hist(acct, trail_day, trail_time, trail_signal_code, trail_signal_name, code, name, current_price, high_price, low_price, volumn, volumn_rate, cdate, sell_plan_qty, sell_plan_amt)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    """, [acct_no] + _pp_rec)
                                 conn.commit()
+                                print(f"매입단가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 @ {_sell_price}")
+                                try:
+                                    bot.send_message(
+                                        chat_id=chat_id,
+                                        text=(f"[매입단가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
+                                              f"매입단가 : {int(_pp_price):,}원, 매도가 : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
+                                              f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                        parse_mode='HTML')
+                                except Exception as te:
+                                    print(f"텔레그램 발송 실패: {te}")
                             else:
                                 print(f"매입단가 이탈 손절 매도주문 실패: {i[1]}[{i[0]}] {c}")
                 except Exception as _ppe:
@@ -1115,100 +1176,6 @@ def process_account(nick):
 
                 if len(result_four) > 0:
                     continue
-
-                # trading_plan ='h' 대상 trading_trail 레코드 생성 (15시 30분 이전에만 변경/생성)
-                #  - 이탈가(08) : 시장비율 허용금액 초과(market_ratio_excess) 시 → 초과금액 기준 매도수량(allocate)
-                #  - 최종이탈가(10) : 해당 종목 시장(코스피/코스닥)의 단기 하락(short_market_signal=='D') 시 → 전량 매도수량
-                _before_1530    = datetime.now().strftime('%H%M') < '1530'
-                _trigger_excess = i[12] == 'h' and trail_signal_code == '08' and market_ratio_excess > 0 and _before_1530
-                _trigger_short  = i[12] == 'h' and trail_signal_code == '10' and short_market_signal == 'D' and _before_1530
-                if _trigger_excess or _trigger_short:
-                    _base_qty   = int(i[6])          if i[6]  is not None else 0
-                    _base_price = int(float(i[14]))  if i[14] is not None else 0
-                    _base_amt   = int(i[15])         if i[15] is not None else 0
-
-                    if _base_qty > 0:
-                        _now = datetime.now()
-                        _yd       = _now.strftime("%Y%m%d")
-                        _hms_proc = _now.strftime('%H%M%S')                          # proc_min: 실제 신호 발생 시각
-                        _hms_dtm  = (_now - timedelta(minutes=10)).strftime('%H%M%S') # trail_dtm: 10분 소급 → loop_start_dt를 현재 10분봉 구간으로 당김
-                        _cur = int(a['stck_prpr'])
-
-                        if _trigger_excess:
-                            # 시장비율 초과분(market_ratio_excess)을 allocate() 로 배분해 실제 매도 가능 수량 산출
-                            # sell_priority = 100 - strength(차트점수 기반, _make_strength_fn 참조)
-                            _eval_sum  = int(i[21]) if i[21] is not None else 0
-                            _strength  = _strength_fn(i[0])
-                            _alloc_bucket = [{
-                                "code": i[0], "name": i[1],
-                                "current_price": _cur,
-                                "eval_sum": _eval_sum,
-                                "avail_qty": _base_qty,
-                                "sell_priority": 100 - _strength,
-                            }]
-                            _alloc_orders = allocate(_alloc_bucket, market_ratio_excess)
-                            alloc_qty = _alloc_orders[0][1] if _alloc_orders else 0
-                        else:
-                            # 최종이탈가 이탈 → 전량 매도수량
-                            alloc_qty = _base_qty
-
-                        if alloc_qty > 0:
-                            n_sell_amount    = alloc_qty
-                            n_sell_sum       = _cur * alloc_qty
-                            sell_plan_amount = format(int(n_sell_amount), ',d')
-                            sig["sell_amount"] = n_sell_amount
-                            sig["sell_sum"]    = n_sell_sum
-
-                        _resist  = int(i[2]) if i[2] else 0
-                        _support = int(i[3]) if i[3] else 0
-                        _etgt    = int(i[4]) if i[4] else 0
-                        _eloss   = int(i[5]) if i[5] else 0
-
-                        if trail_signal_code == '10':                                               # 최종이탈가 이탈시
-                            _tt_plan = '100'                                                        # 매도비율 100% 설정
-                        else:                                                                       # 이탈가 이탈시 
-                            _tt_plan = str(max(1, min(100, round(100 - _strength))))                # 매도비율 100 - strength(차트점수 기반) 설정
-
-                        if _tt_plan is not None:
-                            if trail_signal_code == '08':   # 지지가 이탈 : stop_price = 지지가, target_price = 지지가 + 지지가 * 0.5%, exit_price = 최종이탈가(별도 유지)
-                                _tt_stop, _tt_tgt, _tt_exit = _support,  int(_support * 1.05), _eloss
-                            else:                           # 최종이탈가 이탈 : stop_price = 최종이탈가, target_price = 최종이탈가 + 최종이탈가 * 0.5%, exit_price = 최종이탈가
-                                _tt_stop, _tt_tgt, _tt_exit = _eloss,    int(_eloss   * 1.05), _eloss
-
-                            _tt_loss = int((_base_price - _tt_exit) * _base_qty) if _tt_exit > 0 else 0
-                            try:
-                                with conn.cursor() as cur_tt:
-                                    # 당일 활성 레코드(trail_tp IN ('1','2'))가 있으면 'C'로 닫고 새로 INSERT
-                                    cur_tt.execute("""
-                                        SELECT 1 FROM trading_trail
-                                        WHERE acct_no = %s AND code = %s
-                                          AND trail_day = %s AND trail_tp IN ('1','2')
-                                    """, (acct_no, i[0], _yd))
-                                    if cur_tt.fetchone():
-                                        cur_tt.execute("""
-                                            UPDATE trading_trail SET trail_tp = 'C', mod_dt = %s
-                                            WHERE acct_no = %s AND code = %s
-                                              AND trail_day = %s AND trail_tp IN ('1','2')
-                                        """, (datetime.now(), acct_no, i[0], _yd))
-
-                                    cur_tt.execute("""
-                                        INSERT INTO trading_trail (
-                                            acct_no, code, name, trail_day, trail_dtm, trail_tp,
-                                            stop_price, target_price, trail_plan,
-                                            basic_price, basic_qty, basic_amt,
-                                            proc_min, trade_tp, exit_price, loss_amt, crt_dt, mod_dt
-                                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                                    """, (
-                                        acct_no, i[0], i[1], _yd, _hms_dtm, '1',
-                                        _tt_stop, _tt_tgt, _tt_plan,
-                                        _base_price, _base_qty, _base_amt,
-                                        _hms_proc, 'M', _tt_exit, _tt_loss,
-                                        datetime.now(), datetime.now()
-                                    ))
-                                conn.commit()
-                                print(f"trading_trail 생성: {i[1]}[{i[0]}] 신호:{trail_signal_code} plan:{_tt_plan}%")
-                            except Exception as _tte:
-                                print(f"trading_trail 생성 실패: {i[1]}[{i[0]}] {_tte}")
 
                 try:
                     print("종목명 : " + i[1] + " 추적신호 : " + trail_signal_name)
