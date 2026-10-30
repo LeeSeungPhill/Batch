@@ -239,6 +239,10 @@ g_split_count = 0        # 분할 횟수
 g_split_base_qty = {}    # 분할매도: {계좌닉네임: 전체 매도수량} (계좌 확인 시점 보유수량 기준)
 g_split_blocked = set()  # 분할매수: 전체 매수금액이 매수가능금액을 초과해 제외된 계좌
 
+# 잔고정리(BCLN) 공유 상태
+g_bcln_list = []         # 기준계좌 보유종목 [(code, name, qty)] — 체크박스 화면 재표시용
+g_bcln_sel = {}          # 선택된 종목 {code: name}
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 INVEST_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong']  # 선택 가능 계좌 목록
@@ -460,7 +464,7 @@ def build_main_menu_markup():
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                  "반등매도", "시장관리", "코스피", "코스닥",
-                                 "분할매수", "분할매도"], callback_header="menu")
+                                 "분할매수", "분할매도", "잔고정리"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
 
@@ -1092,6 +1096,23 @@ def get_previous_business_day(day):
     cur100.close()
 
     return result_one00[0][0]
+
+def show_bcln_keyboard(query):
+    """잔고정리 보유종목 체크박스 키보드 표시 (✅/⬜ 토글)"""
+    buttons = [
+        [InlineKeyboardButton(f"{'✅' if code in g_bcln_sel else '⬜'} {name} ({format(qty, ',d')}주)", callback_data=f"bcln_t:{code}")]
+        for code, name, qty in g_bcln_list
+    ]
+    all_checked = len(g_bcln_list) > 0 and len(g_bcln_sel) == len(g_bcln_list)
+    buttons.append([InlineKeyboardButton(f"{'✅' if all_checked else '⬜'} 전체선택", callback_data="bcln_all")])
+    buttons.append([
+        InlineKeyboardButton("다음 ▶", callback_data="bcln_next"),
+        InlineKeyboardButton("취소", callback_data="menu,취소"),
+    ])
+    query.edit_message_text(
+        text=f"[잔고정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=None, bot=None):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
@@ -3013,6 +3034,7 @@ def callback_get(update, context) :
             "TRALL": "menu,종목관리", "TRMAR": "menu,종목관리",
             "HCHG": "menu,보유종목_교체",
             "SPB": "menu,분할매수", "SPS": "menu,분할매도",
+            "BCLN": "bcln_back",
         }.get(back_num)
         if back_parent:
             query.data = back_parent
@@ -3645,6 +3667,16 @@ def callback_get(update, context) :
             query.edit_message_text(
                 text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
                 reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
+            )
+        elif menu_num == "BCLN":
+            # 잔고정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
+            menuNum = "BCLN"
+            bc_names = ", ".join(g_bcln_sel.values())
+            query.edit_message_text(
+                text=(f"[선택계좌: {selected_str}]\n"
+                      f"[잔고정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
+                      f"매도비율(1~100, 전량:100)을 입력하세요.\n"
+                      f"(종목별 기존 미체결 매도주문 취소 후 현재가로 매도합니다)")
             )
         elif menu_num in ("SPB", "SPS"):
             # 분할매수/분할매도 — 차수 선택 버튼 표시
@@ -4707,7 +4739,7 @@ def callback_get(update, context) :
                 InlineKeyboardButton(f"지지가({_fmt(support_v)})",       callback_data="menu,kk_field_지지가"),
                 InlineKeyboardButton(f"추세상한가({_fmt(trend_high_v)})", callback_data="menu,kk_field_추세상한가"),
                 InlineKeyboardButton(f"추세이탈가({_fmt(trend_low_v)})", callback_data="menu,kk_field_추세이탈가"),
-                InlineKeyboardButton("취소",                              callback_data="menu,취소"),
+                InlineKeyboardButton("◀ 뒤로가기",                         callback_data="menu,kk_back"),
             ]
             rows_kk = [kk_field_btns[i:i+2] for i in range(0, len(kk_field_btns), 2)]
             query.edit_message_text(
@@ -4716,6 +4748,10 @@ def callback_get(update, context) :
             )
         except Exception as e:
             query.edit_message_text(text=f"[{g_kk_name} 변경] 오류: {str(e)}")
+
+    elif command == "kk_back":
+        # 코스피/코스닥 항목 선택 → 메인 메뉴로 복귀
+        query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
 
     elif command.startswith("kk_field_"):
         global g_kk_field
@@ -4948,6 +4984,59 @@ def callback_get(update, context) :
             t.start()
         for t in threads_fo:
             t.join()
+
+    elif command == "잔고정리":
+        # 기준계좌 보유종목을 체크박스 목록으로 표시
+        try:
+            ac_bc = account(arguments[1])
+            c_bc = stock_balance(ac_bc['access_token'], ac_bc['app_key'], ac_bc['app_secret'], ac_bc['acct_no'], "")
+        except Exception as e:
+            query.edit_message_text(text=f"[잔고정리] 잔고 조회 오류: {str(e)}")
+            return
+        g_bcln_list.clear()
+        g_bcln_sel.clear()
+        for j, _ in enumerate(c_bc.index):
+            bc_qty = int(c_bc['hldg_qty'][j])
+            if bc_qty > 0:
+                g_bcln_list.append((c_bc['pdno'][j], c_bc['prdt_name'][j], bc_qty))
+        if not g_bcln_list:
+            query.edit_message_text(text="[잔고정리] 보유종목이 없습니다.")
+            return
+        show_bcln_keyboard(query)
+
+    elif command.startswith("bcln_t:"):
+        bc_code = command.split(":", 1)[1]
+        if bc_code in g_bcln_sel:
+            del g_bcln_sel[bc_code]
+        else:
+            bc_name = next((n for c, n, _ in g_bcln_list if c == bc_code), bc_code)
+            g_bcln_sel[bc_code] = bc_name
+        show_bcln_keyboard(query)
+
+    elif command == "bcln_all":
+        if len(g_bcln_sel) == len(g_bcln_list):
+            g_bcln_sel.clear()
+        else:
+            g_bcln_sel.clear()
+            g_bcln_sel.update({c: n for c, n, _ in g_bcln_list})
+        show_bcln_keyboard(query)
+
+    elif command == "bcln_back":
+        # 계좌 선택 → 종목 체크박스 화면으로 복귀 (선택 상태 유지)
+        if not g_bcln_list:
+            query.edit_message_text(text="[잔고정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            return
+        show_bcln_keyboard(query)
+
+    elif command == "bcln_next":
+        if not g_bcln_sel:
+            try:
+                query.answer("정리할 종목을 1개 이상 선택하세요.", show_alert=True)
+            except Exception:
+                pass
+            return
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "BCLN")
 
     elif command == "분할매수":
         menuNum = "SPB"
@@ -6472,6 +6561,89 @@ def echo(update, context):
             t.start()
             time.sleep(0.5)
         for t in threads_hc:
+            t.join()
+        return
+
+    if menuNum == 'BCLN':
+        # 입력: 매도비율(1~100)
+        bc_items = dict(g_bcln_sel)
+        if not bc_items:
+            initMenuNum()
+            context.bot.send_message(chat_id=user_id, text="[잔고정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            return
+        bc_txt = user_text.strip()
+        if not bc_txt.isdecimal() or not (1 <= int(bc_txt) <= 100):
+            context.bot.send_message(chat_id=user_id, text="[잔고정리] 매도비율은 1~100 숫자로 입력하세요.")
+            return  # menuNum 유지 → 재입력 가능
+        bc_ratio = int(bc_txt)
+        initMenuNum()
+
+        def process_nick_bcln(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            t_label = nick if nick else arguments[1]
+            t_acct = str(t_acct_no)
+            # 1) 선택 종목별 기존 미체결 매도주문 취소
+            cancel_failed = set()
+            for bc_code, bc_name in bc_items.items():
+                try:
+                    if order_cancel_proc(t_access_token, t_app_key, t_app_secret, t_acct, bc_code, '01') != 'success':
+                        cancel_failed.add(bc_code)
+                        context.bot.send_message(chat_id=user_id, text=f"-{t_label}-[{bc_name}] 기존 매도주문 취소 실패 → 제외")
+                except Exception as e:
+                    cancel_failed.add(bc_code)
+                    context.bot.send_message(chat_id=user_id, text=f"-{t_label}-[{bc_name}] 기존 매도주문 취소 오류: {str(e)} → 제외")
+                time.sleep(0.3)
+            time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
+            # 2) 취소 반영된 잔고 조회
+            try:
+                e_bc = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct, "")
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{t_label}- [잔고정리] 잔고 조회 오류: {str(e)}")
+                return
+            psbl_map = {e_bc['pdno'][j]: int(e_bc['ord_psbl_qty'][j]) for j, _ in enumerate(e_bc.index)}
+
+            # 3) 종목별 매도비율 기준 수량으로 현재가 매도
+            for bc_code, bc_name in bc_items.items():
+                if bc_code in cancel_failed:
+                    continue
+                tag = f"-{t_label}-[{bc_name}(<code>{bc_code}</code>)]"
+                try:
+                    bc_psbl = psbl_map.get(bc_code, 0)
+                    if bc_psbl <= 0:
+                        context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도가능수량 없음")
+                        continue
+                    bc_qty = bc_psbl if bc_ratio >= 100 else max(1, int(bc_psbl * bc_ratio / 100))
+                    bc_qty = min(bc_qty, bc_psbl)
+                    ap_bc = inquire_price(t_access_token, t_app_key, t_app_secret, bc_code)
+                    bc_price = int(ap_bc['stck_prpr'])
+                    bc_price = round_to_valid_price(bc_price, get_tick_size(bc_price))
+                    c_bc = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct,
+                                      bc_code, "00", str(bc_qty), str(bc_price))
+                    if c_bc is not None and c_bc['ODNO'] != "":
+                        context.bot.send_message(chat_id=user_id, parse_mode='HTML',
+                            text=(f"{tag} 매도주문 완료 | 비율: {bc_ratio}% | 가격: {format(bc_price, ',d')}원 | "
+                                  f"수량: {format(bc_qty, ',d')}/{format(bc_psbl, ',d')}주 | 금액: {format(bc_price * bc_qty, ',d')}원 | "
+                                  f"주문번호: <code>{str(int(c_bc['ODNO']))}</code>"))
+                    else:
+                        context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도주문 실패")
+                except Exception as e:
+                    context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도 오류: {str(e)}")
+                time.sleep(0.3)  # 초당 호출 제한
+
+        context.bot.send_message(chat_id=user_id, text=f"[잔고정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
+        bc_threads = []
+        for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+            try:
+                ac_bcx = account(nick) if nick else account(arguments[1])
+            except Exception as e:
+                context.bot.send_message(chat_id=user_id, text=f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(target=process_nick_bcln,
+                                 args=(nick, ac_bcx['acct_no'], ac_bcx['access_token'], ac_bcx['app_key'], ac_bcx['app_secret']))
+            bc_threads.append(t)
+            t.start()
+            time.sleep(0.5)
+        for t in bc_threads:
             t.join()
         return
 
