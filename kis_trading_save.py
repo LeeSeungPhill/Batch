@@ -359,8 +359,8 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
     cur21.execute("""
         SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
         FROM "interestItem_interest_item"
-        WHERE acct_no = %s
-    """, (str(acct_no),))
+        WHERE acct_no = %s AND interest_day = %s
+    """, (str(acct_no), today))
     result = cur21.fetchall()
     cur21.close()
     cur22 = conn.cursor()
