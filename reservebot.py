@@ -458,6 +458,9 @@ def build_button(text_list, callback_header = "") : # make button list
 
     return button_list
 
+# 매매계획 코드(trading_plan) 표시명: None=일반, h=홀딩, i=투자, e=정리
+PLAN_LABELS = {None: "일반", 'h': "홀딩", 'i': "투자", 'e': "정리"}
+
 def build_main_menu_markup():
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
                                  "전체예약", "예약주문", "예약정정", "예약취소", 
@@ -1454,6 +1457,8 @@ def callback_get(update, context) :
                     name = f"(투자) {name}"
                 elif sb[4] == 'h':
                     name = f"(홀딩) {name}"
+                elif sb[4] == 'e':
+                    name = f"(정리) {name}"
 
                 sell_qty_str = ""
                 if need_sell and sb_map.get(code, (None,)*5)[4] != 'i':
@@ -1774,7 +1779,7 @@ def callback_get(update, context) :
                 pass
             def _hfmt(v):
                 return format(int(v), ',d') if v is not None else '-'
-            plan_btn_text = "매매계획(투자)" if h_tp == 'i' else ("매매계획(홀딩)" if h_tp == 'h' else "매매계획(일반)")
+            plan_btn_text = f"매매계획({PLAN_LABELS.get(h_tp, '일반')}) ▼"
             field_buttons = [
                 InlineKeyboardButton(f"목표가({_hfmt(h_target)})",      callback_data=f"menu,holding_edit_field_목표가"),
                 InlineKeyboardButton(f"이탈가({_hfmt(h_loss)})",        callback_data=f"menu,holding_edit_field_이탈가"),
@@ -1822,36 +1827,46 @@ def callback_get(update, context) :
         )
 
     elif command == "holding_plan_toggle":
+        # 매매계획 선택 목록(콤보박스 형태) 표시 — 현재값은 ✔ 표시
         try:
             with get_conn().cursor() as cur_tp:
                 cur_tp.execute(
-                    'SELECT trading_plan FROM public."stockBalance_stock_balance" WHERE code = %s AND proc_yn = \'Y\'',
+                    "SELECT trading_plan FROM public.\"stockBalance_stock_balance\" WHERE code = %s AND proc_yn = 'Y'",
                     (g_holding_edit_code,)
                 )
                 tp_row = cur_tp.fetchone()
                 cur_tp_val = tp_row[0] if tp_row else None
-            if cur_tp_val == 'i':
-                new_tp = 'h'
-            elif cur_tp_val == 'h':
-                new_tp = None
-            else:
-                new_tp = 'i'
-            with get_conn().cursor() as cur_upd:
-                if new_tp is None:
-                    cur_upd.execute(
-                        'UPDATE public."stockBalance_stock_balance" SET trading_plan = NULL WHERE code = %s AND proc_yn = \'Y\'',
-                        (g_holding_edit_code,)
-                    )
-                else:
-                    cur_upd.execute(
-                        'UPDATE public."stockBalance_stock_balance" SET trading_plan = %s WHERE code = %s AND proc_yn = \'Y\'',
-                        (new_tp, g_holding_edit_code)
-                    )
-                get_conn().commit()
-                updated = cur_upd.rowcount
-            plan_label = "투자" if new_tp == 'i' else ("홀딩" if new_tp == 'h' else "일반")
+            opt_codes = [("g", None), ("h", 'h'), ("i", 'i'), ("e", 'e')]
+            opt_btns = [
+                InlineKeyboardButton(
+                    f"{'✔ ' if val == cur_tp_val else ''}{PLAN_LABELS[val]}",
+                    callback_data=f"menu,plan_set_{key}"
+                )
+                for key, val in opt_codes
+            ]
+            rows_tp = [opt_btns[i:i+2] for i in range(0, len(opt_btns), 2)]
+            rows_tp.append([InlineKeyboardButton("뒤로가기", callback_data=f"menu,holding_edit_{g_holding_edit_code}")])
             query.edit_message_text(
-                text=f"[{g_holding_edit_name}(<code>{g_holding_edit_code}</code>)] 매매계획 → {plan_label} ({updated}건 업데이트)",
+                text=f"[{g_holding_edit_name}({g_holding_edit_code})] 매매계획을 선택하세요 (현재: {PLAN_LABELS.get(cur_tp_val, '일반')}):",
+                reply_markup=InlineKeyboardMarkup(rows_tp)
+            )
+        except Exception as e:
+            query.edit_message_text(text=f"[매매계획 변경] 오류: {str(e)}")
+
+    elif command.startswith("plan_set_"):
+        new_tp = {"g": None, "h": 'h', "i": 'i', "e": 'e'}.get(command[len("plan_set_"):], 'x')
+        if new_tp == 'x':
+            return
+        try:
+            with get_conn().cursor() as cur_upd:
+                cur_upd.execute(
+                    "UPDATE public.\"stockBalance_stock_balance\" SET trading_plan = %s WHERE code = %s AND proc_yn = 'Y'",
+                    (new_tp, g_holding_edit_code)
+                )
+                updated = cur_upd.rowcount
+            get_conn().commit()
+            query.edit_message_text(
+                text=f"[{g_holding_edit_name}(<code>{g_holding_edit_code}</code>)] 매매계획 → {PLAN_LABELS[new_tp]} ({updated}건 업데이트)",
                 parse_mode='HTML'
             )
         except Exception as e:

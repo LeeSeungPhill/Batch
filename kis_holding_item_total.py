@@ -1005,16 +1005,20 @@ def process_account(nick):
             elif mkt == 'KOSDAQ' and kosdak_short_v == '02':
                 short_market_signal = 'D'
 
-            # trading_plan = 'h' 보유종목 장중(09:00~15:20) 손절 처리
-            #  ① 지지가(sign_support_price) 이탈 : 기존 미체결 매도주문 전량 취소 → 보유수량 전량 최유리지정가 매도 → trading_plan = NULL
-            #  ② 매입단가(purchase_price) 이탈 (①에 해당하지 않을 때) : 당일 최초 1회만 기존 매도주문 취소 후
+            # trading_plan = 'h'(홀딩) / 'e'(정리) 보유종목 장중 손절 처리
+            #  - 처리시간 : 장시작 갭하락 방지 위해 09:10 ~ 15:20 (1월 2일 10:10 ~ 15:20, 11월 19일 수능일 10:10 ~ 16:20)
+            #  ① 지지가(sign_support_price) 이탈 ('h', 'e') : 기존 미체결 매도주문 전량 취소 → 보유수량 전량 최유리지정가 매도 → trading_plan = NULL
+            #  ② 매입단가(purchase_price) 이탈 ('h' 전용, ①에 해당하지 않을 때) : 당일 최초 1회만 기존 매도주문 취소 후
             #     이탈 시점 10분봉 고가(고가 <= 매입단가이면 매입단가)로 지정가 대기 매도 → 이후 주문가 고정 (trail_signal '11' 기록으로 재주문 방지)
             _cur_price = int(a['stck_prpr'])
             _pp_amount = int(i[6]) if i[6] is not None else 0
             _pp_price  = float(i[14]) if i[14] is not None else 0
             _support   = int(i[3]) if i[3] else 0
-            _hold_target   = i[12] == 'h' and _pp_amount > 0 and '0900' <= datetime.now().strftime('%H%M') < '1520'
-            _support_break = _hold_target and _support > 0 and _cur_price < _support
+            _start_hm  = '1010' if (today.endswith('0102') or today.endswith('1119')) else '0910'
+            _end_hm    = '1620' if today.endswith('1119') else '1520'
+            _in_session    = _pp_amount > 0 and _start_hm <= datetime.now().strftime('%H%M') < _end_hm
+            _support_break = i[12] in ('h', 'e') and _in_session and _support > 0 and _cur_price < _support
+            _sp_label      = '정리대상 지지가 이탈' if i[12] == 'e' else '홀딩대상 지지가 이탈 손절'
 
             if _support_break:
                 try:
@@ -1022,7 +1026,7 @@ def process_account(nick):
                     if not _cancel_ok:
                         try:
                             bot.send_message(chat_id=chat_id,
-                                             text=f"[지지가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                             text=f"[{_sp_label}-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
                                              parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
@@ -1038,22 +1042,22 @@ def process_account(nick):
                                     WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
                                 """, (str(acct_no), i[0]))
                             conn.commit()
-                            print(f"지지가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 최유리지정가")
+                            print(f"{_sp_label} 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 최유리지정가")
                             try:
                                 bot.send_message(
                                     chat_id=chat_id,
-                                    text=(f"[지지가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
+                                    text=(f"[{_sp_label} 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
                                           f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매도가 : 최유리지정가, 매도량 : {_pp_amount:,}주, "
                                           f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
                                     parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                         else:
-                            print(f"지지가 이탈 손절 매도주문 실패: {i[1]}[{i[0]}] {c}")
+                            print(f"{_sp_label} 매도주문 실패: {i[1]}[{i[0]}] {c}")
                 except Exception as _spe:
-                    print(f"지지가 이탈 손절 매도주문 에러: {i[1]}[{i[0]}] {_spe}")
+                    print(f"{_sp_label} 매도주문 에러: {i[1]}[{i[0]}] {_spe}")
 
-            elif _hold_target and _pp_price > 0 and _cur_price < _pp_price:
+            elif i[12] == 'h' and _in_session and _pp_price > 0 and _cur_price < _pp_price:
                 try:
                     with conn.cursor() as cur_ts:
                         cur_ts.execute("""

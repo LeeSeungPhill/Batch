@@ -147,8 +147,8 @@ if result_one == None:
 
             sql = """
                 SELECT 
-                    (SELECT SUM(eval_sum) FROM public."stockBalance_stock_balance" A WHERE A.acct_no = B.acct_no AND (trading_plan NOT IN ('i', 'h') OR trading_plan IS NULL) AND proc_yn = 'Y') - prvs_rcdl_excc_amt
-                    , ((SELECT SUM(eval_sum) FROM public."stockBalance_stock_balance" A WHERE A.acct_no = B.acct_no AND (A.trading_plan NOT IN ('i', 'h') OR A.trading_plan IS NULL) AND proc_yn = 'Y') * (100 - market_ratio::numeric) * 0.01)::int - prvs_rcdl_excc_amt
+                    (SELECT SUM(eval_sum) FROM public."stockBalance_stock_balance" A WHERE A.acct_no = B.acct_no AND (trading_plan NOT IN ('i', 'h', 'e') OR trading_plan IS NULL) AND proc_yn = 'Y') - prvs_rcdl_excc_amt
+                    , ((SELECT SUM(eval_sum) FROM public."stockBalance_stock_balance" A WHERE A.acct_no = B.acct_no AND (A.trading_plan NOT IN ('i', 'h', 'e') OR A.trading_plan IS NULL) AND proc_yn = 'Y') * (100 - market_ratio::numeric) * 0.01)::int - prvs_rcdl_excc_amt
                 FROM public."stockFundMng_stock_fund_mng" B
                 WHERE B.acct_no = %s
             """
@@ -180,7 +180,7 @@ if result_one == None:
                         sb.eval_sum
                     FROM public."stockBalance_stock_balance" sb
                     WHERE sb.proc_yn = 'Y'
-                    AND (sb.trading_plan NOT IN ('i', 'h') OR sb.trading_plan IS NULL)
+                    AND (sb.trading_plan NOT IN ('i', 'h', 'e') OR sb.trading_plan IS NULL)
                     AND sb.acct_no = %s
                 """
 

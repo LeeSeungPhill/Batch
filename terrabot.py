@@ -3902,7 +3902,7 @@ def callback_get(update, context) :
                 result_one00 = cur100.fetchall()
                 cur100.close()
 
-                trading_plan_dic = {"h":"홀딩", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
+                trading_plan_dic = {"h":"홀딩", "e":"정리", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
                 reserve_strt_dt = datetime.now().strftime("%Y%m%d")
                 reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
 
@@ -4066,7 +4066,7 @@ def callback_get(update, context) :
             elif data_selected.find("매매계획") != -1:
                 menuNum = "162"
 
-                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획(홀딩:h 투자:i 전체메도:as 2/3매도:66s 절반매도:50s 1/3매도:33s 1/4매도:25s 1/5매도:20s 1차매수:1b 2차매수:2b 3차매수:3b 4차매수:4b 5차매수:5b)을 입력하세요.",
+                context.bot.edit_message_text(text="보유종목 수정할 종목코드(종목명), 매매계획(홀딩:h 정리:e 투자:i 전체메도:as 2/3매도:66s 절반매도:50s 1/3매도:33s 1/4매도:25s 1/5매도:20s 1차매수:1b 2차매수:2b 3차매수:3b 4차매수:4b 5차매수:5b)을 입력하세요.",
                                               chat_id=update.callback_query.message.chat_id,
                                               message_id=update.callback_query.message.message_id)                                    
 
@@ -6361,7 +6361,7 @@ def echo(update, context):
             result_one00 = cur100.fetchall()
             cur100.close()
 
-            trading_plan_dic = {"h":"홀딩", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
+            trading_plan_dic = {"h":"홀딩", "e":"정리", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
             reserve_strt_dt = datetime.now().strftime("%Y%m%d")
             reserve_end_dt = (datetime.now() + relativedelta(months=1)).strftime("%Y%m%d")
 
@@ -6612,7 +6612,7 @@ def echo(update, context):
                 commandBot = user_text.split(sep=',', maxsplit=2)
                 print("commandBot[1] : ", commandBot[1])    # 매매계획
 
-            trading_plan_dic = {"h":"홀딩", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
+            trading_plan_dic = {"h":"홀딩", "e":"정리", "i":"투자", "as":"전체메도", "66s":"2/3매도", "50s":"절반매도", "33s":"1/3매도", "25s":"1/4매도", "20s":"1/5매도", "1b":"1차매수", "2b":"2차매수", "3b":"3차매수", "4b":"4차매수", "5b":"5차매수"}
 
             # 매매계획 존재시
             if len(commandBot[1]) > 0:
