@@ -443,6 +443,20 @@ def get_completed_10min_key(dt: datetime):
     base_minute = (dt.minute // 10) * 10
     return dt.replace(minute=base_minute, second=0, microsecond=0)
 
+def _restore_base_key(start_date, proc_min):
+    """
+    trail_tp='2' DB 복원 시 기준봉 키 복원 (proc_min이 속한 10분봉)
+    - 돌파 직후(proc_min=돌파 분봉): 돌파 10분봉 완성 시점 매도/이탈 감지 스킵
+    - 10분봉 완성 처리 후(proc_min=x9분): 해당 봉은 이미 처리되어 재처리 없음 → 영향 없음
+    """
+    try:
+        if not proc_min:
+            return None
+        _pm = str(proc_min).zfill(6)[:6]
+        return get_10min_key(datetime.strptime(str(start_date) + _pm, "%Y%m%d%H%M%S"))
+    except Exception:
+        return None
+
 def get_previous_business_day(day, conn):
     cur100 = conn.cursor()
     cur100.execute("select prev_business_day_char(%s)", (day,))
@@ -954,7 +968,7 @@ def get_kis_1min_from_datetime(
             "base_high": int(target_price) if target_price else 0,
             "base_vol": int(volumn) if volumn else 0,
             "peak_high": int(target_price) if target_price else 0,  # 기준봉 갱신 이력 최고 고가
-            "base_key": None,         # 돌파 발생 10분봉 키 (DB 복원 시 None → 스킵 없음)
+            "base_key": _restore_base_key(start_date, proc_min),  # DB 복원 시 proc_min이 속한 10분봉 (돌파봉 완성 시점 스킵)
         }
     else:
         tenmin_state = {
@@ -1120,10 +1134,11 @@ def get_kis_1min_from_datetime(
 
                     # ── breakdown_wait_2: 분봉 저가 기준 이탈가 감지 → 해당 10분봉 완성 시 매도 ──
                     # 이탈가 이탈이 발생한 10분봉의 마지막 분봉 처리 시 조건 D에서 sell_trigger 활성화
-                    if not breakdown_wait_2["active"]:
+                    # 돌파 기준봉(base_key) 내 분봉은 이탈 감지 제외 (기준봉 저가 = 자기 자신 저가 → 오탐 방지)
+                    if not breakdown_wait_2["active"] and get_10min_key(row["dt"]) != tenmin_state["base_key"]:
                         _bw2_10min_key = get_10min_key(row["dt"])
-                        _bw2_is_exit = exit_price and low_price <= int(exit_price)
-                        _bw2_is_stop = low_price <= int(stop_price)
+                        _bw2_is_exit = exit_price and low_price < int(exit_price)
+                        _bw2_is_stop = low_price < int(stop_price)
                         if _bw2_is_exit or _bw2_is_stop:
                             _bw2_breach_price = int(exit_price) if _bw2_is_exit else int(stop_price)
                             _bw2_breach_type = "exit" if _bw2_is_exit else "stop"
