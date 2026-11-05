@@ -2034,17 +2034,6 @@ def get_kis_1min_from_datetime(
                 })
                 return signals
 
-        # trail_tp='2' 분봉 단위 이탈가 감지 → 해당 10분봉 완성 시 sell_trigger 활성
-        # (trail_tp='1'/'2' 양쪽 경로에서 참조되므로 trail_tp 분기 밖에서 초기화)
-        _cached_alert_key_2 = _alert_keys.get("2")
-        breakdown_wait_2 = {
-            "active": False,             # 이탈가 이탈 감지 여부
-            "breach_price": 0,           # 이탈된 가격 (stop_price 또는 exit_price)
-            "breach_type": "",           # "exit" or "stop"
-            "tenmin_key": None,          # 이탈 발생 10분봉 키 (같은 봉 완성 시점에 sell_trigger)
-            "last_alert_tenmin_key": _cached_alert_key_2,
-        }
-
         # 현재 형성 중인 10분봉 키 — 이 키와 같거나 이후 봉은 미완성이므로 스킵
         current_10min_key = get_completed_10min_key(datetime.now())
         for _, row in df.iterrows():
@@ -2263,6 +2252,7 @@ def get_kis_1min_from_datetime(
                                         "base_vol": base_10min["거래량"].astype(int).sum(),
                                         "base_key": base_key,   # 돌파 발생 10분봉 → 이 봉 완성 시점은 스킵
                                     })
+                                    tenmin_state["peak_high"] = max(tenmin_state["peak_high"], tenmin_state["base_high"])  # 조건 B 고점 초기화
 
                                     if verbose:
                                         try:
@@ -2302,37 +2292,6 @@ def get_kis_1min_from_datetime(
                             completed_key = get_completed_10min_key(row["dt"])
                             tenmin_df = df[df["dt"].apply(get_completed_10min_key) == completed_key]
 
-                            # ── breakdown_wait_2: 분봉 저가 기준 이탈가 감지 → 해당 10분봉 완성 시 매도 ──
-                            # 이탈가 이탈이 발생한 10분봉의 마지막 분봉 처리 시 조건 D에서 sell_trigger 활성화
-                            # 돌파 기준봉(base_key) 내 분봉은 이탈 감지 제외 (기준봉 저가 = 자기 자신 저가 → 오탐 방지)
-                            if not breakdown_wait_2["active"] and get_10min_key(row["dt"]) != tenmin_state["base_key"]:
-                                _bw2_10min_key = get_10min_key(row["dt"])
-                                _bw2_is_exit = exit_price and low_price < int(exit_price)
-                                _bw2_is_stop = low_price < int(stop_price)
-                                if _bw2_is_exit or _bw2_is_stop:
-                                    _bw2_breach_price = int(exit_price) if _bw2_is_exit else int(stop_price)
-                                    _bw2_breach_type = "exit" if _bw2_is_exit else "stop"
-                                    _bw2_label = "최종이탈가" if _bw2_is_exit else "이탈가"
-                                    breakdown_wait_2.update({
-                                        "active": True,
-                                        "breach_price": _bw2_breach_price,
-                                        "breach_type": _bw2_breach_type,
-                                        "tenmin_key": _bw2_10min_key,
-                                    })
-                                    _bw2_key_str = _bw2_10min_key.strftime("%Y%m%d%H%M")
-                                    if breakdown_wait_2["last_alert_tenmin_key"] is None or _bw2_key_str > breakdown_wait_2["last_alert_tenmin_key"]:
-                                        breakdown_wait_2["last_alert_tenmin_key"] = _bw2_key_str
-                                        _write_alert_key_db(conn, acct_no, stock_code, start_date, start_time, "2", _bw2_key_str)
-                                        try:
-                                            message = (
-                                                f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
-                                                f" {_bw2_label}({_bw2_breach_price:,})원 분봉 저가 이탈 → 10분봉 완성 후 매도 대기"
-                                            )
-                                            print(message)
-                                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
-                                        except Exception as te:
-                                            print(f"텔레그램 발송 실패: {te}")
-
                             # 10분봉의 마지막 1분봉일 때만 처리 (10분봉 완성 시점)
                             # 돌파 발생 10분봉 자체는 스킵 → 다음 완성 10분봉부터 매도/갱신 체크
                             if not tenmin_df.empty and row["dt"] == tenmin_df["dt"].max():
@@ -2355,20 +2314,25 @@ def get_kis_1min_from_datetime(
                                 # 직전 10분봉 종가 (조건 A·C 공통)
                                 prev_key = completed_key - timedelta(minutes=10)
                                 prev_tenmin_df = df[df["dt"].apply(get_completed_10min_key) == prev_key]
-                                if not prev_tenmin_df.empty:
+                                prev_exists = not prev_tenmin_df.empty
+                                if prev_exists:
                                     prev_close = int(prev_tenmin_df.loc[prev_tenmin_df["dt"].idxmax(), "종가"])
                                 else:
                                     prev_close = safety_margin + 1  # 직전봉 없으면 정상 간주
 
-                                # 조건 D: breakdown_wait_2 활성 → 분봉 저가 이탈가 이탈 확인된 10분봉 완성 시 매도
-                                # 이탈가 이탈이 발생한 10분봉(tenmin_key)과 현재 완성 중인 봉(completed_key)이
-                                # 같거나 이후이면 sell_trigger 활성 (이탈가 이탈 분봉이 속한 봉이 완성되는 시점)
-                                if not sell_trigger and breakdown_wait_2["active"] and breakdown_wait_2["tenmin_key"] is not None:
-                                    if completed_key >= breakdown_wait_2["tenmin_key"]:
-                                        _bw2_label = "최종이탈가" if breakdown_wait_2["breach_type"] == "exit" else "이탈가"
+                                # 조건 D: 이탈가/최종이탈가를 10분봉 종가로 이탈 → 즉시 매도
+                                # - 최종이탈가(exit_price): 종가 이탈 시 무조건 매도
+                                # - 이탈가(stop_price): 기준봉 저가보다 높을 때만 하드스탑으로 적용
+                                #   (stop_price == base_low 인 경우 기준봉 저가 이탈은 조건 A / C-2 에서 판단)
+                                if not sell_trigger:
+                                    _d_is_exit = bool(exit_price) and tenmin_close <= int(exit_price)
+                                    _d_is_stop = int(stop_price) > tenmin_state["base_low"] and tenmin_close <= int(stop_price)
+                                    if _d_is_exit or _d_is_stop:
+                                        _d_label = "최종이탈가" if _d_is_exit else "이탈가"
+                                        _d_price = int(exit_price) if _d_is_exit else int(stop_price)
                                         sell_trigger = True
                                         sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
-                                        sell_reason = f"{_bw2_label}({breakdown_wait_2['breach_price']:,})원 분봉 저가 이탈 10분봉 완성 매도 (매도가:{sell_price:,})"
+                                        sell_reason = f"{_d_label}({_d_price:,})원 10분봉 종가 이탈 매도 (매도가:{sell_price:,})"
 
                                 # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 이탈 폭·연속 이탈 여부로 매도가 분기
                                 if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
@@ -2402,23 +2366,15 @@ def get_kis_1min_from_datetime(
                                         sell_price = get_valid_sell_price(max(tenmin_close, peak_sell_threshold))
                                         sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈 (매도가:{sell_price:,})"
 
-                                # 조건 C-1: 이탈가/최종이탈가 이탈 → 즉시 매도
-                                # 기준봉 저가 이탈 여부 무관, 거래량·연속이탈 조건 없이 이탈가 기준으로 즉시 매도 처리
-                                # (stop_price >= base_low 인 경우에도 이탈가 이탈 시 매도 보장)
-                                if not sell_trigger and tenmin_close > safety_margin:
-                                    is_exit_breach = exit_price and tenmin_close <= int(exit_price)
-                                    is_stop_breach = tenmin_close <= int(stop_price)
-                                    if is_exit_breach or is_stop_breach:
-                                        sell_trigger = True
-                                        sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
-                                        sell_reason = f"이탈가({stop_price:,})원 이탈 (매도가:{sell_price:,})"
+                                # (구 조건 C-1: 이탈가/최종이탈가 종가 이탈 → 조건 D로 통합)
 
                                 # 조건 C-2: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                                 # 거래량 초과 OR 연속 이탈 시 매도 (저거래량 지속 하락 방어)
                                 # 14:30 이후는 연속 이탈 1회만으로 매도 (장후반 모멘텀 소진 방어)
+                                # 직전봉이 없으면 연속 이탈로 보지 않음
                                 # 매도가 하한: safety_margin (안전마진 이상), 호가단위 내림
                                 consecutive_breaks = (1 if tenmin_close < tenmin_state["base_low"] else 0) + \
-                                                    (1 if prev_close < tenmin_state["base_low"] else 0)
+                                                    (1 if prev_exists and prev_close < tenmin_state["base_low"] else 0)
                                 late_day_consec_threshold = 1 if current_time >= dt_time(14, 30) else 2
                                 if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or consecutive_breaks >= late_day_consec_threshold):
                                     sell_trigger = True
@@ -2495,6 +2451,7 @@ def get_kis_1min_from_datetime(
                                 base_updated = False
                                 if tenmin_high > tenmin_low:
                                     if tenmin_high > tenmin_state["base_high"] or tenmin_vol > tenmin_state["base_vol"]:
+                                        reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
                                         tenmin_state.update({
                                             "base_low": max(tenmin_low, tenmin_state["base_low"]),  # 트레일링 스탑은 위로만 이동
                                             "base_high": tenmin_high,
@@ -2504,17 +2461,17 @@ def get_kis_1min_from_datetime(
                                         base_updated = True
 
                                         if verbose:
-                                            reason = "고가 돌파" if tenmin_high > tenmin_state["base_high"] else "거래량 돌파"
                                             message = (
                                                 f"-{nick}-[{completed_key.strftime('%Y%m%d %H:%M')}]{stock_name}[<code>{stock_code}</code>] {reason} 기준봉 갱신 고가 : {tenmin_high:,}원,  저가 : {tenmin_low:,}원, 거래량 : {tenmin_vol:,}주"
                                             )
                                             print(message)
 
-                                        update_trading_trail(int(tenmin_low), int(tenmin_high), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
+                                        # stop_price ← 끌어올린 기준봉 저가, target_price ← 누적 최고가 (다음 실행 / NXT 이관 복원용)
+                                        update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["peak_high"]), int(tenmin_vol), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
 
                                 # → 다음 1분 실행 시 이미 처리한 봉 재처리 방지
                                 if not base_updated:
-                                    update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["base_high"]), int(tenmin_state["base_vol"]), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
+                                    update_trading_trail(int(tenmin_state["base_low"]), int(tenmin_state["peak_high"]), int(tenmin_state["base_vol"]), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
 
     return signals
 

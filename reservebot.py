@@ -3802,6 +3802,7 @@ def callback_get(update, context) :
                                     basic_qty,
                                     stop_price,
                                     target_price,
+                                    volumn,
                                     trade_tp,
                                     trail_plan,
                                     exit_price
@@ -3826,6 +3827,7 @@ def callback_get(update, context) :
                             basic_amt,
                             stop_price,
                             target_price,
+                            volumn,
                             proc_min,
                             trade_tp,
                             trail_plan,
@@ -3846,6 +3848,7 @@ def callback_get(update, context) :
                             COALESCE(BAL.purchase_price*BAL.purchase_qty, 0) AS basic_amt,
                             COALESCE(S.stop_price, 0) AS stop_price,
                             COALESCE(S.target_price, 0) AS target_price,
+                            S.volumn AS volumn,
                             %s AS proc_min,
                             S.trade_tp AS trade_tp,
                             S.trail_plan AS trail_plan,
