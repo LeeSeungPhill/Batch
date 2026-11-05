@@ -1319,6 +1319,7 @@ def get_kis_1min_from_datetime(
         # 고점 대비 되돌림 상태 추적
         peak_high_tenmin = basic_price   # 10분봉 완성 기준 최고 고가
         tenmin_completed_key_last = None # 마지막 처리 10분봉 키 (중복 방지)
+        _now_10min_key = get_completed_10min_key(datetime.now())  # 현재 형성 중인 10분봉 키 (이 키 이상은 미완성 → 완성 판단 제외)
         order_price = 0                  # 실제 매도 주문가
         has_reached_15pct = False        # 당일 고가가 전일종가 대비 15%+ 달성 여부 (1회 True 후 유지)
 
@@ -1375,13 +1376,25 @@ def get_kis_1min_from_datetime(
                 breakout_check = high_price if breakout_type == "high" else close_price
                 breakdown_check = low_price if breakdown_type == "low" else close_price
 
+                # 당일 고가가 전일종가 대비 15%+ 달성 시 플래그 True (이후 유지, 09:10 이전 포함)
+                if not has_reached_15pct and prev_close and int(prev_close) > 0:
+                    if high_price >= int(prev_close * 1.15):
+                        has_reached_15pct = True
+                        print(f"  [{stock_name}-{stock_code}] 당일 15%+ 상승 달성({row['시간']})")
+
                 # ===============================
-                # 09:10 또는 10:10 이전 미처리
+                # 09:10 또는 10:10 이전: 매도 판단 미처리
+                # - 15% 달성 상태면 10분봉 완성 시 고점(peak_high_tenmin)만 반영
                 # ===============================
                 _late_open = trade_date.endswith("0102") or trade_date.endswith("1119")
-                if _late_open and row["dt"].time() < datetime.strptime("10:10", "%H:%M").time():
-                    continue
-                elif not _late_open and row["dt"].time() < datetime.strptime("09:10", "%H:%M").time():
+                _open_cut = datetime.strptime("10:10" if _late_open else "09:10", "%H:%M").time()
+                if row["dt"].time() < _open_cut:
+                    if has_reached_15pct:
+                        _pk_key = get_10min_key(row["dt"])
+                        _pk_df = df[df["dt"].apply(get_10min_key) == _pk_key]
+                        if not _pk_df.empty and row["dt"] == _pk_df["dt"].max() and _pk_key < _now_10min_key:
+                            peak_high_tenmin = int(max(peak_high_tenmin, int(_pk_df["고가"].astype(int).max())))
+                            tenmin_completed_key_last = _pk_key
                     continue
 
                 # 현재 분봉 시간
@@ -1390,12 +1403,6 @@ def get_kis_1min_from_datetime(
                 vol_ratio = (acml_vol / prev_volume) * 100 if prev_volume > 0 else 0
 
                 gain_pct = ((close_price - basic_price) / basic_price) * 100 if basic_price > 0 else 0
-
-                # 당일 고가가 전일종가 대비 15%+ 달성 시 플래그 True (이후 유지)
-                if not has_reached_15pct and prev_close and int(prev_close) > 0:
-                    if high_price >= int(prev_close * 1.15):
-                        has_reached_15pct = True
-                        print(f"  [{stock_name}-{stock_code}] 당일 15%+ 상승 달성({row['시간']})")
 
                 # 상승추세 기준 저점 종가 이탈 → 상승추세 제외 해제 (당일 유지)
                 if _trend_up and not _uptrend_broken and _up_support_price > 0 and close_price < _up_support_price:
@@ -1507,7 +1514,8 @@ def get_kis_1min_from_datetime(
                         tenmin_df_b = df[df["dt"].apply(get_10min_key) == current_10min_key_b]
                         is_last_of_tenmin = (not tenmin_df_b.empty and row["dt"] == tenmin_df_b["dt"].max())
 
-                        if is_last_of_tenmin and current_10min_key_b != tenmin_completed_key_last:
+                        # 형성 중인 10분봉(_now_10min_key 이상)은 미완성 → 완성 판단 제외
+                        if is_last_of_tenmin and current_10min_key_b != tenmin_completed_key_last and current_10min_key_b < _now_10min_key:
                             tenmin_completed_key_last = current_10min_key_b
                             # numpy.int64 → 파이썬 int 변환 (psycopg2 SQL 파라미터 호환)
                             tenmin_high_b = int(tenmin_df_b["고가"].astype(int).max())
@@ -2061,9 +2069,9 @@ def get_kis_1min_from_datetime(
                         pre_market = current_time < datetime.strptime("09:10", "%H:%M").time()
 
                     # ===============================
-                    # 상한가 도달 시 절반 매도 (trail_tp='1','2' 공통)
+                    # 상한가 도달 시 절반 매도 (trail_tp='1','2' 공통, 09:10 이전 포함)
                     # ===============================
-                    if not pre_market and high_price >= upper_limit:
+                    if high_price >= upper_limit:
                         i_trail_plan = "50"
                         trail_qty = max(1, int(basic_qty * 0.5))
                         order_price = upper_limit
@@ -2097,8 +2105,9 @@ def get_kis_1min_from_datetime(
 
                     # ===============================
                     # 기준봉 미생성 상태 → 목표가 돌파 시 기준봉 생성 (09:10 또는 10:10 이전에도 수행)
+                    # - 09:10(10:10) 이전: 기준봉 미생성 상태에서 목표가 돌파 판단만 수행 (이탈가 감지는 제외)
                     # ===============================
-                    if not pre_market:
+                    if not pre_market or tenmin_state["base_low"] is None:
                         if tenmin_state["base_low"] is None:
                             chk_vol = volumn if volumn else 0
                             if trail_tp == '1':
@@ -2151,7 +2160,7 @@ def get_kis_1min_from_datetime(
                                 # ── 이탈 감지: 즉시 매도 대신 10분봉 저가·거래량 대기 등록 ──
                                 else:
                                     # 최종이탈가(exit_price) 이탈
-                                    if breakdown_check <= exit_price and acml_vol > chk_vol:
+                                    if not pre_market and breakdown_check <= exit_price and acml_vol > chk_vol:
                                         current_10min_key_1 = get_10min_key(row["dt"])
                                         breakdown_wait_1.update({
                                             "active": True,
@@ -2195,7 +2204,7 @@ def get_kis_1min_from_datetime(
                                                     print(f"텔레그램 발송 실패: {te}")            
 
                                     # 이탈가(stop_price) 이탈
-                                    elif breakdown_check <= stop_price and acml_vol > chk_vol:
+                                    elif not pre_market and breakdown_check <= stop_price and acml_vol > chk_vol:
                                         current_10min_key_1 = get_10min_key(row["dt"])
                                         breakdown_wait_1.update({
                                             "active": True,
