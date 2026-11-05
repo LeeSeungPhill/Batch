@@ -14,6 +14,8 @@ from dateutil.relativedelta import relativedelta
 from psycopg2.extras import execute_values
 import time
 import threading
+import html
+from telegram.error import RetryAfter, TimedOut, NetworkError, BadRequest
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -36,7 +38,57 @@ def get_conn():
         except Exception:
             pass
         conn = db.connect(conn_string)
-    return conn                
+    return conn
+
+# 텔레그램 전송 직렬화/보호 (멀티스레드 flood control 대응)
+_tg_send_lock = threading.Lock()
+
+def safe_send(bot, chat_id, text, parse_mode=None, max_retry=3):
+    """예외를 밖으로 던지지 않는 텔레그램 전송.
+    RetryAfter → 지정 시간 대기 후 재시도, TimedOut/NetworkError → 1회 재시도.
+    4096자 초과 시 줄 단위로 분할 전송."""
+    chunks, buf = [], ""
+    for line in str(text).split("\n"):
+        if len(buf) + len(line) + 1 > 4000:
+            chunks.append(buf)
+            buf = ""
+        buf = f"{buf}\n{line}" if buf else line
+    if buf:
+        chunks.append(buf)
+
+    ok = True
+    for chunk in chunks:
+        sent = False
+        timed_out = 0
+        for _ in range(max_retry):
+            try:
+                with _tg_send_lock:
+                    bot.send_message(chat_id=chat_id, text=chunk, parse_mode=parse_mode)
+                    time.sleep(0.05)
+                sent = True
+                break
+            except RetryAfter as e:
+                time.sleep(float(e.retry_after) + 0.5)
+            except BadRequest as e:
+                # HTML 파싱 오류 등 → 태그 제거 후 일반 텍스트로 1회 재전송
+                if parse_mode:
+                    parse_mode = None
+                    chunk = html.unescape(re.sub(r"<[^>]+>", "", chunk))
+                    continue
+                print(f"[safe_send] 전송 실패: {e}")
+                break
+            except (TimedOut, NetworkError) as e:
+                # TimedOut 은 실제 전송됐을 수 있으므로 1회만 재시도
+                timed_out += 1
+                if timed_out > 1:
+                    print(f"[safe_send] 전송 실패(timeout): {e}")
+                    break
+                time.sleep(1)
+            except Exception as e:
+                print(f"[safe_send] 전송 실패: {e}")
+                break
+        ok = ok and sent
+    return ok                
 
 cur001 = conn.cursor()
 cur001.execute("select bot_token2 from \"stockAccount_stock_account\" where nick_name = %s", (arguments[1],))
@@ -6464,11 +6516,15 @@ def echo(update, context):
         def process_nick_hchg(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             t_nick_label = nick if nick else arguments[1]
             t_acct_no = str(t_acct_no)
+            s_nm = html.escape(str(hc_sell_name))
+            b_nm = html.escape(str(hc_buy_name)) if hc_buy_code else ''
+            # 결과는 계좌별로 모아서 마지막에 1회 전송 (텔레그램 flood control 방지)
+            lines = []
             try:
                 # 매도 주문 전 기존 미체결 매도주문이 있으면 먼저 전량 취소
                 cancel_ret = order_cancel_proc(t_access_token, t_app_key, t_app_secret, t_acct_no, hc_sell_code, '01')
                 if cancel_ret != 'success':
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{hc_sell_name}] 기존 매도주문 취소 실패 → 중단")
+                    lines.append(f"[{s_nm}] 기존 매도주문 취소 실패 → 중단")
                     return
                 time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
 
@@ -6480,7 +6536,7 @@ def echo(update, context):
                         sell_psbl_qty = int(e_hc['ord_psbl_qty'][j])
                         break
                 if sell_psbl_qty <= 0:
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{hc_sell_name}] 매도가능수량 없음")
+                    lines.append(f"[{s_nm}] 매도가능수량 없음")
                     return
 
                 # 매도단가(0 → 현재가), 매도비율 기준 매도수량 산정 후 매도 주문 (지정가)
@@ -6495,17 +6551,13 @@ def echo(update, context):
                 c_s = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct_no,
                                  hc_sell_code, "00", str(sell_qty), str(sell_price))
                 if c_s is None or c_s['ODNO'] == "":
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{hc_sell_name}] 매도주문 실패")
+                    lines.append(f"[{s_nm}] 매도주문 실패")
                     return
                 sell_ord_no = str(int(c_s['ODNO']))
                 sell_amt = sell_price * sell_qty
-                context.bot.send_message(
-                    chat_id=user_id,
-                    text=(f"-{t_nick_label}-[{hc_sell_name}(<code>{hc_sell_code}</code>)] 매도주문 완료 | "
+                lines.append((f"[{s_nm}(<code>{hc_sell_code}</code>)] 매도주문 완료 | "
                           f"매도가:{format(sell_price, ',d')}원 | 비율:{sell_ratio}% | 수량:{format(sell_qty, ',d')}주 | "
-                          f"매도금액:{format(sell_amt, ',d')}원 | 주문번호:<code>{sell_ord_no}</code>"),
-                    parse_mode='HTML'
-                )
+                          f"매도금액:{format(sell_amt, ',d')}원 | 주문번호:<code>{sell_ord_no}</code>"))
 
                 time.sleep(0.5)
                 order_info = fetch_order_complete_info(t_access_token, t_app_key, t_app_secret,
@@ -6516,12 +6568,11 @@ def echo(update, context):
                     )
                     if updated > 0:
                         tp_label = "전량매도" if new_tp == '4' else "부분매도"
-                        context.bot.send_message(chat_id=user_id,
-                            text=f"-{t_nick_label}-[{hc_sell_name}] 매매추적정보 {tp_label} 갱신 {updated}건")
+                        lines.append(f"[{s_nm}] 매매추적정보 {tp_label} 갱신 {updated}건")
 
                 # 매수종목 미지정(0) → 매수 생략
                 if not hc_buy_code:
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}- 매수종목 미지정(미매수:0) → 대체매수 생략")
+                    lines.append(f" 매수종목 미지정(미매수:0) → 대체매수 생략")
                     return
 
                 # 매수단가 (0 → 현재가), 매도금액 기준 매수량 산정
@@ -6531,38 +6582,34 @@ def echo(update, context):
                 buy_price = buy_cur_price if buy_unpr_in <= 0 else buy_unpr_in
                 buy_price = round_to_valid_price(buy_price, get_tick_size(buy_price))
                 if buy_price <= 0:
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{hc_buy_name}] 매수단가 산정 불가")
+                    lines.append(f"[{b_nm}] 매수단가 산정 불가")
                     return
                 buy_qty = int(sell_amt // buy_price)
                 if buy_qty <= 0:
-                    context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"-{t_nick_label}-[{hc_buy_name}] 매도금액({format(sell_amt, ',d')}원) 기준 매수량 0주 → 매수 미처리"
-                    )
+                    lines.append(f"[{b_nm}] 매도금액({format(sell_amt, ',d')}원) 기준 매수량 0주 → 매수 미처리")
                     return
                 c_b = order_cash(True, t_access_token, t_app_key, t_app_secret, t_acct_no,
                                  hc_buy_code, "00", str(buy_qty), str(buy_price))
                 if c_b is not None and c_b['ODNO'] != "":
-                    context.bot.send_message(
-                        chat_id=user_id,
-                        text=(f"-{t_nick_label}-[{hc_buy_name}(<code>{hc_buy_code}</code>)] 대체 매수주문 완료 | "
+                    lines.append((f"[{b_nm}(<code>{hc_buy_code}</code>)] 대체 매수주문 완료 | "
                               f"매수가:{format(buy_price, ',d')}원 | 수량:{format(buy_qty, ',d')}주 | "
-                              f"매수금액:{format(buy_price * buy_qty, ',d')}원 | 주문번호:<code>{str(int(c_b['ODNO']))}</code>"),
-                        parse_mode='HTML'
-                    )
+                              f"매수금액:{format(buy_price * buy_qty, ',d')}원 | 주문번호:<code>{str(int(c_b['ODNO']))}</code>"))
                 else:
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}-[{hc_buy_name}] 대체 매수주문 실패")
+                    lines.append(f"[{b_nm}] 대체 매수주문 실패")
             except Exception as e:
-                context.bot.send_message(chat_id=user_id, text=f"-{t_nick_label}- [보유종목 교체] 오류: {str(e)}")
+                lines.append(f"오류: {html.escape(str(e))}")
+            finally:
+                header = f"-{t_nick_label}- [보유종목 교체] {s_nm}" + (f" → {b_nm}" if b_nm else "")
+                safe_send(context.bot, user_id, "\n".join([header] + lines), parse_mode='HTML')
 
-        context.bot.send_message(chat_id=user_id, text=f"[{hc_sell_name}] 보유종목 교체 처리 중...")
+        safe_send(context.bot, user_id, f"[{hc_sell_name}] 보유종목 교체 처리 중...")
         threads_hc = []
         for nick in target_nicks_hc:
             if nick is not None:
                 try:
                     ac_hc = account(nick)
                 except Exception as e:
-                    context.bot.send_message(chat_id=user_id, text=f"-{nick}- 계좌조회 오류: {str(e)}")
+                    safe_send(context.bot, user_id, f"-{nick}- 계좌조회 오류: {str(e)}")
                     continue
                 t_acct_hc = ac_hc['acct_no']; t_tok_hc = ac_hc['access_token']
                 t_key_hc  = ac_hc['app_key'];  t_sec_hc = ac_hc['app_secret']
@@ -6570,7 +6617,7 @@ def echo(update, context):
                 try:
                     ac_hc_def = account(arguments[1])
                 except Exception as e:
-                    context.bot.send_message(chat_id=user_id, text=f"계좌조회 오류: {str(e)}")
+                    safe_send(context.bot, user_id, f"계좌조회 오류: {str(e)}")
                     continue
                 t_acct_hc = ac_hc_def['acct_no']; t_tok_hc = ac_hc_def['access_token']
                 t_key_hc  = ac_hc_def['app_key'];  t_sec_hc = ac_hc_def['app_secret']
@@ -6599,62 +6646,75 @@ def echo(update, context):
         def process_nick_bcln(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
             t_label = nick if nick else arguments[1]
             t_acct = str(t_acct_no)
-            # 1) 선택 종목별 기존 미체결 매도주문 취소
-            cancel_failed = set()
-            for bc_code, bc_name in bc_items.items():
-                try:
-                    if order_cancel_proc(t_access_token, t_app_key, t_app_secret, t_acct, bc_code, '01') != 'success':
-                        cancel_failed.add(bc_code)
-                        context.bot.send_message(chat_id=user_id, text=f"-{t_label}-[{bc_name}] 기존 매도주문 취소 실패 → 제외")
-                except Exception as e:
-                    cancel_failed.add(bc_code)
-                    context.bot.send_message(chat_id=user_id, text=f"-{t_label}-[{bc_name}] 기존 매도주문 취소 오류: {str(e)} → 제외")
-                time.sleep(0.3)
-            time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
-
-            # 2) 취소 반영된 잔고 조회
+            # 결과는 계좌별로 모아서 마지막에 1회 전송 (텔레그램 flood control 방지)
+            lines = []
+            ok_cnt = fail_cnt = skip_cnt = 0
             try:
-                e_bc = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct, "")
-            except Exception as e:
-                context.bot.send_message(chat_id=user_id, text=f"-{t_label}- [잔고정리] 잔고 조회 오류: {str(e)}")
-                return
-            psbl_map = {e_bc['pdno'][j]: int(e_bc['ord_psbl_qty'][j]) for j, _ in enumerate(e_bc.index)}
+                # 1) 선택 종목별 기존 미체결 매도주문 취소
+                cancel_failed = set()
+                for bc_code, bc_name in bc_items.items():
+                    try:
+                        if order_cancel_proc(t_access_token, t_app_key, t_app_secret, t_acct, bc_code, '01') != 'success':
+                            cancel_failed.add(bc_code)
+                            lines.append(f"[{html.escape(bc_name)}] 기존 매도주문 취소 실패 → 제외")
+                    except Exception as e:
+                        cancel_failed.add(bc_code)
+                        lines.append(f"[{html.escape(bc_name)}] 기존 매도주문 취소 오류: {html.escape(str(e))} → 제외")
+                    time.sleep(0.3)
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+                skip_cnt += len(cancel_failed)
 
-            # 3) 종목별 매도비율 기준 수량으로 현재가 매도
-            for bc_code, bc_name in bc_items.items():
-                if bc_code in cancel_failed:
-                    continue
-                tag = f"-{t_label}-[{bc_name}(<code>{bc_code}</code>)]"
+                # 2) 취소 반영된 잔고 조회
                 try:
-                    bc_psbl = psbl_map.get(bc_code, 0)
-                    if bc_psbl <= 0:
-                        context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도가능수량 없음")
-                        continue
-                    bc_qty = bc_psbl if bc_ratio >= 100 else max(1, int(bc_psbl * bc_ratio / 100))
-                    bc_qty = min(bc_qty, bc_psbl)
-                    ap_bc = inquire_price(t_access_token, t_app_key, t_app_secret, bc_code)
-                    bc_price = int(ap_bc['stck_prpr'])
-                    bc_price = round_to_valid_price(bc_price, get_tick_size(bc_price))
-                    c_bc = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct,
-                                      bc_code, "00", str(bc_qty), str(bc_price))
-                    if c_bc is not None and c_bc['ODNO'] != "":
-                        context.bot.send_message(chat_id=user_id, parse_mode='HTML',
-                            text=(f"{tag} 매도주문 완료 | 비율: {bc_ratio}% | 가격: {format(bc_price, ',d')}원 | "
-                                  f"수량: {format(bc_qty, ',d')}/{format(bc_psbl, ',d')}주 | 금액: {format(bc_price * bc_qty, ',d')}원 | "
-                                  f"주문번호: <code>{str(int(c_bc['ODNO']))}</code>"))
-                    else:
-                        context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도주문 실패")
+                    e_bc = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct, "")
                 except Exception as e:
-                    context.bot.send_message(chat_id=user_id, parse_mode='HTML', text=f"{tag} 매도 오류: {str(e)}")
-                time.sleep(0.3)  # 초당 호출 제한
+                    lines.append(f"잔고 조회 오류: {html.escape(str(e))}")
+                    return
+                psbl_map = {e_bc['pdno'][j]: int(e_bc['ord_psbl_qty'][j]) for j, _ in enumerate(e_bc.index)}
 
-        context.bot.send_message(chat_id=user_id, text=f"[잔고정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
+                # 3) 종목별 매도비율 기준 수량으로 현재가 매도
+                for bc_code, bc_name in bc_items.items():
+                    if bc_code in cancel_failed:
+                        continue
+                    tag = f"[{html.escape(bc_name)}(<code>{bc_code}</code>)]"
+                    try:
+                        bc_psbl = psbl_map.get(bc_code, 0)
+                        if bc_psbl <= 0:
+                            lines.append(f"{tag} 매도가능수량 없음")
+                            skip_cnt += 1
+                            continue
+                        bc_qty = bc_psbl if bc_ratio >= 100 else max(1, int(bc_psbl * bc_ratio / 100))
+                        bc_qty = min(bc_qty, bc_psbl)
+                        ap_bc = inquire_price(t_access_token, t_app_key, t_app_secret, bc_code)
+                        bc_price = int(ap_bc['stck_prpr'])
+                        bc_price = round_to_valid_price(bc_price, get_tick_size(bc_price))
+                        c_bc = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct,
+                                          bc_code, "00", str(bc_qty), str(bc_price))
+                        if c_bc is not None and c_bc['ODNO'] != "":
+                            ok_cnt += 1
+                            lines.append(f"{tag} 매도완료 | {format(bc_price, ',d')}원 | "
+                                         f"{format(bc_qty, ',d')}/{format(bc_psbl, ',d')}주 | "
+                                         f"{format(bc_price * bc_qty, ',d')}원 | <code>{str(int(c_bc['ODNO']))}</code>")
+                        else:
+                            fail_cnt += 1
+                            lines.append(f"{tag} 매도주문 실패")
+                    except Exception as e:
+                        fail_cnt += 1
+                        lines.append(f"{tag} 매도 오류: {html.escape(str(e))}")
+                    time.sleep(0.3)  # 초당 호출 제한
+            except Exception as e:
+                lines.append(f"처리 중단 오류: {html.escape(str(e))}")
+            finally:
+                header = (f"-{t_label}- [잔고정리 {bc_ratio}%] 완료 {ok_cnt} / 실패 {fail_cnt} / 제외 {skip_cnt}")
+                safe_send(context.bot, user_id, "\n".join([header] + lines), parse_mode='HTML')
+
+        safe_send(context.bot, user_id, f"[잔고정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
         bc_threads = []
         for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
             try:
                 ac_bcx = account(nick) if nick else account(arguments[1])
             except Exception as e:
-                context.bot.send_message(chat_id=user_id, text=f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
+                safe_send(context.bot, user_id, f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
                 continue
             t = threading.Thread(target=process_nick_bcln,
                                  args=(nick, ac_bcx['acct_no'], ac_bcx['access_token'], ac_bcx['app_key'], ac_bcx['app_secret']))
