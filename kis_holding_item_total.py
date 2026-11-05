@@ -424,6 +424,25 @@ def order_cancel(access_token, app_key, app_secret, acct_no, order_no, ord_gno_b
     ar = resp.APIResp(res)
     return ar.getBody().output
 
+# 주식현재가 호가/예상체결 (매수1호가 bidp1 확인용)
+def inquire_asking_price(access_token, app_key, app_secret, code):
+
+    headers = {"Content-Type": "application/json",
+               "authorization": f"Bearer {access_token}",
+               "appKey": app_key,
+               "appSecret": app_secret,
+               "tr_id": "FHKST01010200",
+               "custtype": "P"}
+    params = {
+            'FID_COND_MRKT_DIV_CODE': "J",
+            'FID_INPUT_ISCD': code
+    }
+    PATH = "uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
+    URL = f"{URL_BASE}/{PATH}"
+    res = requests.get(URL, headers=headers, params=params, verify=False, timeout=10)
+    ar = resp.APIResp(res)
+    return ar.getBody().output1
+
 # 해당 종목 당일 미체결 매도주문 전량 취소 → (전체 취소 성공 여부, 취소 대상 건수)
 def cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, code, name):
     open_sell = [
@@ -959,7 +978,7 @@ def process_account(nick):
                 A.eval_sum
             FROM "stockBalance_stock_balance" A
             LEFT JOIN "stockFundMng_stock_fund_mng" F ON F.acct_no = A.acct_no
-            WHERE A.acct_no = %s AND A.proc_yn = 'Y' AND (A.trading_plan IS NULL OR A.trading_plan NOT IN ('i'))
+            WHERE A.acct_no = %s AND A.proc_yn = 'Y' AND (A.trading_plan IS NULL OR A.trading_plan NOT IN ('i')) AND A.purchase_amount > 0
         """, (str(acct_no), str(acct_no), str(acct_no), str(acct_no), str(acct_no)))
         result_three = cur03.fetchall()
         cur03.close()
@@ -1033,8 +1052,19 @@ def process_account(nick):
                     else:
                         if _cancel_cnt:
                             time.sleep(0.5)
-                        # 최유리지정가(03) : 주문단가 0
-                        c = order_cash(False, access_token, app_key, app_secret, str(acct_no), i[0], "03", str(_pp_amount), "0")
+                        # 매도 최유리지정가는 매수1호가에 체결되므로, 매수1호가가 이탈가보다 높을 때만 최유리지정가(03, 주문단가 0)
+                        # 그렇지 않으면 이탈가(호가단위 올림)로 지정가(00) 매도
+                        try:
+                            _bid1 = int(float(inquire_asking_price(access_token, app_key, app_secret, i[0])['bidp1']))
+                        except Exception as _be:
+                            _bid1 = 0
+                            print(f"매수1호가 조회 실패 → 이탈가 지정가로 처리: {i[1]}[{i[0]}] {_be}")
+                        if _bid1 > _support:
+                            _ord_dvsn, _ord_price, _price_label = "03", 0, "최유리지정가"
+                        else:
+                            _ord_dvsn, _ord_price = "00", ceil_to_tick(_support)
+                            _price_label = f"이탈가 지정가 {_ord_price:,}원"
+                        c = order_cash(False, access_token, app_key, app_secret, str(acct_no), i[0], _ord_dvsn, str(_pp_amount), str(_ord_price))
                         if c and c.get('ODNO'):
                             with conn.cursor() as cur_tp:
                                 cur_tp.execute("""
@@ -1042,12 +1072,12 @@ def process_account(nick):
                                     WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
                                 """, (str(acct_no), i[0]))
                             conn.commit()
-                            print(f"{_sp_label} 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 최유리지정가")
+                            print(f"{_sp_label} 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 {_price_label}")
                             try:
                                 bot.send_message(
                                     chat_id=chat_id,
                                     text=(f"[{_sp_label} 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
-                                          f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매도가 : 최유리지정가, 매도량 : {_pp_amount:,}주, "
+                                          f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매수1호가 : {_bid1:,}원, 매도가 : {_price_label}, 매도량 : {_pp_amount:,}주, "
                                           f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
                                     parse_mode='HTML')
                             except Exception as te:

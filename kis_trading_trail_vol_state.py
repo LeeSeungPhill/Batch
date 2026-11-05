@@ -641,6 +641,40 @@ def _get_stock_market_type(stock_code: str, access_token: str,
         pass
     return 'KOSPI'
 
+def get_best_bid(stock_code: str, access_token: str, app_key: str, app_secret: str) -> int:
+    """매수 1호가(bidp1) 조회 — 매도 최유리지정가가 체결되는 가격. 실패·호가 없음은 0."""
+    try:
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+            headers={
+                "Content-Type": "application/json",
+                "authorization": f"Bearer {access_token}",
+                "appKey": app_key, "appSecret": app_secret,
+                "tr_id": "FHKST01010200", "custtype": "P",
+            },
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output1'):
+            return int(float(d['output1'].get('bidp1') or 0))
+    except Exception:
+        pass
+    return 0
+
+def plan_breakdown_sell(stock_code: str, close_price: int, breach_price: int, short_market_down: bool,
+                        access_token: str, app_key: str, app_secret: str):
+    """이탈가 이탈 매도 주문 방식 결정
+    - 시장 약세: 현재가 지정가
+    - 그 외: 최유리지정가(매수1호가)가 이탈가보다 높을 때만 최유리지정가(매도가 = 매수1호가), 아니면 이탈가 지정가(매도가 = 이탈가)
+    반환: (주문구분 '00' 지정가 / '03' 최유리지정가, 주문(기준)가, 설명) — 최유리지정가는 주문단가 0으로 나가며 기준가는 금액 산정용"""
+    if short_market_down:
+        return "00", close_price, f"현재가 지정가:{close_price:,}"
+    best_bid = get_best_bid(stock_code, access_token, app_key, app_secret)
+    if best_bid > breach_price:
+        return "03", best_bid, f"최유리지정가(매수1호가:{best_bid:,} > 이탈가:{breach_price:,})"
+    return "00", breach_price, f"이탈가 지정가:{breach_price:,}(매수1호가:{best_bid:,})"
+
 def _get_current_price_quick(stock_code: str, access_token: str,
                               app_key: str, app_secret: str) -> int:
     """종목코드의 현재가 즉시 조회 (단일 quote API). 실패 시 0."""
@@ -1307,11 +1341,9 @@ def get_kis_1min_from_datetime(
             return None
 
         def _l_order_plan(close_price, breach_price):
-            """이탈 매도 주문 방식: 시장 약세 → 현재가 지정가 / 약세 아니고 현재가 < 이탈가 → 최유리지정가 / 그 외 → 현재가 지정가
-            반환: (주문구분, 주문(기준)가) — 최유리지정가는 주문단가 0으로 나가며 기준가는 금액 산정용"""
-            if not _short_market_down and close_price < breach_price:
-                return "03", close_price
-            return "00", close_price
+            """이탈 매도 주문 방식 (plan_breakdown_sell): 시장 약세 → 현재가 지정가 / 매수1호가 > 이탈가 → 최유리지정가 / 그 외 → 이탈가 지정가
+            반환: (주문구분, 주문(기준)가, 설명)"""
+            return plan_breakdown_sell(stock_code, close_price, breach_price, _short_market_down, access_token, app_key, app_secret)
 
         for _, row in df.iterrows():
 
@@ -1362,8 +1394,7 @@ def get_kis_1min_from_datetime(
                 # ===============================
                 if exit_price and int(exit_price) > 0 and close_price <= int(exit_price):
                     _ep = int(exit_price)
-                    _ep_dvsn, _ep_price = _l_order_plan(close_price, _ep)
-                    _ep_desc = "최유리지정가" if _ep_dvsn == "03" else f"현재가 지정가:{_ep_price:,}"
+                    _ep_dvsn, _ep_price, _ep_desc = _l_order_plan(close_price, _ep)
                     i_trail_plan = trail_plan if trail_plan else "100"
                     trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                     trail_amt = _ep_price * trail_qty
@@ -1434,8 +1465,8 @@ def get_kis_1min_from_datetime(
                             sell_signal_type = breakdown_wait["signal_type"]
                             effective_stop = breakdown_wait["effective_stop"]
                             
-                            # 시장 약세: 현재가 지정가 / 약세 아니고 현재가 < 이탈가: 최유리지정가 / 그 외: 현재가 지정가
-                            sell_ord_dvsn, order_price = _l_order_plan(close_price, effective_stop)
+                            # 시장 약세: 현재가 지정가 / 매수1호가 > 이탈가: 최유리지정가 / 그 외: 이탈가 지정가
+                            sell_ord_dvsn, order_price, _ = _l_order_plan(close_price, effective_stop)
                         else:
                             # 저가 이탈 없으면 → 대기 유지
                             pass
@@ -1450,7 +1481,7 @@ def get_kis_1min_from_datetime(
                         sell_reason = breakdown_wait["reason"] + f" → {_early_detail}"
                         sell_signal_type = breakdown_wait["signal_type"]
                         effective_stop = breakdown_wait["effective_stop"]
-                        sell_ord_dvsn, order_price = _l_order_plan(close_price, effective_stop)
+                        sell_ord_dvsn, order_price, _ = _l_order_plan(close_price, effective_stop)
 
                 if not breakdown_wait["active"] and not sell_trigger:
 
@@ -1951,18 +1982,14 @@ def get_kis_1min_from_datetime(
                 return None
 
             def _sell_breakdown_1(row, close_price, breakdown_check, detail):
-                """시장 약세: 현재가 지정가(100%) / 그 외: 현재가 < 이탈가면 최유리지정가, 아니면 현재가 지정가(50%)"""
+                """시장 약세: 현재가 지정가(100%) / 그 외: 매수1호가(최유리지정가) > 이탈가면 최유리지정가, 아니면 이탈가 지정가(50%)
+                이탈가는 최종이탈가 이탈이면 최종이탈가, 이탈가 이탈이면 이탈가(stop_price)"""
                 sell_label = breakdown_wait_1["sell_label"]
-                if _short_market_down:
-                    ord_dvsn, price_desc = "00", f"현재가 지정가:{close_price:,}"
-                    i_trail_plan = trail_plan if trail_plan else "100"
-                elif close_price < int(stop_price):
-                    ord_dvsn, price_desc = "03", f"최유리지정가(현재가:{close_price:,})"
-                    i_trail_plan = trail_plan if trail_plan else "50"
-                else:
-                    ord_dvsn, price_desc = "00", f"현재가 지정가:{close_price:,}"
-                    i_trail_plan = trail_plan if trail_plan else "50"
-                order_price = close_price
+                breach_price = int(exit_price) if sell_label == "최종이탈가 매도" else int(stop_price)
+                ord_dvsn, order_price, price_desc = plan_breakdown_sell(
+                    stock_code, close_price, breach_price, _short_market_down, access_token, app_key, app_secret
+                )
+                i_trail_plan = trail_plan if trail_plan else ("100" if _short_market_down else "50")
                 trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                 trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                 trail_amt = order_price * trail_qty
