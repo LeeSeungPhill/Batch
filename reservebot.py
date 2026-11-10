@@ -295,6 +295,11 @@ g_split_blocked = set()  # 분할매수: 전체 매수금액이 매수가능금�
 g_bcln_list = []         # 기준계좌 보유종목 [(code, name, qty)] — 체크박스 화면 재표시용
 g_bcln_sel = {}          # 선택된 종목 {code: name}
 
+# 반등정리(RBCL) 공유 상태 — 물타기(직전 평균단가보다 낮은 가격 매수) 물량 반등 시 정리
+g_rbcl_list = {}         # 기준계좌 물타기 잔량 보유종목 {code: name}
+g_rbcl = {}              # 선택 종목 {'code': ..., 'name': ...}
+RBCL_COST_RATE = 1.002   # 매도단가 0 입력 시 평균단가 × 1.002 (세금·수수료 반영 실질 본전)
+
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
 INVEST_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong']  # 선택 가능 계좌 목록
@@ -519,7 +524,7 @@ def build_main_menu_markup():
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                  "반등매도", "시장관리", "코스피", "코스닥",
-                                 "분할매수", "분할매도", "잔고정리"], callback_header="menu")
+                                 "분할매수", "분할매도", "잔고정리", "반등정리"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
 
@@ -1168,6 +1173,109 @@ def show_bcln_keyboard(query):
         text=f"[잔고정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+
+def rbcl_build_lots(acct_no, name):
+    """
+    반등정리용 체결 이력 → LIFO lot 재구성 (계좌별)
+    - 처음 매수 : 보유 0주에서 시작한 첫 매수 주문
+    - 물타기    : 보유 중 체결가 < 직전 평균단가 인 매수 주문 (그 외 추가매수는 불타기)
+    - 매도 차감 : LIFO (최근 매수 lot 부터), 보유 0주 → lot 초기화 / 평균단가는 매도 시 불변
+    반환: {'qty': 재구성 보유수량, 'avg': 재구성 평균단가, 'avgdown_qty': 물타기 잔량, 'lots': [...], 'complete': 이력 정상 여부}
+    stockOrderComplete 는 종목코드가 없어 종목명으로 조회 — 호출부에서 재구성 수량 == 잔고 수량 일 때만 사용할 것
+    """
+    buy_types = ("현금매수", "매수정정*")
+    sell_types = ("현금매도", "매도정정*")
+    c_lot = get_conn()
+    with c_lot.cursor() as cur_lot:
+        cur_lot.execute("""
+            SELECT order_type, COALESCE(NULLIF(total_complete_qty, ''), '0')::int,
+                   COALESCE(NULLIF(total_complete_amt, ''), '0')::bigint
+            FROM public."stockOrderComplete_stock_order_complete"
+            WHERE acct_no = %s AND name = %s
+              AND order_type = ANY(%s)
+              AND COALESCE(NULLIF(total_complete_qty, ''), '0')::int > 0
+            ORDER BY order_dt, order_tmd, order_no::bigint
+        """, (int(acct_no), name, list(buy_types + sell_types)))
+        fills = cur_lot.fetchall()
+
+    lots, qty, cost, complete = [], 0, 0.0, bool(fills)
+    for otype, cq, camt in fills:
+        if otype in buy_types:
+            price = camt / cq
+            if qty == 0:
+                lots, cost, kind = [], 0.0, "INIT"
+            else:
+                kind = "AVGDOWN" if price < cost / qty else "PYRAMID"
+            lots.append({"kind": kind, "qty": cq, "price": round(price)})
+            qty += cq
+            cost += camt
+        else:
+            if cq > qty:            # 이력 시작 전 보유분 매도 → 이력 불완전
+                complete = False
+                lots, qty, cost = [], 0, 0.0
+                continue
+            avg = cost / qty
+            remain = cq
+            while remain > 0 and lots:
+                take = min(remain, lots[-1]["qty"])
+                lots[-1]["qty"] -= take
+                remain -= take
+                if lots[-1]["qty"] == 0:
+                    lots.pop()
+            qty -= cq
+            cost = avg * qty
+            if qty == 0:
+                lots, cost = [], 0.0
+    return {
+        "qty": qty,
+        "avg": cost / qty if qty else 0,
+        "avgdown_qty": sum(l["qty"] for l in lots if l["kind"] == "AVGDOWN"),
+        "lots": lots,
+        "complete": complete,
+    }
+
+def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_qty=0):
+    """
+    계좌별 반등정리 주문 계획
+    in_price 0 → 평균단가 × RBCL_COST_RATE 호가 올림 / in_qty 0 → 물타기 잔량
+    최종 수량 = min(요청 수량, 주문가능수량)
+    반환: dict(ok, reason, hldg, avg, psbl, avgdown, price, qty)
+    """
+    row = None
+    if bal_df is not None and not bal_df.empty:
+        hit = bal_df[(bal_df['pdno'] == code) & (bal_df['hldg_qty'].astype(int) > 0)]
+        if not hit.empty:
+            row = hit.iloc[0]
+    if row is None:
+        return {"ok": False, "reason": "보유수량 없음"}
+    hldg = int(row['hldg_qty'])
+    psbl = int(row['ord_psbl_qty'])
+    avg = float(row['pchs_avg_pric'])
+    lot = rbcl_build_lots(acct_no, name)
+    plan = {"hldg": hldg, "avg": avg, "psbl": psbl, "avgdown": lot["avgdown_qty"],
+            "lot_qty": lot["qty"], "lot_match": lot["qty"] == hldg}
+
+    if in_price > 0:
+        price = round_to_valid_price(in_price, get_tick_size(in_price))
+    else:
+        base = avg * RBCL_COST_RATE
+        price = int(round_to_valid_price(base, get_tick_size(base), 'up'))
+    plan["price"] = int(price)
+
+    if in_qty > 0:
+        want = in_qty
+    else:
+        if not plan["lot_match"]:
+            return {**plan, "ok": False,
+                    "reason": f"체결이력 불일치(이력 {lot['qty']:,}주 ≠ 잔고 {hldg:,}주) → 물타기 수량 산정 불가"}
+        want = lot["avgdown_qty"]
+        if want <= 0:
+            return {**plan, "ok": False, "reason": "물타기 잔량 없음"}
+    qty = min(want, psbl)
+    plan.update({"want": want, "qty": qty})
+    if qty <= 0:
+        return {**plan, "ok": False, "reason": f"주문가능수량 없음(요청 {want:,}주)"}
+    return {**plan, "ok": True, "reason": ""}
 
 def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=None, bot=None):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
@@ -3102,6 +3210,7 @@ def callback_get(update, context) :
             "HCHG": "menu,보유종목_교체",
             "SPB": "menu,분할매수", "SPS": "menu,분할매도",
             "BCLN": "bcln_back",
+            "RBCL": "menu,반등정리",
         }.get(back_num)
         if back_parent:
             query.data = back_parent
@@ -3744,6 +3853,42 @@ def callback_get(update, context) :
                       f"[잔고정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
                       f"매도비율(1~100, 전량:100)을 입력하세요.\n"
                       f"(종목별 기존 미체결 매도주문 취소 후 현재가로 매도합니다)")
+            )
+        elif menu_num == "RBCL":
+            # 반등정리 — 계좌별 평단가·물타기 잔량·주문가능수량 미리보기 후 매도단가, 매도수량 입력 프롬프트
+            menuNum = "RBCL"
+            rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
+            if not rb_code:
+                menuNum = "0"
+                query.edit_message_text(text="[반등정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+                return
+            query.edit_message_text(text=f"[반등정리] {rb_name}({rb_code}) 계좌별 물타기 수량 조회 중...")
+            rb_lines = []
+            for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+                label = nick if nick else arguments[1]
+                try:
+                    ac_rp = account(nick) if nick else account(arguments[1])
+                    bal_rp = stock_balance(ac_rp['access_token'], ac_rp['app_key'], ac_rp['app_secret'], ac_rp['acct_no'], "")
+                    p = rbcl_plan(ac_rp['acct_no'], rb_code, rb_name, bal_rp)
+                    if "hldg" not in p:
+                        rb_lines.append(f"  -{label}- {p['reason']}")
+                    else:
+                        avgdown_txt = (f"물타기 {format(p['avgdown'], ',d')}주" if p['lot_match']
+                                       else f"이력불일치(이력 {format(p['lot_qty'], ',d')}주)")
+                        rb_lines.append(
+                            f"  -{label}- 보유 {format(p['hldg'], ',d')}주 | 평단 {format(round(p['avg']), ',d')}원"
+                            f" → 매도가(0) {format(p['price'], ',d')}원 | {avgdown_txt} | 주문가능 {format(p['psbl'], ',d')}주")
+                except Exception as e:
+                    rb_lines.append(f"  -{label}- 조회 오류: {html.escape(str(e))}")
+                time.sleep(0.2)
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=(f"[선택계좌: {selected_str}]\n"
+                      f"[반등정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
+                      f"매도단가(0:평단가), 매도수량(0:물타기수량)을 입력하세요.\n"
+                      f"(평단가 = 평균단가×{RBCL_COST_RATE} 호가올림, 물타기수량 = 직전 평균단가보다 낮게 매수체결된 잔량(LIFO),"
+                      f" 해당 종목 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
+                parse_mode='HTML'
             )
         elif menu_num in ("SPB", "SPS"):
             # 분할매수/분할매도 — 차수 선택 버튼 표시
@@ -5107,6 +5252,52 @@ def callback_get(update, context) :
             return
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "BCLN")
+
+    elif command == "반등정리":
+        # 기준계좌 보유종목 중 물타기(직전 평균단가보다 낮은 가격 매수) 잔량이 있는 종목 목록
+        try:
+            ac_rb = account(arguments[1])
+            c_rb = stock_balance(ac_rb['access_token'], ac_rb['app_key'], ac_rb['app_secret'], ac_rb['acct_no'], "")
+        except Exception as e:
+            query.edit_message_text(text=f"[반등정리] 잔고 조회 오류: {str(e)}")
+            return
+        g_rbcl_list.clear()
+        g_rbcl.clear()
+        rb_buttons = []
+        for j, _ in enumerate(c_rb.index):
+            rb_qty = int(c_rb['hldg_qty'][j])
+            if rb_qty <= 0:
+                continue
+            rb_code, rb_name = c_rb['pdno'][j], c_rb['prdt_name'][j]
+            try:
+                rb_lot = rbcl_build_lots(ac_rb['acct_no'], rb_name)
+            except Exception as e:
+                print(f"[반등정리] {rb_name} 체결이력 조회 오류: {e}")
+                continue
+            # 체결이력 재구성 수량이 잔고와 일치하고 물타기 잔량이 있는 종목만
+            if rb_lot['qty'] != rb_qty or rb_lot['avgdown_qty'] <= 0:
+                continue
+            g_rbcl_list[rb_code] = rb_name
+            rb_buttons.append(InlineKeyboardButton(
+                f"{rb_name}({rb_code}) 물타기 {format(rb_lot['avgdown_qty'], ',d')}/{format(rb_qty, ',d')}주",
+                callback_data=f"rbcl_s:{rb_code}"
+            ))
+        if not rb_buttons:
+            query.edit_message_text(text="[반등정리] 직전 평균단가보다 낮은 가격에 매수체결된 보유종목이 없습니다.")
+            return
+        rb_rows = build_menu(rb_buttons, 1)
+        rb_rows.append([InlineKeyboardButton("취소", callback_data="menu,취소")])
+        query.edit_message_text(text="[반등정리] 반등정리할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rb_rows))
+
+    elif command.startswith("rbcl_s:"):
+        rb_code = command.split(":", 1)[1]
+        if rb_code not in g_rbcl_list:
+            query.edit_message_text(text="[반등정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            return
+        g_rbcl.clear()
+        g_rbcl.update({"code": rb_code, "name": g_rbcl_list[rb_code]})
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "RBCL")
 
     elif command == "분할매수":
         menuNum = "SPB"
@@ -6626,6 +6817,72 @@ def echo(update, context):
             t.start()
             time.sleep(0.5)
         for t in threads_hc:
+            t.join()
+        return
+
+    if menuNum == 'RBCL':
+        # 입력: 매도단가(0:평단가), 매도수량(0:물타기수량)
+        rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
+        if not rb_code:
+            initMenuNum()
+            context.bot.send_message(chat_id=user_id, text="[반등정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            return
+        rb_parts = [p.strip().replace(",", "") for p in user_text.replace("，", ",").split(",")]
+        if len(rb_parts) != 2 or not all(p.isdecimal() for p in rb_parts):
+            context.bot.send_message(chat_id=user_id, text="[반등정리] 매도단가, 매도수량을 숫자 2개로 입력하세요.")
+            return  # menuNum 유지 → 재입력 가능
+        rb_in_price, rb_in_qty = int(rb_parts[0]), int(rb_parts[1])
+        initMenuNum()
+
+        def process_nick_rbcl(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            t_label = nick if nick else arguments[1]
+            tag = f"-{t_label}- [{html.escape(rb_name)}(<code>{rb_code}</code>)]"
+            try:
+                # 1) 해당 종목 기존 미체결 매도주문 취소 → 실패 시 중복 매도 방지를 위해 제외
+                cncl_res = order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), rb_code, '01')
+                if cncl_res != 'success':
+                    cncl_msg = " / ".join(cncl_res) if isinstance(cncl_res, list) else str(cncl_res)
+                    safe_send(context.bot, user_id,
+                              f"{tag} 기존 매도주문 취소 실패 → 반등정리 제외 ({html.escape(cncl_msg)})", parse_mode='HTML')
+                    return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
+                # 2) 취소 반영된 잔고로 주문 계획 산정
+                bal = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                p = rbcl_plan(t_acct_no, rb_code, rb_name, bal, rb_in_price, rb_in_qty)
+                if not p["ok"]:
+                    safe_send(context.bot, user_id, f"{tag} 반등정리 제외: {html.escape(p['reason'])}", parse_mode='HTML')
+                    return
+                limit_note = (f" (요청 {format(p['want'], ',d')}주 → 주문가능수량 제한)" if p['qty'] < p['want'] else "")
+                c_rb = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
+                                  rb_code, "00", str(p['qty']), str(p['price']))
+                if c_rb is not None and c_rb['ODNO'] != "":
+                    safe_send(context.bot, user_id,
+                              f"{tag} 반등정리 매도주문 완료 | {format(p['price'], ',d')}원"
+                              f"(평단 {format(round(p['avg']), ',d')}원) | {format(p['qty'], ',d')}/{format(p['hldg'], ',d')}주"
+                              f"{limit_note} | {format(p['price'] * p['qty'], ',d')}원 | <code>{str(int(c_rb['ODNO']))}</code>",
+                              parse_mode='HTML')
+                else:
+                    safe_send(context.bot, user_id, f"{tag} 반등정리 매도주문 실패", parse_mode='HTML')
+            except Exception as e:
+                safe_send(context.bot, user_id, f"{tag} 반등정리 오류: {html.escape(str(e))}", parse_mode='HTML')
+
+        safe_send(context.bot, user_id,
+                  f"[반등정리] {rb_name} 매도단가 {'평단가' if rb_in_price == 0 else format(rb_in_price, ',d') + '원'}, "
+                  f"매도수량 {'물타기수량' if rb_in_qty == 0 else format(rb_in_qty, ',d') + '주'} 처리 중...")
+        rb_threads = []
+        for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+            try:
+                ac_rbx = account(nick) if nick else account(arguments[1])
+            except Exception as e:
+                safe_send(context.bot, user_id, f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(target=process_nick_rbcl,
+                                 args=(nick, ac_rbx['acct_no'], ac_rbx['access_token'], ac_rbx['app_key'], ac_rbx['app_secret']))
+            rb_threads.append(t)
+            t.start()
+            time.sleep(0.5)
+        for t in rb_threads:
             t.join()
         return
 
