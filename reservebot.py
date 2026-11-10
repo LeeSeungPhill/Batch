@@ -280,7 +280,7 @@ g_trail73_short_buy_qty = 0  # 단기시장 기준 매수량
 g_hchg_code = ""    # 매도 대상 보유종목코드
 g_hchg_name = ""    # 매도 대상 보유종목명
 
-# 시장관리(MKTM) → 선택 시장레벨 공유 상태
+# 시장관리(MKTM) → 선택 시장흐름 공유 상태
 g_mktm_level = ""   # "1":시장상승, "2":시장하락, "3":시장패턴
 
 # 분할매수(SPB)/분할매도(SPS) 공유 상태
@@ -291,11 +291,11 @@ g_split_count = 0        # 분할 횟수
 g_split_base_qty = {}    # 분할매도: {계좌닉네임: 전체 매도수량} (계좌 확인 시점 보유수량 기준)
 g_split_blocked = set()  # 분할매수: 전체 매수금액이 매수가능금액을 초과해 제외된 계좌
 
-# 잔고정리(BCLN) 공유 상태
+# 현재가 정리(BCLN) 공유 상태
 g_bcln_list = []         # 기준계좌 보유종목 [(code, name, qty)] — 체크박스 화면 재표시용
 g_bcln_sel = {}          # 선택된 종목 {code: name}
 
-# 반등정리(RBCL) 공유 상태 — 물타기(직전 평균단가보다 낮은 가격 매수) 물량 반등 시 정리
+# 물타기 정리(RBCL) 공유 상태 — 물타기(직전 평균단가보다 낮은 가격 매수) 물량 반등 시 정리
 g_rbcl_list = {}         # 기준계좌 물타기 잔량 보유종목 {code: name}
 g_rbcl = {}              # 선택 종목 {'code': ..., 'name': ...}
 RBCL_COST_RATE = 1.002   # 매도단가 0 입력 시 평균단가 × 1.002 (세금·수수료 반영 실질 본전)
@@ -1175,7 +1175,7 @@ def get_previous_business_day(day):
     return result_one00[0][0]
 
 def show_bcln_keyboard(query):
-    """잔고정리 보유종목 체크박스 키보드 표시 (✅/⬜ 토글)"""
+    """현재가 정리 보유종목 체크박스 키보드 표시 (✅/⬜ 토글)"""
     buttons = [
         [InlineKeyboardButton(f"{'✅' if code in g_bcln_sel else '⬜'} {name} ({format(qty, ',d')}주)", callback_data=f"bcln_t:{code}")]
         for code, name, qty in g_bcln_list
@@ -1184,16 +1184,16 @@ def show_bcln_keyboard(query):
     buttons.append([InlineKeyboardButton(f"{'✅' if all_checked else '⬜'} 전체선택", callback_data="bcln_all")])
     buttons.append([
         InlineKeyboardButton("다음 ▶", callback_data="bcln_next"),
-        InlineKeyboardButton("취소", callback_data="menu,취소"),
+        InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리"),
     ])
     query.edit_message_text(
-        text=f"[잔고정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
+        text=f"[현재가 정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
 def rbcl_build_lots(acct_no, name):
     """
-    반등정리용 체결 이력 → LIFO lot 재구성 (계좌별)
+    물타기 정리용 체결 이력 → LIFO lot 재구성 (계좌별)
     - 처음 매수 : 보유 0주에서 시작한 첫 매수 주문
     - 물타기    : 보유 중 체결가 < 직전 평균단가 인 매수 주문 (그 외 추가매수는 불타기)
     - 매도 차감 : LIFO (최근 매수 lot 부터), 보유 0주 → lot 초기화 / 평균단가는 매도 시 불변
@@ -1260,7 +1260,7 @@ def rbcl_avgdown_amt(pchs_amt, lot):
 
 def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_amt=0):
     """
-    계좌별 반등정리 주문 계획
+    계좌별 물타기 정리 주문 계획
     in_price 0 → 평균단가 × RBCL_COST_RATE 호가 올림
     in_amt   0 → 물타기금액(현재 매입총금액 - 최초 매수체결 금액) / in_amt > 0 → 입력 매도금액
     매도수량 = 매도금액 ÷ 매도단가 (주 단위 내림)
@@ -3866,7 +3866,7 @@ def callback_get(update, context) :
                 parse_mode='HTML'
             )
         elif menu_num == "MKTM":
-            # 시장관리 — 시장레벨(상승/하락/패턴) 선택 버튼 표시
+            # 시장관리 — 시장흐름(상승/하락/패턴) 선택 버튼 표시
             menuNum = "0"
             mktm_buttons = [
                 InlineKeyboardButton("시장상승", callback_data="mktm_lv:1"),
@@ -3874,28 +3874,28 @@ def callback_get(update, context) :
                 InlineKeyboardButton("시장패턴", callback_data="mktm_lv:3"),
             ]
             query.edit_message_text(
-                text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
+                text=f"[선택계좌: {selected_str}]\n시장흐름을 선택하세요:",
                 reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
             )
         elif menu_num == "BCLN":
-            # 잔고정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
+            # 현재가 정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
             menuNum = "BCLN"
             bc_names = ", ".join(g_bcln_sel.values())
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"[잔고정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
+                      f"[현재가 정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
                       f"매도비율(1~100, 전량:100)을 입력하세요.\n"
                       f"(종목별 기존 미체결 매도주문 취소 후 현재가로 매도합니다)")
             )
         elif menu_num == "RBCL":
-            # 반등정리 — 계좌별 평단가·물타기금액·주문가능수량 미리보기 후 매도단가, 매도금액 입력 프롬프트
+            # 물타기 정리 — 계좌별 평단가·물타기금액·주문가능수량 미리보기 후 매도단가, 매도금액 입력 프롬프트
             menuNum = "RBCL"
             rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
             if not rb_code:
                 menuNum = "0"
-                query.edit_message_text(text="[반등정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+                query.edit_message_text(text="[물타기 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
                 return
-            query.edit_message_text(text=f"[반등정리] {rb_name}({rb_code}) 계좌별 물타기금액 조회 중...")
+            query.edit_message_text(text=f"[물타기 정리] {rb_name}({rb_code}) 계좌별 물타기금액 조회 중...")
             rb_lines = []
             for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
                 label = nick if nick else arguments[1]
@@ -3917,7 +3917,7 @@ def callback_get(update, context) :
             context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"[반등정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
+                      f"[물타기 정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
                       f"매도단가(0:매수단가), 매도금액(0:물타기금액)을 입력하세요.\n"
                       f"(종목별 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
                 parse_mode='HTML'
@@ -5021,13 +5021,14 @@ def callback_get(update, context) :
                 for i in range(len(c_fb.index))
                 if int(c_fb['hldg_qty'][i]) > 0
             ]
+            fb_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리")]
             if fb_buttons:
                 query.edit_message_text(
                     text="피보나치 매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2, footer_buttons=fb_back))
                 )
             else:
-                query.edit_message_text(text="보유종목이 없습니다.")
+                query.edit_message_text(text="보유종목이 없습니다.", reply_markup=InlineKeyboardMarkup([fb_back]))
         except Exception as e:
             query.edit_message_text(text=f"[반등매도] 오류: {str(e)}")
 
@@ -5244,7 +5245,7 @@ def callback_get(update, context) :
             ac_bc = account(arguments[1])
             c_bc = stock_balance(ac_bc['access_token'], ac_bc['app_key'], ac_bc['app_secret'], ac_bc['acct_no'], "")
         except Exception as e:
-            query.edit_message_text(text=f"[잔고정리] 잔고 조회 오류: {str(e)}")
+            query.edit_message_text(text=f"[현재가 정리] 잔고 조회 오류: {str(e)}")
             return
         g_bcln_list.clear()
         g_bcln_sel.clear()
@@ -5253,7 +5254,7 @@ def callback_get(update, context) :
             if bc_qty > 0:
                 g_bcln_list.append((c_bc['pdno'][j], c_bc['prdt_name'][j], bc_qty))
         if not g_bcln_list:
-            query.edit_message_text(text="[잔고정리] 보유종목이 없습니다.")
+            query.edit_message_text(text="[현재가 정리] 보유종목이 없습니다.")
             return
         show_bcln_keyboard(query)
 
@@ -5277,7 +5278,7 @@ def callback_get(update, context) :
     elif command == "bcln_back":
         # 계좌 선택 → 종목 체크박스 화면으로 복귀 (선택 상태 유지)
         if not g_bcln_list:
-            query.edit_message_text(text="[잔고정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            query.edit_message_text(text="[현재가 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
             return
         show_bcln_keyboard(query)
 
@@ -5297,7 +5298,7 @@ def callback_get(update, context) :
             ac_rb = account(arguments[1])
             c_rb = stock_balance(ac_rb['access_token'], ac_rb['app_key'], ac_rb['app_secret'], ac_rb['acct_no'], "")
         except Exception as e:
-            query.edit_message_text(text=f"[반등정리] 잔고 조회 오류: {str(e)}")
+            query.edit_message_text(text=f"[물타기 정리] 잔고 조회 오류: {str(e)}")
             return
         g_rbcl_list.clear()
         g_rbcl.clear()
@@ -5310,7 +5311,7 @@ def callback_get(update, context) :
             try:
                 rb_lot = rbcl_build_lots(ac_rb['acct_no'], rb_name)
             except Exception as e:
-                print(f"[반등정리] {rb_name} 체결이력 조회 오류: {e}")
+                print(f"[물타기 정리] {rb_name} 체결이력 조회 오류: {e}")
                 continue
             # 체결이력 재구성 수량이 잔고와 일치하고 물타기 잔량이 있는 종목만
             rb_pchs = c_rb['pchs_amt'][j] if 'pchs_amt' in c_rb.columns else ''
@@ -5324,16 +5325,16 @@ def callback_get(update, context) :
                 callback_data=f"rbcl_s:{rb_code}"
             ))
         if not rb_buttons:
-            query.edit_message_text(text="[반등정리] 직전 평균단가보다 낮은 가격에 매수체결된 보유종목이 없습니다.")
+            query.edit_message_text(text="[물타기 정리] 직전 평균단가보다 낮은 가격에 매수체결된 보유종목이 없습니다.")
             return
         rb_rows = build_menu(rb_buttons, 1)
-        rb_rows.append([InlineKeyboardButton("취소", callback_data="menu,취소")])
-        query.edit_message_text(text="[반등정리] 반등정리할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rb_rows))
+        rb_rows.append([InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리")])
+        query.edit_message_text(text="[물타기 정리] 물타기 정리할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rb_rows))
 
     elif command.startswith("rbcl_s:"):
         rb_code = command.split(":", 1)[1]
         if rb_code not in g_rbcl_list:
-            query.edit_message_text(text="[반등정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            query.edit_message_text(text="[물타기 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
             return
         g_rbcl.clear()
         g_rbcl.update({"code": rb_code, "name": g_rbcl_list[rb_code]})
@@ -5457,7 +5458,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "MKTM")
 
     elif command.startswith("mktm_lv:"):
-        # 시장관리 — 시장레벨 버튼 선택 → 매매금액 입력 프롬프트
+        # 시장관리 — 시장흐름 버튼 선택 → 매매금액 입력 프롬프트
         mktm_level = command.split(":", 1)[1]
         level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
         g_mktm_level = mktm_level
@@ -6869,11 +6870,11 @@ def echo(update, context):
         rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
         if not rb_code:
             initMenuNum()
-            context.bot.send_message(chat_id=user_id, text="[반등정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            context.bot.send_message(chat_id=user_id, text="[물타기 정리] 선택된 종목이 없습니다. 다시 시도하세요.")
             return
         rb_parts = [p.strip().replace(",", "") for p in user_text.replace("，", ",").split(",")]
         if len(rb_parts) != 2 or not all(p.isdecimal() for p in rb_parts):
-            context.bot.send_message(chat_id=user_id, text="[반등정리] 매도단가, 매도금액을 숫자 2개로 입력하세요.")
+            context.bot.send_message(chat_id=user_id, text="[물타기 정리] 매도단가, 매도금액을 숫자 2개로 입력하세요.")
             return  # menuNum 유지 → 재입력 가능
         rb_in_price, rb_in_amt = int(rb_parts[0]), int(rb_parts[1])
         initMenuNum()
@@ -6887,7 +6888,7 @@ def echo(update, context):
                 if cncl_res != 'success':
                     cncl_msg = " / ".join(cncl_res) if isinstance(cncl_res, list) else str(cncl_res)
                     safe_send(context.bot, user_id,
-                              f"{tag} 기존 매도주문 취소 실패 → 반등정리 제외 ({html.escape(cncl_msg)})", parse_mode='HTML')
+                              f"{tag} 기존 매도주문 취소 실패 → 물타기 정리 제외 ({html.escape(cncl_msg)})", parse_mode='HTML')
                     return
                 time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
 
@@ -6895,24 +6896,24 @@ def echo(update, context):
                 bal = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
                 p = rbcl_plan(t_acct_no, rb_code, rb_name, bal, rb_in_price, rb_in_amt)
                 if not p["ok"]:
-                    safe_send(context.bot, user_id, f"{tag} 반등정리 제외: {html.escape(p['reason'])}", parse_mode='HTML')
+                    safe_send(context.bot, user_id, f"{tag} 물타기 정리 제외: {html.escape(p['reason'])}", parse_mode='HTML')
                     return
                 limit_note = (f" (요청 {format(p['want'], ',d')}주 → 주문가능수량 제한)" if p['qty'] < p['want'] else "")
                 c_rb = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
                                   rb_code, "00", str(p['qty']), str(p['price']))
                 if c_rb is not None and c_rb['ODNO'] != "":
                     safe_send(context.bot, user_id,
-                              f"{tag} 반등정리 매도주문 완료 | {format(p['price'], ',d')}원"
+                              f"{tag} 물타기 정리 매도주문 완료 | {format(p['price'], ',d')}원"
                               f"(평단 {format(round(p['avg']), ',d')}원) | {format(p['qty'], ',d')}/{format(p['hldg'], ',d')}주"
                               f"{limit_note} | {format(p['price'] * p['qty'], ',d')}원 | <code>{str(int(c_rb['ODNO']))}</code>",
                               parse_mode='HTML')
                 else:
-                    safe_send(context.bot, user_id, f"{tag} 반등정리 매도주문 실패", parse_mode='HTML')
+                    safe_send(context.bot, user_id, f"{tag} 물타기 정리 매도주문 실패", parse_mode='HTML')
             except Exception as e:
-                safe_send(context.bot, user_id, f"{tag} 반등정리 오류: {html.escape(str(e))}", parse_mode='HTML')
+                safe_send(context.bot, user_id, f"{tag} 물타기 정리 오류: {html.escape(str(e))}", parse_mode='HTML')
 
         safe_send(context.bot, user_id,
-                  f"[반등정리] {rb_name} 매도단가 {'평단가' if rb_in_price == 0 else format(rb_in_price, ',d') + '원'}, "
+                  f"[물타기 정리] {rb_name} 매도단가 {'평단가' if rb_in_price == 0 else format(rb_in_price, ',d') + '원'}, "
                   f"매도금액 {'물타기금액' if rb_in_amt == 0 else format(rb_in_amt, ',d') + '원'} 처리 중...")
         rb_threads = []
         for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
@@ -6935,11 +6936,11 @@ def echo(update, context):
         bc_items = dict(g_bcln_sel)
         if not bc_items:
             initMenuNum()
-            context.bot.send_message(chat_id=user_id, text="[잔고정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            context.bot.send_message(chat_id=user_id, text="[현재가 정리] 선택된 종목이 없습니다. 다시 시도하세요.")
             return
         bc_txt = user_text.strip()
         if not bc_txt.isdecimal() or not (1 <= int(bc_txt) <= 100):
-            context.bot.send_message(chat_id=user_id, text="[잔고정리] 매도비율은 1~100 숫자로 입력하세요.")
+            context.bot.send_message(chat_id=user_id, text="[현재가 정리] 매도비율은 1~100 숫자로 입력하세요.")
             return  # menuNum 유지 → 재입력 가능
         bc_ratio = int(bc_txt)
         initMenuNum()
@@ -7006,10 +7007,10 @@ def echo(update, context):
             except Exception as e:
                 lines.append(f"처리 중단 오류: {html.escape(str(e))}")
             finally:
-                header = (f"-{t_label}- [잔고정리 {bc_ratio}%] 완료 {ok_cnt} / 실패 {fail_cnt} / 제외 {skip_cnt}")
+                header = (f"-{t_label}- [현재가 정리 {bc_ratio}%] 완료 {ok_cnt} / 실패 {fail_cnt} / 제외 {skip_cnt}")
                 safe_send(context.bot, user_id, "\n".join([header] + lines), parse_mode='HTML')
 
-        safe_send(context.bot, user_id, f"[잔고정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
+        safe_send(context.bot, user_id, f"[현재가 정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
         bc_threads = []
         for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
             try:
@@ -7032,7 +7033,7 @@ def echo(update, context):
         level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
         if mktm_level not in ("1", "2", "3"):
             initMenuNum()
-            context.bot.send_message(chat_id=user_id, text="선택된 시장레벨이 없습니다. 다시 시도하세요.")
+            context.bot.send_message(chat_id=user_id, text="선택된 시장흐름이 없습니다. 다시 시도하세요.")
             return
 
         mktm_text = user_text.strip().replace(',', '')
