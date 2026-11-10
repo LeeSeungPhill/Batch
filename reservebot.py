@@ -1180,7 +1180,8 @@ def rbcl_build_lots(acct_no, name):
     - 처음 매수 : 보유 0주에서 시작한 첫 매수 주문
     - 물타기    : 보유 중 체결가 < 직전 평균단가 인 매수 주문 (그 외 추가매수는 불타기)
     - 매도 차감 : LIFO (최근 매수 lot 부터), 보유 0주 → lot 초기화 / 평균단가는 매도 시 불변
-    반환: {'qty': 재구성 보유수량, 'avg': 재구성 평균단가, 'avgdown_qty': 물타기 잔량, 'lots': [...], 'complete': 이력 정상 여부}
+    반환: {'qty': 재구성 보유수량, 'avg': 재구성 평균단가, 'avgdown_qty': 물타기 잔량,
+           'avgdown_amt': 물타기 잔량 매수금액(처음 매수분 제외, 잔량 × 매수체결가), 'lots': [...], 'complete': 이력 정상 여부}
     stockOrderComplete 는 종목코드가 없어 종목명으로 조회 — 호출부에서 재구성 수량 == 잔고 수량 일 때만 사용할 것
     """
     buy_types = ("현금매수", "매수정정*")
@@ -1230,14 +1231,22 @@ def rbcl_build_lots(acct_no, name):
         "qty": qty,
         "avg": cost / qty if qty else 0,
         "avgdown_qty": sum(l["qty"] for l in lots if l["kind"] == "AVGDOWN"),
+        "init_qty": sum(l["qty"] for l in lots if l["kind"] == "INIT"),
+        "init_amt": int(sum(l["qty"] * l["price"] for l in lots if l["kind"] == "INIT")),   # 최초 매수체결 금액(잔량 × 체결가)
         "lots": lots,
         "complete": complete,
     }
 
-def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_qty=0):
+def rbcl_avgdown_amt(pchs_amt, lot):
+    """물타기금액 = 현재 매입총금액(잔고 pchs_amt) - 최초 매수체결 금액(처음 매수 lot)"""
+    return max(0, int(pchs_amt) - int(lot["init_amt"]))
+
+def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_amt=0):
     """
     계좌별 반등정리 주문 계획
-    in_price 0 → 평균단가 × RBCL_COST_RATE 호가 올림 / in_qty 0 → 물타기 잔량
+    in_price 0 → 평균단가 × RBCL_COST_RATE 호가 올림
+    in_amt   0 → 물타기금액(현재 매입총금액 - 최초 매수체결 금액) / in_amt > 0 → 입력 매도금액
+    매도수량 = 매도금액 ÷ 매도단가 (주 단위 내림)
     최종 수량 = min(요청 수량, 주문가능수량)
     반환: dict(ok, reason, hldg, avg, psbl, avgdown, price, qty)
     """
@@ -1251,8 +1260,10 @@ def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_qty=0):
     hldg = int(row['hldg_qty'])
     psbl = int(row['ord_psbl_qty'])
     avg = float(row['pchs_avg_pric'])
+    pchs_amt = int(float(row['pchs_amt'])) if 'pchs_amt' in row.index and str(row['pchs_amt']).strip() else int(avg * hldg)
     lot = rbcl_build_lots(acct_no, name)
-    plan = {"hldg": hldg, "avg": avg, "psbl": psbl, "avgdown": lot["avgdown_qty"],
+    plan = {"hldg": hldg, "avg": avg, "psbl": psbl, "pchs_amt": pchs_amt, "avgdown": lot["avgdown_qty"],
+            "init_qty": lot["init_qty"], "init_amt": lot["init_amt"], "avgdown_amt": rbcl_avgdown_amt(pchs_amt, lot),
             "lot_qty": lot["qty"], "lot_match": lot["qty"] == hldg}
 
     if in_price > 0:
@@ -1262,15 +1273,19 @@ def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_qty=0):
         price = int(round_to_valid_price(base, get_tick_size(base), 'up'))
     plan["price"] = int(price)
 
-    if in_qty > 0:
-        want = in_qty
+    if in_amt > 0:
+        sell_amt = in_amt
     else:
         if not plan["lot_match"]:
             return {**plan, "ok": False,
-                    "reason": f"체결이력 불일치(이력 {lot['qty']:,}주 ≠ 잔고 {hldg:,}주) → 물타기 수량 산정 불가"}
-        want = lot["avgdown_qty"]
-        if want <= 0:
-            return {**plan, "ok": False, "reason": "물타기 잔량 없음"}
+                    "reason": f"체결이력 불일치(이력 {lot['qty']:,}주 ≠ 잔고 {hldg:,}주) → 물타기금액 산정 불가"}
+        sell_amt = plan["avgdown_amt"]
+        if sell_amt <= 0:
+            return {**plan, "ok": False, "reason": "물타기금액 없음"}
+    plan["sell_amt"] = sell_amt
+    want = int(sell_amt // plan["price"])
+    if want <= 0:
+        return {**plan, "ok": False, "reason": f"매도금액({sell_amt:,}원) < 매도단가({plan['price']:,}원)"}
     qty = min(want, psbl)
     plan.update({"want": want, "qty": qty})
     if qty <= 0:
@@ -3855,14 +3870,14 @@ def callback_get(update, context) :
                       f"(종목별 기존 미체결 매도주문 취소 후 현재가로 매도합니다)")
             )
         elif menu_num == "RBCL":
-            # 반등정리 — 계좌별 평단가·물타기 잔량·주문가능수량 미리보기 후 매도단가, 매도수량 입력 프롬프트
+            # 반등정리 — 계좌별 평단가·물타기금액·주문가능수량 미리보기 후 매도단가, 매도금액 입력 프롬프트
             menuNum = "RBCL"
             rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
             if not rb_code:
                 menuNum = "0"
                 query.edit_message_text(text="[반등정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
                 return
-            query.edit_message_text(text=f"[반등정리] {rb_name}({rb_code}) 계좌별 물타기 수량 조회 중...")
+            query.edit_message_text(text=f"[반등정리] {rb_name}({rb_code}) 계좌별 물타기금액 조회 중...")
             rb_lines = []
             for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
                 label = nick if nick else arguments[1]
@@ -3873,11 +3888,12 @@ def callback_get(update, context) :
                     if "hldg" not in p:
                         rb_lines.append(f"  -{label}- {p['reason']}")
                     else:
-                        avgdown_txt = (f"물타기 {format(p['avgdown'], ',d')}주" if p['lot_match']
+                        avgdown_txt = (f"매입 {format(p['pchs_amt'], ',d')}원 - 최초 {format(p['init_amt'], ',d')}원"
+                                       f" = 물타기금액 {format(p['avgdown_amt'], ',d')}원" if p['lot_match']
                                        else f"이력불일치(이력 {format(p['lot_qty'], ',d')}주)")
                         rb_lines.append(
-                            f"  -{label}- 보유 {format(p['hldg'], ',d')}주 | 평단 {format(round(p['avg']), ',d')}원"
-                            f" → 매도가(0) {format(p['price'], ',d')}원 | {avgdown_txt} | 주문가능 {format(p['psbl'], ',d')}주")
+                            f"  -{label}- 매수단가 {format(round(p['avg']), ',d')}원"
+                            f" → 매도가(0) {format(p['price'], ',d')}원 | {avgdown_txt}")
                 except Exception as e:
                     rb_lines.append(f"  -{label}- 조회 오류: {html.escape(str(e))}")
                 time.sleep(0.2)
@@ -3885,9 +3901,8 @@ def callback_get(update, context) :
                 chat_id=query.message.chat_id,
                 text=(f"[선택계좌: {selected_str}]\n"
                       f"[반등정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
-                      f"매도단가(0:평단가), 매도수량(0:물타기수량)을 입력하세요.\n"
-                      f"(평단가 = 평균단가×{RBCL_COST_RATE} 호가올림, 물타기수량 = 직전 평균단가보다 낮게 매수체결된 잔량(LIFO),"
-                      f" 해당 종목 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
+                      f"매도단가(0:평단가), 매도금액(0:물타기금액)을 입력하세요.\n"
+                      f"(물타기금액 = 현재 매입총금액 - 최초 매수체결 금액, 종목별 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
                 parse_mode='HTML'
             )
         elif menu_num in ("SPB", "SPS"):
@@ -5275,11 +5290,14 @@ def callback_get(update, context) :
                 print(f"[반등정리] {rb_name} 체결이력 조회 오류: {e}")
                 continue
             # 체결이력 재구성 수량이 잔고와 일치하고 물타기 잔량이 있는 종목만
-            if rb_lot['qty'] != rb_qty or rb_lot['avgdown_qty'] <= 0:
+            rb_pchs = c_rb['pchs_amt'][j] if 'pchs_amt' in c_rb.columns else ''
+            rb_pchs = int(float(rb_pchs)) if str(rb_pchs).strip() else int(float(c_rb['pchs_avg_pric'][j]) * rb_qty)
+            rb_amt = rbcl_avgdown_amt(rb_pchs, rb_lot)
+            if rb_lot['qty'] != rb_qty or rb_lot['avgdown_qty'] <= 0 or rb_amt <= 0:
                 continue
             g_rbcl_list[rb_code] = rb_name
             rb_buttons.append(InlineKeyboardButton(
-                f"{rb_name}({rb_code}) 물타기 {format(rb_lot['avgdown_qty'], ',d')}/{format(rb_qty, ',d')}주",
+                f"{rb_name}({rb_code}) 물타기금액 {format(rb_amt, ',d')}원",
                 callback_data=f"rbcl_s:{rb_code}"
             ))
         if not rb_buttons:
@@ -6821,7 +6839,7 @@ def echo(update, context):
         return
 
     if menuNum == 'RBCL':
-        # 입력: 매도단가(0:평단가), 매도수량(0:물타기수량)
+        # 입력: 매도단가(0:평단가), 매도금액(0:물타기금액)
         rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
         if not rb_code:
             initMenuNum()
@@ -6829,9 +6847,9 @@ def echo(update, context):
             return
         rb_parts = [p.strip().replace(",", "") for p in user_text.replace("，", ",").split(",")]
         if len(rb_parts) != 2 or not all(p.isdecimal() for p in rb_parts):
-            context.bot.send_message(chat_id=user_id, text="[반등정리] 매도단가, 매도수량을 숫자 2개로 입력하세요.")
+            context.bot.send_message(chat_id=user_id, text="[반등정리] 매도단가, 매도금액을 숫자 2개로 입력하세요.")
             return  # menuNum 유지 → 재입력 가능
-        rb_in_price, rb_in_qty = int(rb_parts[0]), int(rb_parts[1])
+        rb_in_price, rb_in_amt = int(rb_parts[0]), int(rb_parts[1])
         initMenuNum()
 
         def process_nick_rbcl(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -6849,7 +6867,7 @@ def echo(update, context):
 
                 # 2) 취소 반영된 잔고로 주문 계획 산정
                 bal = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
-                p = rbcl_plan(t_acct_no, rb_code, rb_name, bal, rb_in_price, rb_in_qty)
+                p = rbcl_plan(t_acct_no, rb_code, rb_name, bal, rb_in_price, rb_in_amt)
                 if not p["ok"]:
                     safe_send(context.bot, user_id, f"{tag} 반등정리 제외: {html.escape(p['reason'])}", parse_mode='HTML')
                     return
@@ -6869,7 +6887,7 @@ def echo(update, context):
 
         safe_send(context.bot, user_id,
                   f"[반등정리] {rb_name} 매도단가 {'평단가' if rb_in_price == 0 else format(rb_in_price, ',d') + '원'}, "
-                  f"매도수량 {'물타기수량' if rb_in_qty == 0 else format(rb_in_qty, ',d') + '주'} 처리 중...")
+                  f"매도금액 {'물타기금액' if rb_in_amt == 0 else format(rb_in_amt, ',d') + '원'} 처리 중...")
         rb_threads = []
         for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
             try:
