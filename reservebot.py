@@ -523,10 +523,27 @@ def build_main_menu_markup():
                                  "전체예약", "예약주문", "예약정정", "예약취소", 
                                  "전체주문", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "반등매도", "시장관리", "코스피", "코스닥",
-                                 "분할매수", "분할매도", "잔고정리", "반등정리"], callback_header="menu")
+                                 "시장관리", "잔고정리", "분할매수", "분할매도"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
+
+# 시장관리 하위 메뉴: 코스피 / 코스닥 / 시장흐름
+def build_market_menu_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("코스피", callback_data="menu,코스피"),
+         InlineKeyboardButton("코스닥", callback_data="menu,코스닥")],
+        [InlineKeyboardButton("시장흐름", callback_data="menu,시장흐름")],
+        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+    ])
+
+# 잔고정리 하위 메뉴: 현재가 정리 / 피보나치 정리 / 물타기 정리
+def build_balance_menu_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("현재가 정리", callback_data="menu,현재가정리")],
+        [InlineKeyboardButton("피보나치 정리", callback_data="menu,반등매도")],
+        [InlineKeyboardButton("물타기 정리", callback_data="menu,반등정리")],
+        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+    ])
 
 def get_command(update, context) :
     update.message.reply_text("메뉴를 선택하세요", reply_markup=build_main_menu_markup()) # reply text with markup
@@ -3225,6 +3242,7 @@ def callback_get(update, context) :
             "HCHG": "menu,보유종목_교체",
             "SPB": "menu,분할매수", "SPS": "menu,분할매도",
             "BCLN": "bcln_back",
+            "MKTM": "menu,시장관리",
             "RBCL": "menu,반등정리",
         }.get(back_num)
         if back_parent:
@@ -3892,8 +3910,7 @@ def callback_get(update, context) :
                                        f" = 물타기금액 {format(p['avgdown_amt'], ',d')}원" if p['lot_match']
                                        else f"이력불일치(이력 {format(p['lot_qty'], ',d')}주)")
                         rb_lines.append(
-                            f"  -{label}- 매수단가 {format(round(p['avg']), ',d')}원"
-                            f" → 매도가(0) {format(p['price'], ',d')}원 | {avgdown_txt}")
+                            f"  -{label}- 매수단가 {format(round(p['avg']), ',d')}원(0:{format(p['price'], ',d')}원) → {avgdown_txt}")
                 except Exception as e:
                     rb_lines.append(f"  -{label}- 조회 오류: {html.escape(str(e))}")
                 time.sleep(0.2)
@@ -3901,8 +3918,8 @@ def callback_get(update, context) :
                 chat_id=query.message.chat_id,
                 text=(f"[선택계좌: {selected_str}]\n"
                       f"[반등정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
-                      f"매도단가(0:평단가), 매도금액(0:물타기금액)을 입력하세요.\n"
-                      f"(물타기금액 = 현재 매입총금액 - 최초 매수체결 금액, 종목별 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
+                      f"매도단가(0:매수단가), 매도금액(0:물타기금액)을 입력하세요.\n"
+                      f"(종목별 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
                 parse_mode='HTML'
             )
         elif menu_num in ("SPB", "SPS"):
@@ -4980,8 +4997,8 @@ def callback_get(update, context) :
             query.edit_message_text(text=f"[{g_kk_name} 변경] 오류: {str(e)}")
 
     elif command == "kk_back":
-        # 코스피/코스닥 항목 선택 → 메인 메뉴로 복귀
-        query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
+        # 코스피/코스닥 항목 선택 → 시장관리 하위 메뉴로 복귀
+        query.edit_message_text(text="[시장관리] 메뉴를 선택하세요", reply_markup=build_market_menu_markup())
 
     elif command.startswith("kk_field_"):
         global g_kk_field
@@ -5216,6 +5233,12 @@ def callback_get(update, context) :
             t.join()
 
     elif command == "잔고정리":
+        query.edit_message_text(text="[잔고정리] 메뉴를 선택하세요", reply_markup=build_balance_menu_markup())
+
+    elif command == "main_menu":
+        query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
+
+    elif command == "현재가정리":
         # 기준계좌 보유종목을 체크박스 목록으로 표시
         try:
             ac_bc = account(arguments[1])
@@ -5427,6 +5450,9 @@ def callback_get(update, context) :
             t.join()
 
     elif command == "시장관리":
+        query.edit_message_text(text="[시장관리] 메뉴를 선택하세요", reply_markup=build_market_menu_markup())
+
+    elif command == "시장흐름":
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "MKTM")
 
