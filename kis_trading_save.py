@@ -357,7 +357,8 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
     # 관심정보 조회
     cur21 = conn.cursor()
     cur21.execute("""
-        SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price
+        SELECT code, name, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price,
+               watch_type, main_business, market, size, industry, mktcap
         FROM "interestItem_interest_item"
         WHERE acct_no = %s AND interest_day = %s
     """, (str(acct_no), today))
@@ -401,10 +402,19 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
             except Exception as ex:
                 print(f"현재가 시세 에러 : [{code}] {ex}")          
         
-        insert_query22 = "with upsert as (update dly_stock_interest set current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, through_price = %s, leave_price = %s, resist_price = %s, support_price = %s, trend_high_price = %s, trend_low_price = %s, last_chg_date = %s where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_interest(acct, dt, name, code, current_price, open_price, high_price, low_price, volumn, volumn_rate, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
+        watch_type = i[8]                                   # 관심유형
+        main_business = i[9]                                # 주요사업
+        market = i[10]                                      # 시장구분
+        size = i[11]                                        # 규모
+        industry = i[12]                                    # 업종
+        mktcap = i[13]                                      # 시가총액
+
+        insert_query22 = "with upsert as (update dly_stock_interest set current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, through_price = %s, leave_price = %s, resist_price = %s, support_price = %s, trend_high_price = %s, trend_low_price = %s, watch_type = %s, main_business = %s, market = %s, size = %s, industry = %s, mktcap = %s, last_chg_date = %s where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_interest(acct, dt, name, code, current_price, open_price, high_price, low_price, volumn, volumn_rate, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, watch_type, main_business, market, size, industry, mktcap, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
         # insert 인자값 설정
-        record_to_insert22 = ([current_price, open_price, high_price, low_price, volumn, float(volumn_rate), int(i[2]), int(i[3]), int(i[4]), int(i[5]), int(i[6]), int(i[7]), datetime.now(), today, code, str(acct_no),
-            str(acct_no), today, name, code, current_price, open_price, high_price, low_price, volumn, float(volumn_rate), int(i[2]), int(i[3]), int(i[4]), int(i[5]), int(i[6]), int(i[7]), datetime.now()])
+        record_to_insert22 = ([current_price, open_price, high_price, low_price, volumn, float(volumn_rate), int(i[2]), int(i[3]), int(i[4]), int(i[5]), int(i[6]), int(i[7]),
+            watch_type, main_business, market, size, industry, mktcap, datetime.now(), today, code, str(acct_no),
+            str(acct_no), today, name, code, current_price, open_price, high_price, low_price, volumn, float(volumn_rate), int(i[2]), int(i[3]), int(i[4]), int(i[5]), int(i[6]), int(i[7]),
+            watch_type, main_business, market, size, industry, mktcap, datetime.now()])
         # DB 연결된 커서의 쿼리 수행
         cur22.execute(insert_query22, record_to_insert22)
         conn.commit()    
