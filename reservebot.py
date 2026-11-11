@@ -344,7 +344,7 @@ def build_date_buttons1(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_date_buttons2(days=7):
     today = datetime.now().date()
@@ -379,7 +379,7 @@ def build_date_buttons2(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_date_buttons3(days=7):
     today = datetime.now().date()
@@ -496,7 +496,7 @@ def build_date_buttons4(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -2405,7 +2405,7 @@ def callback_get(update, context) :
             if sl_buttons:
                 query.edit_message_text(
                     text="매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(sl_buttons, 1))
+                    reply_markup=InlineKeyboardMarkup(build_menu(sl_buttons, 1, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
                 )
             else:
                 query.edit_message_text(text="보유종목이 없습니다.")
@@ -2434,7 +2434,7 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문정정", callback_data="corr_type_01")
         query.edit_message_text(
             text="정정할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
         )
 
     elif command.startswith("corr_type_"):
@@ -2511,7 +2511,7 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문취소", callback_data="cncl_type_01")
         query.edit_message_text(
             text="취소할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
         )
 
     elif command.startswith("cncl_type_"):
@@ -2676,7 +2676,7 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도예약", callback_data="rsv_type_sell")
         query.edit_message_text(
             text="예약 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
         )
 
     elif command == "rsv_type_buy":
@@ -2732,7 +2732,7 @@ def callback_get(update, context) :
         btn_sell_rc = InlineKeyboardButton("매도예약정정", callback_data="rsv_corr_type_01")
         query.edit_message_text(
             text="정정할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
         )
 
     elif command.startswith("rsv_corr_type_"):
@@ -2809,7 +2809,7 @@ def callback_get(update, context) :
         btn_sell_cn = InlineKeyboardButton("매도예약취소", callback_data="rsv_cncl_type_01")
         query.edit_message_text(
             text="취소할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
         )
 
     elif command.startswith("rsv_cncl_type_"):
@@ -2881,7 +2881,7 @@ def callback_get(update, context) :
 
     elif command == "추적등록":
         button_list = build_button(["매수자동등록", "매수주문등록", "주문제외등록"], data_selected)
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
+        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list), footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
         context.bot.edit_message_text(text="추적등록 방식을 선택해 주세요.",
                                         chat_id=update.callback_query.message.chat_id,
@@ -4469,7 +4469,7 @@ def callback_get(update, context) :
 
     elif command == "추적상태":
         button_list = build_button(["재개", "멈춤"], data_selected)
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
+        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list), footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
         context.bot.edit_message_text(text="상태를 선택해 주세요.",
                                         chat_id=update.callback_query.message.chat_id,
