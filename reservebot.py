@@ -431,6 +431,7 @@ def _show_holding_edit_keyboard(query, context_bot=None):
             h_name = c['prdt_name'][i]
             if int(c['hldg_qty'][i]) > 0:
                 edit_buttons.append(InlineKeyboardButton(f"{h_name}({h_code})", callback_data=f"menu,holding_edit_{h_code}"))
+        edit_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
         rows = [edit_buttons[i:i+2] for i in range(0, len(edit_buttons), 2)]
         query.edit_message_text(text="수정할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rows))
     except Exception as e:
@@ -455,6 +456,7 @@ def _show_interest_edit_keyboard(query):
             for r in rows
         ]
         ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
+        ii_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
         rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
         query.edit_message_text(text="변경할 관심종목을 선택하거나 신규 등록하세요:", reply_markup=InlineKeyboardMarkup(rows_kb))
     except Exception as e:
@@ -1538,7 +1540,7 @@ def callback_get(update, context) :
             InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
             InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
             InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
-            InlineKeyboardButton("취소",          callback_data="menu,취소"),
+            InlineKeyboardButton("◀ 뒤로가기",     callback_data="menu,main_menu"),
         ]
         query.edit_message_text(
             text="종목관리 메뉴를 선택하세요:",
@@ -1704,7 +1706,7 @@ def callback_get(update, context) :
                                 InlineKeyboardButton(btn_label, callback_data=f"menu,holding_{h_code}")
                             )
                     if hold_buttons:
-                        hold_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                        hold_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
                         # 한 행에 2개씩
                         rows = [hold_buttons[i:i+2] for i in range(0, len(hold_buttons), 2)]
                         context.bot.send_message(
@@ -1781,7 +1783,7 @@ def callback_get(update, context) :
                     InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"interest_del_{r[1]}")
                     for r in rows
                 ]
-                del_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                del_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
                 del_rows = [del_buttons[i:i+2] for i in range(0, len(del_buttons), 2)]
                 context.bot.send_message(
                     text="삭제할 관심 종목을 선택하세요:",
@@ -2072,6 +2074,10 @@ def callback_get(update, context) :
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "TRMAR")
 
+    elif command == "tm_back":
+        # 트레이딩 시장 종목 선택 → 다중계좌 선택으로 복귀 (선택된 계좌 유지)
+        show_account_selection_keyboard(query, "TRMAR")
+
     elif command.startswith("tm_sell:"):
         # 트레이딩 시장 — 종목 버튼 선택 시 현재가 기준 매도수량으로 즉시 매도
         parts = command.split(":")
@@ -2172,7 +2178,9 @@ def callback_get(update, context) :
             return
         query.edit_message_text(
             text="[보유종목 교체] 변경할 보유종목을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup(build_menu(hc0_buttons, 1))
+            reply_markup=InlineKeyboardMarkup(build_menu(
+                hc0_buttons, 1,
+                footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리")]))
         )
 
     elif command.startswith("hchg_pick:"):
@@ -3216,12 +3224,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_change_{code}")
                     for code, name in tc_rows
                 ]
+                tc_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]
                 query.edit_message_text(
                     text="변경할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(tc_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(tc_buttons, 2, footer_buttons=tc_back))
                 )
             else:
-                query.edit_message_text(text="추적 중인 종목이 없습니다.")
+                query.edit_message_text(
+                    text="추적 중인 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적변경] 오류: {str(e)}")
 
@@ -3770,7 +3782,9 @@ def callback_get(update, context) :
                 context.bot.send_message(
                     chat_id=query.message.chat_id,
                     text=f"-{t_nick_label}- [트레이딩 시장] 현금전환 필요금액: {format(need_cash_tm, ',d')}원\n매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(tm_buttons, 1))
+                    reply_markup=InlineKeyboardMarkup(build_menu(
+                        tm_buttons, 1,
+                        footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="tm_back")]))
                 )
 
             threads_tm = []
@@ -3875,7 +3889,9 @@ def callback_get(update, context) :
             ]
             query.edit_message_text(
                 text=f"[선택계좌: {selected_str}]\n시장흐름을 선택하세요:",
-                reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
+                reply_markup=InlineKeyboardMarkup(build_menu(
+                    mktm_buttons, 1,
+                    footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="mktm_back")]))
             )
         elif menu_num == "BCLN":
             # 현재가 정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
@@ -4476,12 +4492,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_resume_{code}")
                     for code, name in resume_rows
                 ]
+                rs_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]
                 query.edit_message_text(
                     text="재개할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(rs_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(rs_buttons, 2, footer_buttons=rs_back))
                 )
             else:
-                query.edit_message_text(text="재개할 종목이 없습니다.")
+                query.edit_message_text(
+                    text="재개할 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적재개] 오류: {str(e)}")
 
@@ -4501,12 +4521,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_stop_{code}")
                     for code, name in stop_rows
                 ]
+                st_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]
                 query.edit_message_text(
                     text="멈출 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(st_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(st_buttons, 2, footer_buttons=st_back))
                 )
             else:
-                query.edit_message_text(text="멈출 종목이 없습니다.")
+                query.edit_message_text(
+                    text="멈출 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적멈춤] 오류: {str(e)}")
 
@@ -5455,6 +5479,11 @@ def callback_get(update, context) :
 
     elif command == "시장흐름":
         g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "MKTM")
+
+    elif command == "mktm_back":
+        # 시장흐름 선택 → 다중계좌 선택으로 복귀 (선택된 계좌 유지)
+        menuNum = "0"
         show_account_selection_keyboard(query, "MKTM")
 
     elif command.startswith("mktm_lv:"):
