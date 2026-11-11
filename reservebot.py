@@ -1346,12 +1346,34 @@ def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=Non
     else:
         query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
 
+def get_market_meta(code):
+    """현재가 조회로 시장구분(market)/규모(size)/업종(industry)/시가총액(mktcap) 산출
+    (simul_server.py 의 _get_market_meta 와 동일 기준). 실패 시 예외 발생."""
+    ac_mm = account(arguments[1])
+    out = inquire_price(ac_mm['access_token'], ac_mm['app_key'], ac_mm['app_secret'], code)
+    market = out.get('rprs_mrkt_kor_name', '') or ''
+    industry = out.get('bstp_kor_isnm', '') or ''
+    try:
+        mktcap = int(str(out.get('hts_avls', '0')).replace(',', ''))
+    except Exception:
+        mktcap = 0
+    if   mktcap >= 10000: size = '대형주'
+    elif mktcap >= 3000:  size = '중형주'
+    else:                 size = '소형주'
+    return {'market': market, 'size': size, 'industry': industry, 'mktcap': str(mktcap)}
+
 def _do_interest_register(chat_id, context, pending):
     try:
         c_reg = get_conn()
         now = datetime.now()
         interest_day = now.strftime('%Y%m%d')
         interest_dtm = now.strftime('%H%M%S')
+        # 시장구분/규모/업종/시가총액 — 조회 실패 시 NULL 로 저장하고 등록은 계속 진행
+        try:
+            meta = get_market_meta(pending['code'])
+        except Exception as e_meta:
+            print(f"[관심종목] {pending['code']} 시장정보 조회 오류: {e_meta}")
+            meta = {'market': None, 'size': None, 'industry': None, 'mktcap': None}
         with c_reg.cursor() as cur_reg:
             cur_reg.execute("""
                 UPDATE public."interestItem_interest_item"
@@ -1362,24 +1384,31 @@ def _do_interest_register(chat_id, context, pending):
                     support_price    = %s,
                     trend_high_price = %s,
                     trend_low_price  = %s,
+                    market           = %s,
+                    size             = %s,
+                    industry         = %s,
+                    mktcap           = %s,
                     last_chg_date    = %s
                 WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             """, (pending['name'],
                   pending['through_price'], pending['leave_price'],
                   pending['d20_high'], pending['d20_low'],
                   pending['y1_high'], pending['y1_low'],
+                  meta['market'], meta['size'], meta['industry'], meta['mktcap'],
                   now,
                   pending['acct_reg'], pending['code']))
             if cur_reg.rowcount == 0:
                 cur_reg.execute("""
                     INSERT INTO public."interestItem_interest_item"
                         (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                         trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                         trend_high_price, trend_low_price, market, size, industry, mktcap,
+                         interest_day, interest_dtm, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
                 """, (pending['acct_reg'], pending['code'], pending['name'],
                       pending['through_price'], pending['leave_price'],
                       pending['d20_high'], pending['d20_low'],
                       pending['y1_high'], pending['y1_low'],
+                      meta['market'], meta['size'], meta['industry'], meta['mktcap'],
                       interest_day, interest_dtm, now))
         c_reg.commit()
         context.bot.send_message(
