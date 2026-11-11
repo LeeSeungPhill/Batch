@@ -280,7 +280,7 @@ g_trail73_short_buy_qty = 0  # 단기시장 기준 매수량
 g_hchg_code = ""    # 매도 대상 보유종목코드
 g_hchg_name = ""    # 매도 대상 보유종목명
 
-# 시장관리(MKTM) → 선택 시장레벨 공유 상태
+# 시장관리(MKTM) → 선택 시장흐름 공유 상태
 g_mktm_level = ""   # "1":시장상승, "2":시장하락, "3":시장패턴
 
 # 분할매수(SPB)/분할매도(SPS) 공유 상태
@@ -291,9 +291,14 @@ g_split_count = 0        # 분할 횟수
 g_split_base_qty = {}    # 분할매도: {계좌닉네임: 전체 매도수량} (계좌 확인 시점 보유수량 기준)
 g_split_blocked = set()  # 분할매수: 전체 매수금액이 매수가능금액을 초과해 제외된 계좌
 
-# 잔고정리(BCLN) 공유 상태
+# 현재가 정리(BCLN) 공유 상태
 g_bcln_list = []         # 기준계좌 보유종목 [(code, name, qty)] — 체크박스 화면 재표시용
 g_bcln_sel = {}          # 선택된 종목 {code: name}
+
+# 물타기 정리(RBCL) 공유 상태 — 물타기(직전 평균단가보다 낮은 가격 매수) 물량 반등 시 정리
+g_rbcl_list = {}         # 기준계좌 물타기 잔량 보유종목 {code: name}
+g_rbcl = {}              # 선택 종목 {'code': ..., 'name': ...}
+RBCL_COST_RATE = 1.002   # 매도단가 0 입력 시 평균단가 × 1.002 (세금·수수료 반영 실질 본전)
 
 # SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'chichipa', 'honeylong', 'worry106']  # 선택 가능 계좌 목록
 SELECTABLE_ACCOUNTS = ['phills2', 'phills75', 'yh480825', 'mamalong', 'phills13', 'phills15', 'worry106']  # 선택 가능 계좌 목록
@@ -339,7 +344,7 @@ def build_date_buttons1(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_date_buttons2(days=7):
     today = datetime.now().date()
@@ -374,7 +379,7 @@ def build_date_buttons2(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_date_buttons3(days=7):
     today = datetime.now().date()
@@ -426,6 +431,7 @@ def _show_holding_edit_keyboard(query, context_bot=None):
             h_name = c['prdt_name'][i]
             if int(c['hldg_qty'][i]) > 0:
                 edit_buttons.append(InlineKeyboardButton(f"{h_name}({h_code})", callback_data=f"menu,holding_edit_{h_code}"))
+        edit_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
         rows = [edit_buttons[i:i+2] for i in range(0, len(edit_buttons), 2)]
         query.edit_message_text(text="수정할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rows))
     except Exception as e:
@@ -450,6 +456,7 @@ def _show_interest_edit_keyboard(query):
             for r in rows
         ]
         ii_buttons.append(InlineKeyboardButton("신규 등록", callback_data="menu,interest_new"))
+        ii_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
         rows_kb = [ii_buttons[i:i+2] for i in range(0, len(ii_buttons), 2)]
         query.edit_message_text(text="변경할 관심종목을 선택하거나 신규 등록하세요:", reply_markup=InlineKeyboardMarkup(rows_kb))
     except Exception as e:
@@ -489,7 +496,7 @@ def build_date_buttons4(days=7):
         )
         cnt += 1
 
-    return InlineKeyboardMarkup(build_menu(buttons, 2))
+    return InlineKeyboardMarkup(build_menu(buttons, 2, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
     menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
@@ -515,13 +522,29 @@ PLAN_LABELS = {None: "일반", 'h': "홀딩", 'i': "투자", 'e': "정리"}
 
 def build_main_menu_markup():
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
-                                 "전체예약", "예약주문", "예약정정", "예약취소", 
-                                 "전체주문", "종목관리", "추적준비", "추적삭제", 
+                                 "예약관리", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "반등매도", "시장관리", "코스피", "코스닥",
-                                 "분할매수", "분할매도", "잔고정리"], callback_header="menu")
+                                 "시장관리", "잔고정리", "분할매수", "분할매도"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
+
+# 시장관리 하위 메뉴: 코스피 / 코스닥 / 시장흐름
+def build_market_menu_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("코스피", callback_data="menu,코스피"),
+         InlineKeyboardButton("코스닥", callback_data="menu,코스닥")],
+        [InlineKeyboardButton("시장흐름", callback_data="menu,시장흐름")],
+        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+    ])
+
+# 잔고정리 하위 메뉴: 현재가 정리 / 피보나치 정리 / 물타기 정리
+def build_balance_menu_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("현재가 정리", callback_data="menu,현재가정리")],
+        [InlineKeyboardButton("피보나치 정리", callback_data="menu,반등매도")],
+        [InlineKeyboardButton("물타기 정리", callback_data="menu,반등정리")],
+        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+    ])
 
 def get_command(update, context) :
     update.message.reply_text("메뉴를 선택하세요", reply_markup=build_main_menu_markup()) # reply text with markup
@@ -1153,7 +1176,7 @@ def get_previous_business_day(day):
     return result_one00[0][0]
 
 def show_bcln_keyboard(query):
-    """잔고정리 보유종목 체크박스 키보드 표시 (✅/⬜ 토글)"""
+    """현재가 정리 보유종목 체크박스 키보드 표시 (✅/⬜ 토글)"""
     buttons = [
         [InlineKeyboardButton(f"{'✅' if code in g_bcln_sel else '⬜'} {name} ({format(qty, ',d')}주)", callback_data=f"bcln_t:{code}")]
         for code, name, qty in g_bcln_list
@@ -1162,12 +1185,130 @@ def show_bcln_keyboard(query):
     buttons.append([InlineKeyboardButton(f"{'✅' if all_checked else '⬜'} 전체선택", callback_data="bcln_all")])
     buttons.append([
         InlineKeyboardButton("다음 ▶", callback_data="bcln_next"),
-        InlineKeyboardButton("취소", callback_data="menu,취소"),
+        InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리"),
     ])
     query.edit_message_text(
-        text=f"[잔고정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
+        text=f"[현재가 정리] 정리할 보유종목을 선택하세요 (선택 {len(g_bcln_sel)}건):",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+
+def rbcl_build_lots(acct_no, name):
+    """
+    물타기 정리용 체결 이력 → LIFO lot 재구성 (계좌별)
+    - 처음 매수 : 보유 0주에서 시작한 첫 매수 주문
+    - 물타기    : 보유 중 체결가 < 직전 평균단가 인 매수 주문 (그 외 추가매수는 불타기)
+    - 매도 차감 : LIFO (최근 매수 lot 부터), 보유 0주 → lot 초기화 / 평균단가는 매도 시 불변
+    반환: {'qty': 재구성 보유수량, 'avg': 재구성 평균단가, 'avgdown_qty': 물타기 잔량,
+           'avgdown_amt': 물타기 잔량 매수금액(처음 매수분 제외, 잔량 × 매수체결가), 'lots': [...], 'complete': 이력 정상 여부}
+    stockOrderComplete 는 종목코드가 없어 종목명으로 조회 — 호출부에서 재구성 수량 == 잔고 수량 일 때만 사용할 것
+    """
+    buy_types = ("현금매수", "매수정정*")
+    sell_types = ("현금매도", "매도정정*")
+    c_lot = get_conn()
+    with c_lot.cursor() as cur_lot:
+        cur_lot.execute("""
+            SELECT order_type, COALESCE(NULLIF(total_complete_qty, ''), '0')::int,
+                   COALESCE(NULLIF(total_complete_amt, ''), '0')::bigint
+            FROM public."stockOrderComplete_stock_order_complete"
+            WHERE acct_no = %s AND name = %s
+              AND order_type = ANY(%s)
+              AND COALESCE(NULLIF(total_complete_qty, ''), '0')::int > 0
+            ORDER BY order_dt, order_tmd, order_no::bigint
+        """, (int(acct_no), name, list(buy_types + sell_types)))
+        fills = cur_lot.fetchall()
+
+    lots, qty, cost, complete = [], 0, 0.0, bool(fills)
+    for otype, cq, camt in fills:
+        if otype in buy_types:
+            price = camt / cq
+            if qty == 0:
+                lots, cost, kind = [], 0.0, "INIT"
+            else:
+                kind = "AVGDOWN" if price < cost / qty else "PYRAMID"
+            lots.append({"kind": kind, "qty": cq, "price": round(price)})
+            qty += cq
+            cost += camt
+        else:
+            if cq > qty:            # 이력 시작 전 보유분 매도 → 이력 불완전
+                complete = False
+                lots, qty, cost = [], 0, 0.0
+                continue
+            avg = cost / qty
+            remain = cq
+            while remain > 0 and lots:
+                take = min(remain, lots[-1]["qty"])
+                lots[-1]["qty"] -= take
+                remain -= take
+                if lots[-1]["qty"] == 0:
+                    lots.pop()
+            qty -= cq
+            cost = avg * qty
+            if qty == 0:
+                lots, cost = [], 0.0
+    return {
+        "qty": qty,
+        "avg": cost / qty if qty else 0,
+        "avgdown_qty": sum(l["qty"] for l in lots if l["kind"] == "AVGDOWN"),
+        "init_qty": sum(l["qty"] for l in lots if l["kind"] == "INIT"),
+        "init_amt": int(sum(l["qty"] * l["price"] for l in lots if l["kind"] == "INIT")),   # 최초 매수체결 금액(잔량 × 체결가)
+        "lots": lots,
+        "complete": complete,
+    }
+
+def rbcl_avgdown_amt(pchs_amt, lot):
+    """물타기금액 = 현재 매입총금액(잔고 pchs_amt) - 최초 매수체결 금액(처음 매수 lot)"""
+    return max(0, int(pchs_amt) - int(lot["init_amt"]))
+
+def rbcl_plan(acct_no, code, name, bal_df, in_price=0, in_amt=0):
+    """
+    계좌별 물타기 정리 주문 계획
+    in_price 0 → 평균단가 × RBCL_COST_RATE 호가 올림
+    in_amt   0 → 물타기금액(현재 매입총금액 - 최초 매수체결 금액) / in_amt > 0 → 입력 매도금액
+    매도수량 = 매도금액 ÷ 매도단가 (주 단위 내림)
+    최종 수량 = min(요청 수량, 주문가능수량)
+    반환: dict(ok, reason, hldg, avg, psbl, avgdown, price, qty)
+    """
+    row = None
+    if bal_df is not None and not bal_df.empty:
+        hit = bal_df[(bal_df['pdno'] == code) & (bal_df['hldg_qty'].astype(int) > 0)]
+        if not hit.empty:
+            row = hit.iloc[0]
+    if row is None:
+        return {"ok": False, "reason": "보유수량 없음"}
+    hldg = int(row['hldg_qty'])
+    psbl = int(row['ord_psbl_qty'])
+    avg = float(row['pchs_avg_pric'])
+    pchs_amt = int(float(row['pchs_amt'])) if 'pchs_amt' in row.index and str(row['pchs_amt']).strip() else int(avg * hldg)
+    lot = rbcl_build_lots(acct_no, name)
+    plan = {"hldg": hldg, "avg": avg, "psbl": psbl, "pchs_amt": pchs_amt, "avgdown": lot["avgdown_qty"],
+            "init_qty": lot["init_qty"], "init_amt": lot["init_amt"], "avgdown_amt": rbcl_avgdown_amt(pchs_amt, lot),
+            "lot_qty": lot["qty"], "lot_match": lot["qty"] == hldg}
+
+    if in_price > 0:
+        price = round_to_valid_price(in_price, get_tick_size(in_price))
+    else:
+        base = avg * RBCL_COST_RATE
+        price = int(round_to_valid_price(base, get_tick_size(base), 'up'))
+    plan["price"] = int(price)
+
+    if in_amt > 0:
+        sell_amt = in_amt
+    else:
+        if not plan["lot_match"]:
+            return {**plan, "ok": False,
+                    "reason": f"체결이력 불일치(이력 {lot['qty']:,}주 ≠ 잔고 {hldg:,}주) → 물타기금액 산정 불가"}
+        sell_amt = plan["avgdown_amt"]
+        if sell_amt <= 0:
+            return {**plan, "ok": False, "reason": "물타기금액 없음"}
+    plan["sell_amt"] = sell_amt
+    want = int(sell_amt // plan["price"])
+    if want <= 0:
+        return {**plan, "ok": False, "reason": f"매도금액({sell_amt:,}원) < 매도단가({plan['price']:,}원)"}
+    qty = min(want, psbl)
+    plan.update({"want": want, "qty": qty})
+    if qty <= 0:
+        return {**plan, "ok": False, "reason": f"주문가능수량 없음(요청 {want:,}주)"}
+    return {**plan, "ok": True, "reason": ""}
 
 def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=None, bot=None):
     """계좌 다중 선택 인라인 키보드를 표시한다. ✅/⬜ 토글 방식."""
@@ -1205,12 +1346,34 @@ def show_account_selection_keyboard(query, menu_num, send_new=False, chat_id=Non
     else:
         query.edit_message_text(text="처리할 계좌를 선택하세요 (복수 선택 가능):", reply_markup=InlineKeyboardMarkup(buttons))
 
+def get_market_meta(code):
+    """현재가 조회로 시장구분(market)/규모(size)/업종(industry)/시가총액(mktcap) 산출
+    (simul_server.py 의 _get_market_meta 와 동일 기준). 실패 시 예외 발생."""
+    ac_mm = account(arguments[1])
+    out = inquire_price(ac_mm['access_token'], ac_mm['app_key'], ac_mm['app_secret'], code)
+    market = out.get('rprs_mrkt_kor_name', '') or ''
+    industry = out.get('bstp_kor_isnm', '') or ''
+    try:
+        mktcap = int(str(out.get('hts_avls', '0')).replace(',', ''))
+    except Exception:
+        mktcap = 0
+    if   mktcap >= 10000: size = '대형주'
+    elif mktcap >= 3000:  size = '중형주'
+    else:                 size = '소형주'
+    return {'market': market, 'size': size, 'industry': industry, 'mktcap': str(mktcap)}
+
 def _do_interest_register(chat_id, context, pending):
     try:
         c_reg = get_conn()
         now = datetime.now()
         interest_day = now.strftime('%Y%m%d')
         interest_dtm = now.strftime('%H%M%S')
+        # 시장구분/규모/업종/시가총액 — 조회 실패 시 NULL 로 저장하고 등록은 계속 진행
+        try:
+            meta = get_market_meta(pending['code'])
+        except Exception as e_meta:
+            print(f"[관심종목] {pending['code']} 시장정보 조회 오류: {e_meta}")
+            meta = {'market': None, 'size': None, 'industry': None, 'mktcap': None}
         with c_reg.cursor() as cur_reg:
             cur_reg.execute("""
                 UPDATE public."interestItem_interest_item"
@@ -1221,24 +1384,31 @@ def _do_interest_register(chat_id, context, pending):
                     support_price    = %s,
                     trend_high_price = %s,
                     trend_low_price  = %s,
+                    market           = %s,
+                    size             = %s,
+                    industry         = %s,
+                    mktcap           = %s,
                     last_chg_date    = %s
                 WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             """, (pending['name'],
                   pending['through_price'], pending['leave_price'],
                   pending['d20_high'], pending['d20_low'],
                   pending['y1_high'], pending['y1_low'],
+                  meta['market'], meta['size'], meta['industry'], meta['mktcap'],
                   now,
                   pending['acct_reg'], pending['code']))
             if cur_reg.rowcount == 0:
                 cur_reg.execute("""
                     INSERT INTO public."interestItem_interest_item"
                         (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                         trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                         trend_high_price, trend_low_price, market, size, industry, mktcap,
+                         interest_day, interest_dtm, proc_yn, last_chg_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
                 """, (pending['acct_reg'], pending['code'], pending['name'],
                       pending['through_price'], pending['leave_price'],
                       pending['d20_high'], pending['d20_low'],
                       pending['y1_high'], pending['y1_low'],
+                      meta['market'], meta['size'], meta['industry'], meta['mktcap'],
                       interest_day, interest_dtm, now))
         c_reg.commit()
         context.bot.send_message(
@@ -1398,7 +1568,7 @@ def callback_get(update, context) :
             InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
             InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
             InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
-            InlineKeyboardButton("취소",          callback_data="menu,취소"),
+            InlineKeyboardButton("◀ 뒤로가기",     callback_data="menu,main_menu"),
         ]
         query.edit_message_text(
             text="종목관리 메뉴를 선택하세요:",
@@ -1564,7 +1734,7 @@ def callback_get(update, context) :
                                 InlineKeyboardButton(btn_label, callback_data=f"menu,holding_{h_code}")
                             )
                     if hold_buttons:
-                        hold_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                        hold_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
                         # 한 행에 2개씩
                         rows = [hold_buttons[i:i+2] for i in range(0, len(hold_buttons), 2)]
                         context.bot.send_message(
@@ -1641,7 +1811,7 @@ def callback_get(update, context) :
                     InlineKeyboardButton(f"{r[0]}({r[1]})", callback_data=f"interest_del_{r[1]}")
                     for r in rows
                 ]
-                del_buttons.append(InlineKeyboardButton("취소", callback_data="취소"))
+                del_buttons.append(InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리"))
                 del_rows = [del_buttons[i:i+2] for i in range(0, len(del_buttons), 2)]
                 context.bot.send_message(
                     text="삭제할 관심 종목을 선택하세요:",
@@ -1932,6 +2102,10 @@ def callback_get(update, context) :
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "TRMAR")
 
+    elif command == "tm_back":
+        # 트레이딩 시장 종목 선택 → 다중계좌 선택으로 복귀 (선택된 계좌 유지)
+        show_account_selection_keyboard(query, "TRMAR")
+
     elif command.startswith("tm_sell:"):
         # 트레이딩 시장 — 종목 버튼 선택 시 현재가 기준 매도수량으로 즉시 매도
         parts = command.split(":")
@@ -2032,7 +2206,9 @@ def callback_get(update, context) :
             return
         query.edit_message_text(
             text="[보유종목 교체] 변경할 보유종목을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup(build_menu(hc0_buttons, 1))
+            reply_markup=InlineKeyboardMarkup(build_menu(
+                hc0_buttons, 1,
+                footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,종목관리")]))
         )
 
     elif command.startswith("hchg_pick:"):
@@ -2078,6 +2254,7 @@ def callback_get(update, context) :
         )
 
     elif command == "전체주문":
+        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,주문취소" if "주문취소" in data_selected else "menu,주문정정")]])
 
         ac = account(arguments[1])
         acct_no = ac['acct_no']
@@ -2128,31 +2305,35 @@ def callback_get(update, context) :
                                 text=final_message,
                                 parse_mode='HTML',
                                 chat_id=query.message.chat_id,
-                                message_id=query.message.message_id
+                                message_id=query.message.message_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                         else:
                             # 두 번째 묶음부터는 새로운 메시지로 전송
                             context.bot.send_message(
                                 text=final_message,
                                 parse_mode='HTML',
-                                chat_id=query.message.chat_id
+                                chat_id=query.message.chat_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                 else:
                     context.bot.edit_message_text(
                         text="일별주문체결 조회 대상이 존재하지 않습니다.",
                         chat_id=query.message.chat_id,
-                        message_id=query.message.message_id
+                        message_id=query.message.message_id,
+                        reply_markup=back_markup
                     )                                
 
             else:
                 context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id)
+                                            chat_id=query.message.chat_id, reply_markup=back_markup)
 
         except Exception as e:
             print('일별주문체결 조회 오류.', e)
             context.bot.edit_message_text(text="[일별주문체결 조회] 오류 : "+str(e),
                                             chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            message_id=query.message.message_id,
+                                            reply_markup=back_markup)
     
     elif command == "매수주문":
         g_selected_accounts.clear()
@@ -2257,7 +2438,7 @@ def callback_get(update, context) :
             if sl_buttons:
                 query.edit_message_text(
                     text="매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(sl_buttons, 1))
+                    reply_markup=InlineKeyboardMarkup(build_menu(sl_buttons, 1, footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
                 )
             else:
                 query.edit_message_text(text="보유종목이 없습니다.")
@@ -2286,7 +2467,11 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문정정", callback_data="corr_type_01")
         query.edit_message_text(
             text="정정할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문정정,전체주문")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
         )
 
     elif command.startswith("corr_type_"):
@@ -2363,7 +2548,11 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문취소", callback_data="cncl_type_01")
         query.edit_message_text(
             text="취소할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문취소,전체주문")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
         )
 
     elif command.startswith("cncl_type_"):
@@ -2428,6 +2617,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "52N")
     
     elif command == "전체예약":
+        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약주문")]])
     
         ac = account(arguments[1])
         acct_no = ac['acct_no']
@@ -2497,38 +2687,57 @@ def callback_get(update, context) :
                                 text=final_message,
                                 parse_mode='HTML',
                                 chat_id=query.message.chat_id,
-                                message_id=query.message.message_id
+                                message_id=query.message.message_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                         else:
                             # 두 번째 묶음부터는 새로운 메시지로 전송
                             context.bot.send_message(
                                 text=final_message,
                                 parse_mode='HTML',
-                                chat_id=query.message.chat_id
+                                chat_id=query.message.chat_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                 else:
                     context.bot.edit_message_text(
                         text="전체예약 조회 대상이 존재하지 않습니다.",
                         chat_id=query.message.chat_id,
-                        message_id=query.message.message_id
+                        message_id=query.message.message_id,
+                        reply_markup=back_markup
                     )                
 
             else:
                 context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id)
+                                            chat_id=query.message.chat_id, reply_markup=back_markup)
 
         except Exception as e:
             print('전체예약 조회 오류.', e)
             context.bot.edit_message_text(text="[전체예약 조회] 오류 : "+str(e),
                                             chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            message_id=query.message.message_id,
+                                            reply_markup=back_markup)
+
+    elif command == "예약관리":
+        query.edit_message_text(
+            text="[예약관리] 메뉴를 선택하세요",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("예약주문", callback_data="menu,예약주문"),
+                 InlineKeyboardButton("예약정정", callback_data="menu,예약정정"),
+                 InlineKeyboardButton("예약취소", callback_data="menu,예약취소")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
+        )
 
     elif command == "예약주문":
         btn_buy  = InlineKeyboardButton("매수예약", callback_data="rsv_type_buy")
         btn_sell = InlineKeyboardButton("매도예약", callback_data="rsv_type_sell")
         query.edit_message_text(
             text="예약 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체예약", callback_data="menu,전체예약")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")],
+            ])
         )
 
     elif command == "rsv_type_buy":
@@ -2584,7 +2793,7 @@ def callback_get(update, context) :
         btn_sell_rc = InlineKeyboardButton("매도예약정정", callback_data="rsv_corr_type_01")
         query.edit_message_text(
             text="정정할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")]])
         )
 
     elif command.startswith("rsv_corr_type_"):
@@ -2661,7 +2870,7 @@ def callback_get(update, context) :
         btn_sell_cn = InlineKeyboardButton("매도예약취소", callback_data="rsv_cncl_type_01")
         query.edit_message_text(
             text="취소할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")]])
         )
 
     elif command.startswith("rsv_cncl_type_"):
@@ -2733,7 +2942,7 @@ def callback_get(update, context) :
 
     elif command == "추적등록":
         button_list = build_button(["매수자동등록", "매수주문등록", "주문제외등록"], data_selected)
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
+        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list), footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
         context.bot.edit_message_text(text="추적등록 방식을 선택해 주세요.",
                                         chat_id=update.callback_query.message.chat_id,
@@ -3076,12 +3285,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_change_{code}")
                     for code, name in tc_rows
                 ]
+                tc_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]
                 query.edit_message_text(
                     text="변경할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(tc_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(tc_buttons, 2, footer_buttons=tc_back))
                 )
             else:
-                query.edit_message_text(text="추적 중인 종목이 없습니다.")
+                query.edit_message_text(
+                    text="추적 중인 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적변경] 오류: {str(e)}")
 
@@ -3102,6 +3315,8 @@ def callback_get(update, context) :
             "HCHG": "menu,보유종목_교체",
             "SPB": "menu,분할매수", "SPS": "menu,분할매도",
             "BCLN": "bcln_back",
+            "MKTM": "menu,시장관리",
+            "RBCL": "menu,반등정리",
         }.get(back_num)
         if back_parent:
             query.data = back_parent
@@ -3628,7 +3843,9 @@ def callback_get(update, context) :
                 context.bot.send_message(
                     chat_id=query.message.chat_id,
                     text=f"-{t_nick_label}- [트레이딩 시장] 현금전환 필요금액: {format(need_cash_tm, ',d')}원\n매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(tm_buttons, 1))
+                    reply_markup=InlineKeyboardMarkup(build_menu(
+                        tm_buttons, 1,
+                        footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="tm_back")]))
                 )
 
             threads_tm = []
@@ -3724,7 +3941,7 @@ def callback_get(update, context) :
                 parse_mode='HTML'
             )
         elif menu_num == "MKTM":
-            # 시장관리 — 시장레벨(상승/하락/패턴) 선택 버튼 표시
+            # 시장관리 — 시장흐름(상승/하락/패턴) 선택 버튼 표시
             menuNum = "0"
             mktm_buttons = [
                 InlineKeyboardButton("시장상승", callback_data="mktm_lv:1"),
@@ -3732,18 +3949,55 @@ def callback_get(update, context) :
                 InlineKeyboardButton("시장패턴", callback_data="mktm_lv:3"),
             ]
             query.edit_message_text(
-                text=f"[선택계좌: {selected_str}]\n시장레벨을 선택하세요:",
-                reply_markup=InlineKeyboardMarkup(build_menu(mktm_buttons, 1))
+                text=f"[선택계좌: {selected_str}]\n시장흐름을 선택하세요:",
+                reply_markup=InlineKeyboardMarkup(build_menu(
+                    mktm_buttons, 1,
+                    footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="mktm_back")]))
             )
         elif menu_num == "BCLN":
-            # 잔고정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
+            # 현재가 정리 — 선택 종목 확인 후 매도비율 입력 프롬프트
             menuNum = "BCLN"
             bc_names = ", ".join(g_bcln_sel.values())
             query.edit_message_text(
                 text=(f"[선택계좌: {selected_str}]\n"
-                      f"[잔고정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
+                      f"[현재가 정리] 대상종목({len(g_bcln_sel)}건): {bc_names}\n"
                       f"매도비율(1~100, 전량:100)을 입력하세요.\n"
                       f"(종목별 기존 미체결 매도주문 취소 후 현재가로 매도합니다)")
+            )
+        elif menu_num == "RBCL":
+            # 물타기 정리 — 계좌별 평단가·물타기금액·주문가능수량 미리보기 후 매도단가, 매도금액 입력 프롬프트
+            menuNum = "RBCL"
+            rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
+            if not rb_code:
+                menuNum = "0"
+                query.edit_message_text(text="[물타기 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+                return
+            query.edit_message_text(text=f"[물타기 정리] {rb_name}({rb_code}) 계좌별 물타기금액 조회 중...")
+            rb_lines = []
+            for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+                label = nick if nick else arguments[1]
+                try:
+                    ac_rp = account(nick) if nick else account(arguments[1])
+                    bal_rp = stock_balance(ac_rp['access_token'], ac_rp['app_key'], ac_rp['app_secret'], ac_rp['acct_no'], "")
+                    p = rbcl_plan(ac_rp['acct_no'], rb_code, rb_name, bal_rp)
+                    if "hldg" not in p:
+                        rb_lines.append(f"  -{label}- {p['reason']}")
+                    else:
+                        avgdown_txt = (f"매입 {format(p['pchs_amt'], ',d')}원 - 최초 {format(p['init_amt'], ',d')}원"
+                                       f" = 물타기금액 {format(p['avgdown_amt'], ',d')}원" if p['lot_match']
+                                       else f"이력불일치(이력 {format(p['lot_qty'], ',d')}주)")
+                        rb_lines.append(
+                            f"  -{label}- 매수단가 {format(round(p['avg']), ',d')}원(0:{format(p['price'], ',d')}원) → {avgdown_txt}")
+                except Exception as e:
+                    rb_lines.append(f"  -{label}- 조회 오류: {html.escape(str(e))}")
+                time.sleep(0.2)
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=(f"[선택계좌: {selected_str}]\n"
+                      f"[물타기 정리] {html.escape(rb_name)}(<code>{rb_code}</code>)\n" + "\n".join(rb_lines) + "\n"
+                      f"매도단가(0:매수단가), 매도금액(0:물타기금액)을 입력하세요.\n"
+                      f"(종목별 기존 미체결 매도주문 취소 후 계좌별 주문가능수량 이내로 매도)"),
+                parse_mode='HTML'
             )
         elif menu_num in ("SPB", "SPS"):
             # 분할매수/분할매도 — 차수 선택 버튼 표시
@@ -4276,7 +4530,7 @@ def callback_get(update, context) :
 
     elif command == "추적상태":
         button_list = build_button(["재개", "멈춤"], data_selected)
-        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list)))
+        show_markup = InlineKeyboardMarkup(build_menu(button_list, len(button_list), footer_buttons=[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]))
 
         context.bot.edit_message_text(text="상태를 선택해 주세요.",
                                         chat_id=update.callback_query.message.chat_id,
@@ -4299,12 +4553,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_resume_{code}")
                     for code, name in resume_rows
                 ]
+                rs_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]
                 query.edit_message_text(
                     text="재개할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(rs_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(rs_buttons, 2, footer_buttons=rs_back))
                 )
             else:
-                query.edit_message_text(text="재개할 종목이 없습니다.")
+                query.edit_message_text(
+                    text="재개할 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적재개] 오류: {str(e)}")
 
@@ -4324,12 +4582,16 @@ def callback_get(update, context) :
                     InlineKeyboardButton(name, callback_data=f"trail_stop_{code}")
                     for code, name in stop_rows
                 ]
+                st_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]
                 query.edit_message_text(
                     text="멈출 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(st_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(st_buttons, 2, footer_buttons=st_back))
                 )
             else:
-                query.edit_message_text(text="멈출 종목이 없습니다.")
+                query.edit_message_text(
+                    text="멈출 종목이 없습니다.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,추적상태")]])
+                )
         except Exception as e:
             query.edit_message_text(text=f"[추적멈춤] 오류: {str(e)}")
 
@@ -4820,8 +5082,8 @@ def callback_get(update, context) :
             query.edit_message_text(text=f"[{g_kk_name} 변경] 오류: {str(e)}")
 
     elif command == "kk_back":
-        # 코스피/코스닥 항목 선택 → 메인 메뉴로 복귀
-        query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
+        # 코스피/코스닥 항목 선택 → 시장관리 하위 메뉴로 복귀
+        query.edit_message_text(text="[시장관리] 메뉴를 선택하세요", reply_markup=build_market_menu_markup())
 
     elif command.startswith("kk_field_"):
         global g_kk_field
@@ -4844,13 +5106,14 @@ def callback_get(update, context) :
                 for i in range(len(c_fb.index))
                 if int(c_fb['hldg_qty'][i]) > 0
             ]
+            fb_back = [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리")]
             if fb_buttons:
                 query.edit_message_text(
                     text="피보나치 매도할 종목을 선택하세요:",
-                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2))
+                    reply_markup=InlineKeyboardMarkup(build_menu(fb_buttons, 2, footer_buttons=fb_back))
                 )
             else:
-                query.edit_message_text(text="보유종목이 없습니다.")
+                query.edit_message_text(text="보유종목이 없습니다.", reply_markup=InlineKeyboardMarkup([fb_back]))
         except Exception as e:
             query.edit_message_text(text=f"[반등매도] 오류: {str(e)}")
 
@@ -5056,12 +5319,18 @@ def callback_get(update, context) :
             t.join()
 
     elif command == "잔고정리":
+        query.edit_message_text(text="[잔고정리] 메뉴를 선택하세요", reply_markup=build_balance_menu_markup())
+
+    elif command == "main_menu":
+        query.edit_message_text(text="메뉴를 선택하세요", reply_markup=build_main_menu_markup())
+
+    elif command == "현재가정리":
         # 기준계좌 보유종목을 체크박스 목록으로 표시
         try:
             ac_bc = account(arguments[1])
             c_bc = stock_balance(ac_bc['access_token'], ac_bc['app_key'], ac_bc['app_secret'], ac_bc['acct_no'], "")
         except Exception as e:
-            query.edit_message_text(text=f"[잔고정리] 잔고 조회 오류: {str(e)}")
+            query.edit_message_text(text=f"[현재가 정리] 잔고 조회 오류: {str(e)}")
             return
         g_bcln_list.clear()
         g_bcln_sel.clear()
@@ -5070,7 +5339,7 @@ def callback_get(update, context) :
             if bc_qty > 0:
                 g_bcln_list.append((c_bc['pdno'][j], c_bc['prdt_name'][j], bc_qty))
         if not g_bcln_list:
-            query.edit_message_text(text="[잔고정리] 보유종목이 없습니다.")
+            query.edit_message_text(text="[현재가 정리] 보유종목이 없습니다.")
             return
         show_bcln_keyboard(query)
 
@@ -5094,7 +5363,7 @@ def callback_get(update, context) :
     elif command == "bcln_back":
         # 계좌 선택 → 종목 체크박스 화면으로 복귀 (선택 상태 유지)
         if not g_bcln_list:
-            query.edit_message_text(text="[잔고정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            query.edit_message_text(text="[현재가 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
             return
         show_bcln_keyboard(query)
 
@@ -5107,6 +5376,55 @@ def callback_get(update, context) :
             return
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "BCLN")
+
+    elif command == "반등정리":
+        # 기준계좌 보유종목 중 물타기(직전 평균단가보다 낮은 가격 매수) 잔량이 있는 종목 목록
+        try:
+            ac_rb = account(arguments[1])
+            c_rb = stock_balance(ac_rb['access_token'], ac_rb['app_key'], ac_rb['app_secret'], ac_rb['acct_no'], "")
+        except Exception as e:
+            query.edit_message_text(text=f"[물타기 정리] 잔고 조회 오류: {str(e)}")
+            return
+        g_rbcl_list.clear()
+        g_rbcl.clear()
+        rb_buttons = []
+        for j, _ in enumerate(c_rb.index):
+            rb_qty = int(c_rb['hldg_qty'][j])
+            if rb_qty <= 0:
+                continue
+            rb_code, rb_name = c_rb['pdno'][j], c_rb['prdt_name'][j]
+            try:
+                rb_lot = rbcl_build_lots(ac_rb['acct_no'], rb_name)
+            except Exception as e:
+                print(f"[물타기 정리] {rb_name} 체결이력 조회 오류: {e}")
+                continue
+            # 체결이력 재구성 수량이 잔고와 일치하고 물타기 잔량이 있는 종목만
+            rb_pchs = c_rb['pchs_amt'][j] if 'pchs_amt' in c_rb.columns else ''
+            rb_pchs = int(float(rb_pchs)) if str(rb_pchs).strip() else int(float(c_rb['pchs_avg_pric'][j]) * rb_qty)
+            rb_amt = rbcl_avgdown_amt(rb_pchs, rb_lot)
+            if rb_lot['qty'] != rb_qty or rb_lot['avgdown_qty'] <= 0 or rb_amt <= 0:
+                continue
+            g_rbcl_list[rb_code] = rb_name
+            rb_buttons.append(InlineKeyboardButton(
+                f"{rb_name}({rb_code}) 물타기금액 {format(rb_amt, ',d')}원",
+                callback_data=f"rbcl_s:{rb_code}"
+            ))
+        if not rb_buttons:
+            query.edit_message_text(text="[물타기 정리] 직전 평균단가보다 낮은 가격에 매수체결된 보유종목이 없습니다.")
+            return
+        rb_rows = build_menu(rb_buttons, 1)
+        rb_rows.append([InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,잔고정리")])
+        query.edit_message_text(text="[물타기 정리] 물타기 정리할 종목을 선택하세요:", reply_markup=InlineKeyboardMarkup(rb_rows))
+
+    elif command.startswith("rbcl_s:"):
+        rb_code = command.split(":", 1)[1]
+        if rb_code not in g_rbcl_list:
+            query.edit_message_text(text="[물타기 정리] 세션 정보가 없습니다. 메뉴를 다시 시작해 주세요.")
+            return
+        g_rbcl.clear()
+        g_rbcl.update({"code": rb_code, "name": g_rbcl_list[rb_code]})
+        g_selected_accounts.clear()
+        show_account_selection_keyboard(query, "RBCL")
 
     elif command == "분할매수":
         menuNum = "SPB"
@@ -5218,11 +5536,19 @@ def callback_get(update, context) :
             t.join()
 
     elif command == "시장관리":
+        query.edit_message_text(text="[시장관리] 메뉴를 선택하세요", reply_markup=build_market_menu_markup())
+
+    elif command == "시장흐름":
         g_selected_accounts.clear()
         show_account_selection_keyboard(query, "MKTM")
 
+    elif command == "mktm_back":
+        # 시장흐름 선택 → 다중계좌 선택으로 복귀 (선택된 계좌 유지)
+        menuNum = "0"
+        show_account_selection_keyboard(query, "MKTM")
+
     elif command.startswith("mktm_lv:"):
-        # 시장관리 — 시장레벨 버튼 선택 → 매매금액 입력 프롬프트
+        # 시장관리 — 시장흐름 버튼 선택 → 매매금액 입력 프롬프트
         mktm_level = command.split(":", 1)[1]
         level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
         g_mktm_level = mktm_level
@@ -6629,16 +6955,82 @@ def echo(update, context):
             t.join()
         return
 
+    if menuNum == 'RBCL':
+        # 입력: 매도단가(0:평단가), 매도금액(0:물타기금액)
+        rb_code, rb_name = g_rbcl.get("code"), g_rbcl.get("name")
+        if not rb_code:
+            initMenuNum()
+            context.bot.send_message(chat_id=user_id, text="[물타기 정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            return
+        rb_parts = [p.strip().replace(",", "") for p in user_text.replace("，", ",").split(",")]
+        if len(rb_parts) != 2 or not all(p.isdecimal() for p in rb_parts):
+            context.bot.send_message(chat_id=user_id, text="[물타기 정리] 매도단가, 매도금액을 숫자 2개로 입력하세요.")
+            return  # menuNum 유지 → 재입력 가능
+        rb_in_price, rb_in_amt = int(rb_parts[0]), int(rb_parts[1])
+        initMenuNum()
+
+        def process_nick_rbcl(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
+            t_label = nick if nick else arguments[1]
+            tag = f"-{t_label}- [{html.escape(rb_name)}(<code>{rb_code}</code>)]"
+            try:
+                # 1) 해당 종목 기존 미체결 매도주문 취소 → 실패 시 중복 매도 방지를 위해 제외
+                cncl_res = order_cancel_proc(t_access_token, t_app_key, t_app_secret, str(t_acct_no), rb_code, '01')
+                if cncl_res != 'success':
+                    cncl_msg = " / ".join(cncl_res) if isinstance(cncl_res, list) else str(cncl_res)
+                    safe_send(context.bot, user_id,
+                              f"{tag} 기존 매도주문 취소 실패 → 물타기 정리 제외 ({html.escape(cncl_msg)})", parse_mode='HTML')
+                    return
+                time.sleep(0.5)  # 취소분이 주문가능수량에 반영되도록 대기
+
+                # 2) 취소 반영된 잔고로 주문 계획 산정
+                bal = stock_balance(t_access_token, t_app_key, t_app_secret, str(t_acct_no), "")
+                p = rbcl_plan(t_acct_no, rb_code, rb_name, bal, rb_in_price, rb_in_amt)
+                if not p["ok"]:
+                    safe_send(context.bot, user_id, f"{tag} 물타기 정리 제외: {html.escape(p['reason'])}", parse_mode='HTML')
+                    return
+                limit_note = (f" (요청 {format(p['want'], ',d')}주 → 주문가능수량 제한)" if p['qty'] < p['want'] else "")
+                c_rb = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
+                                  rb_code, "00", str(p['qty']), str(p['price']))
+                if c_rb is not None and c_rb['ODNO'] != "":
+                    safe_send(context.bot, user_id,
+                              f"{tag} 물타기 정리 매도주문 완료 | {format(p['price'], ',d')}원"
+                              f"(평단 {format(round(p['avg']), ',d')}원) | {format(p['qty'], ',d')}/{format(p['hldg'], ',d')}주"
+                              f"{limit_note} | {format(p['price'] * p['qty'], ',d')}원 | <code>{str(int(c_rb['ODNO']))}</code>",
+                              parse_mode='HTML')
+                else:
+                    safe_send(context.bot, user_id, f"{tag} 물타기 정리 매도주문 실패", parse_mode='HTML')
+            except Exception as e:
+                safe_send(context.bot, user_id, f"{tag} 물타기 정리 오류: {html.escape(str(e))}", parse_mode='HTML')
+
+        safe_send(context.bot, user_id,
+                  f"[물타기 정리] {rb_name} 매도단가 {'평단가' if rb_in_price == 0 else format(rb_in_price, ',d') + '원'}, "
+                  f"매도금액 {'물타기금액' if rb_in_amt == 0 else format(rb_in_amt, ',d') + '원'} 처리 중...")
+        rb_threads = []
+        for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
+            try:
+                ac_rbx = account(nick) if nick else account(arguments[1])
+            except Exception as e:
+                safe_send(context.bot, user_id, f"-{nick or arguments[1]}- 계좌조회 오류: {str(e)}")
+                continue
+            t = threading.Thread(target=process_nick_rbcl,
+                                 args=(nick, ac_rbx['acct_no'], ac_rbx['access_token'], ac_rbx['app_key'], ac_rbx['app_secret']))
+            rb_threads.append(t)
+            t.start()
+            time.sleep(0.5)
+        for t in rb_threads:
+            t.join()
+        return
+
     if menuNum == 'BCLN':
         # 입력: 매도비율(1~100)
         bc_items = dict(g_bcln_sel)
         if not bc_items:
             initMenuNum()
-            context.bot.send_message(chat_id=user_id, text="[잔고정리] 선택된 종목이 없습니다. 다시 시도하세요.")
+            context.bot.send_message(chat_id=user_id, text="[현재가 정리] 선택된 종목이 없습니다. 다시 시도하세요.")
             return
         bc_txt = user_text.strip()
         if not bc_txt.isdecimal() or not (1 <= int(bc_txt) <= 100):
-            context.bot.send_message(chat_id=user_id, text="[잔고정리] 매도비율은 1~100 숫자로 입력하세요.")
+            context.bot.send_message(chat_id=user_id, text="[현재가 정리] 매도비율은 1~100 숫자로 입력하세요.")
             return  # menuNum 유지 → 재입력 가능
         bc_ratio = int(bc_txt)
         initMenuNum()
@@ -6705,10 +7097,10 @@ def echo(update, context):
             except Exception as e:
                 lines.append(f"처리 중단 오류: {html.escape(str(e))}")
             finally:
-                header = (f"-{t_label}- [잔고정리 {bc_ratio}%] 완료 {ok_cnt} / 실패 {fail_cnt} / 제외 {skip_cnt}")
+                header = (f"-{t_label}- [현재가 정리 {bc_ratio}%] 완료 {ok_cnt} / 실패 {fail_cnt} / 제외 {skip_cnt}")
                 safe_send(context.bot, user_id, "\n".join([header] + lines), parse_mode='HTML')
 
-        safe_send(context.bot, user_id, f"[잔고정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
+        safe_send(context.bot, user_id, f"[현재가 정리] {len(bc_items)}개 종목 {bc_ratio}% 매도 처리 중...")
         bc_threads = []
         for nick in (g_selected_accounts[:] if g_selected_accounts else [None]):
             try:
@@ -6731,7 +7123,7 @@ def echo(update, context):
         level_label = {"1": "시장상승", "2": "시장하락", "3": "시장패턴"}.get(mktm_level, mktm_level)
         if mktm_level not in ("1", "2", "3"):
             initMenuNum()
-            context.bot.send_message(chat_id=user_id, text="선택된 시장레벨이 없습니다. 다시 시도하세요.")
+            context.bot.send_message(chat_id=user_id, text="선택된 시장흐름이 없습니다. 다시 시도하세요.")
             return
 
         mktm_text = user_text.strip().replace(',', '')

@@ -1162,7 +1162,11 @@ def get_kis_1min_from_datetime(
                                 _d_price = int(exit_price) if _d_is_exit else int(stop_price)
                                 sell_trigger = True
                                 sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
-                                sell_reason = f"{_d_label}({_d_price:,})원 10분봉 종가 이탈 매도 (매도가:{sell_price:,})"
+                                _d_rule = "최종이탈가 종가 이탈 무조건 매도" if _d_is_exit else f"이탈가 > 기준봉 저가({tenmin_state['base_low']:,}원) 하드스탑"
+                                sell_reason = (
+                                    f"[조건D] {_d_label}({_d_price:,})원 10분봉 종가({tenmin_close:,}원) 이탈 - {_d_rule}"
+                                    f" (매도가:{sell_price:,}원 = max(종가, 안전마진 {safety_margin:,}원))"
+                                )
 
                         # 조건 A: 기준봉 저가를 종가로 이탈 + 안전마진 이하 → 이탈 폭·연속 이탈 여부로 매도가 분기
                         if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close <= safety_margin:
@@ -1172,16 +1176,22 @@ def get_kis_1min_from_datetime(
                             if gap_rate <= 0.5 and not prev_below_safety:
                                 # 케이스1: 소폭 이탈 + 직전봉 정상 → 안전마진가 (반등 체결 기대)
                                 sell_price = get_valid_sell_price(safety_margin)
-                                a_case = "[안전마진가]"
+                                a_case = "[안전마진가: 이탈폭≤0.5% & 직전봉 정상]"
                             elif gap_rate <= 2.0 and not prev_below_safety:
                                 # 케이스2: 중간 이탈 + 직전봉 정상 → 절충가
                                 sell_price = get_valid_sell_price(int((safety_margin + tenmin_close) / 2))
-                                a_case = "[절충가]"
+                                a_case = "[절충가(안전마진·종가 중간): 이탈폭≤2.0% & 직전봉 정상]"
                             else:
                                 # 케이스3: 큰 이탈 OR 연속 이탈 → 현재가 즉시 체결
                                 sell_price = get_valid_sell_price(tenmin_close)
-                                a_case = "[현재가]"
-                            sell_reason = f"안전마진({safety_margin:,})원 이하 기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈 {a_case} (이탈폭:{gap_rate:.1f}%, 매도가:{sell_price:,})"
+                                a_case = "[현재가: 이탈폭>2.0% 또는 직전봉 안전마진 하회]"
+                            _prev_desc = (f"직전봉 종가:{prev_close:,}({'안전마진 하회' if prev_below_safety else '정상'})"
+                                          if prev_exists else "직전봉 없음")
+                            sell_reason = (
+                                f"[조건A] 기준봉 저가({tenmin_state['base_low']:,}원) 10분봉 종가({tenmin_close:,}원) 이탈"
+                                f" & 안전마진({safety_margin:,}, 매수가+5%) 이하 {a_case}"
+                                f" - 이탈폭:{gap_rate:.2f}%, {_prev_desc} (매도가:{sell_price:,}원)"
+                            )
 
                         # 조건 B: 고점 대비 되돌림 → 수익 구간 동적 청산 (peak retracement)
                         # 활성화 조건: safety_margin 초과(수익 확보) + 최소 5% 이상 상승폭
@@ -1193,11 +1203,15 @@ def get_kis_1min_from_datetime(
                             if tenmin_close < peak_sell_threshold:
                                 sell_trigger = True
                                 sell_price = get_valid_sell_price(max(tenmin_close, peak_sell_threshold))
-                                sell_reason = f"고점({tenmin_state['peak_high']:,})원 되돌림 임계({peak_sell_threshold:,})원 종가 이탈 (매도가:{sell_price:,})"
+                                _peak_gain = (tenmin_state['peak_high'] / basic_price - 1) * 100 if basic_price > 0 else 0
+                                sell_reason = (
+                                    f"[조건B] 고점({tenmin_state['peak_high']:,}원, 매수가 대비 +{_peak_gain:.1f}%) 대비 되돌림"
+                                    f" - 고점~안전마진({safety_margin:,}) 구간 {peak_to_safety:,}원의 {PEAK_RETRACEMENT_RATE * 100:.0f}% 되돌림"
+                                    f" 임계({peak_sell_threshold:,}) 10분봉 종가({tenmin_close:,}원) 이탈"
+                                    f" (매도가:{sell_price:,}원 = max(종가, 임계))"
+                                )
 
-                        # (구 조건 C-1: 이탈가/최종이탈가 종가 이탈 → 조건 D로 통합)
-
-                        # 조건 C-2: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
+                        # 조건 C: 기준봉 저가를 종가로 이탈 + 안전마진 이상 → 연속 이탈 판단
                         # 거래량 초과 OR 연속 이탈(현재봉 + 직전봉) 시 매도 (저거래량 지속 하락 방어)
                         # 직전봉이 없으면 연속 이탈로 보지 않음
                         # 매도가 하한: safety_margin (안전마진 이상), 호가단위 내림
@@ -1206,7 +1220,16 @@ def get_kis_1min_from_datetime(
                         if not sell_trigger and tenmin_close < tenmin_state["base_low"] and tenmin_close > safety_margin and (tenmin_vol > tenmin_state["base_vol"] or consecutive_breaks >= CONSEC_BREAK_THRESHOLD):
                             sell_trigger = True
                             sell_price = get_valid_sell_price(max(tenmin_close, safety_margin))
-                            sell_reason = f"기준봉 저가({tenmin_state['base_low']:,})원 종가 이탈 (매도가:{sell_price:,})"
+                            _c2_hits = []
+                            if tenmin_vol > tenmin_state["base_vol"]:
+                                _c2_hits.append(f"거래량 초과({tenmin_vol:,}주 > 기준봉 {tenmin_state['base_vol']:,}주)")
+                            if consecutive_breaks >= CONSEC_BREAK_THRESHOLD:
+                                _c2_hits.append(f"연속 이탈 {consecutive_breaks}회(기준 {CONSEC_BREAK_THRESHOLD}회)")
+                            sell_reason = (
+                                f"[조건C] 기준봉 저가({tenmin_state['base_low']:,}원) 10분봉 종가({tenmin_close:,}원) 이탈"
+                                f" & 안전마진({safety_margin:,}) 초과 - {' / '.join(_c2_hits)}"
+                                f" (매도가:{sell_price:,}원 = max(종가, 안전마진))"
+                            )
 
                         if sell_trigger:
                             # 해당 종목의 시장이 단기 하락인 경우 : 매도주문가 = 현재가, 매도비율 70%

@@ -791,6 +791,23 @@ def _get_market_meta(code):
 _INTEREST_FIELDS = ('through_price', 'leave_price', 'resist_price', 'support_price',
                     'trend_high_price', 'trend_low_price')
 
+# 관심유형(watch_type) — balance_info/trading_note.py의 WATCH_TYPES와 같은 코드 체계.
+# DB에는 코드(A~D)를 콤마로 이어 저장(예: 'A,C'), 화면에는 설명 표시.
+_WATCH_TYPES = {
+    'A': '가장 최근 목표가 또는 EPS 수정이 상향',
+    'B': '실측 3개 분기 동안 매출·영업이익이 연속 증가',
+    'C': '직전 분기 대비 영업이익 증감이 ±10% 이내',
+    'D': '흑자전환 또는 적자축소이고, 정기보고서 접수일 이후 주가 상승이 +5% 이하',
+}
+
+
+def _parse_watch_type(value) -> list:
+    """DB 문자열('A,C') 또는 화면 값(리스트)을 A~D 코드만 남긴 정렬 리스트로(trading_note와 동일)."""
+    if value is None:
+        return []
+    items = value if isinstance(value, (list, tuple)) else str(value).split(',')
+    return sorted({str(v).strip() for v in items if str(v).strip() in _WATCH_TYPES})
+
 
 def _kis_period_high_low(ac, code, period='D', count=30):
     """reservebot.get_period_high_low와 동일: KIS 일/주/월봉(FHKST01010400) 최근 count개
@@ -840,27 +857,40 @@ def interest_item_suggest():
     }
 
     registered = None
+    main_business = ''
     try:
         conn = get_conn()
         cur = conn.cursor()
         cur.execute("""
             SELECT through_price, leave_price, resist_price, support_price,
-                   trend_high_price, trend_low_price, interest_day, interest_dtm
+                   trend_high_price, trend_low_price, interest_day, interest_dtm, watch_type,
+                   main_business
             FROM public."interestItem_interest_item"
             WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             ORDER BY last_chg_date DESC LIMIT 1
         """, (int(ac['acct_no']), code))
         row = cur.fetchone()
+        # 주요사업 기본값: 등록된 관심종목 값 → 없으면 투자관리(invest_mng) 주요사업
+        if row and row[9]:
+            main_business = row[9]
+        else:
+            cur.execute("SELECT main_business FROM public.invest_mng WHERE code = %s AND proc_yn = 'Y' "
+                        "ORDER BY mod_dt DESC NULLS LAST LIMIT 1", (code,))
+            mrow = cur.fetchone()
+            main_business = (mrow[0] if mrow else None) or ''
         cur.close()
         conn.close()
         if row:
             registered = dict(zip(_INTEREST_FIELDS, row[:6]))
             registered['interest_day'] = row[6]
             registered['interest_dtm'] = row[7]
+            registered['watch_type']   = _parse_watch_type(row[8])
+            registered['main_business'] = row[9] or ''
     except Exception as e:
         print(f"[관심종목] {code} 등록 여부 조회 오류: {e}")
 
-    return jsonify({'code': code, 'acct_no': ac['acct_no'], 'suggest': suggest, 'registered': registered})
+    return jsonify({'code': code, 'acct_no': ac['acct_no'], 'suggest': suggest, 'registered': registered,
+                    'main_business': main_business, 'watch_types': _WATCH_TYPES})
 
 
 @app.route('/api/interest-item', methods=['POST'])
@@ -877,6 +907,23 @@ def interest_item_register():
         if v is None or v <= 0:
             return jsonify({'error': f'관심종목 가격을 모두 0보다 큰 값으로 입력하세요. ({f})'}), 400
         prices[f] = int(v)
+    # 관심유형: 선택 안 하면 NULL(trading_note와 동일하게 'A,C' 형태로 저장)
+    watch_type = _parse_watch_type(data.get('watch_type'))
+    watch_type_db = ','.join(watch_type) or None
+    main_business = (data.get('main_business') or '').strip() or None
+
+    # 시장구분/규모/업종/시가총액 — 투자정보 적용(invest_mng)과 같은 _get_market_meta 값.
+    # 화면이 종목 조회 때 받은 값을 보내면 그대로 쓰고, 빠진 값이 있으면 여기서 조회한다.
+    meta = {k: (str(data.get(k)).strip() if data.get(k) not in (None, '') else None)
+            for k in ('market', 'size', 'industry', 'mktcap')}
+    if not all(meta.values()):
+        try:
+            m = _get_market_meta(code)
+            meta = {k: meta[k] or (str(m[k]) if m.get(k) not in (None, '') else None) for k in meta}
+        except Exception as e:
+            print(f"[관심종목] {code} 시장정보 조회 오류: {e}")
+    mk_num = _num_or_none(meta['mktcap'])
+    meta['mktcap'] = str(int(mk_num)) if mk_num is not None else None
 
     ac = _get_api_account()
     if not ac or not ac.get('acct_no'):
@@ -891,12 +938,15 @@ def interest_item_register():
         cur.execute("""
             UPDATE public."interestItem_interest_item"
             SET name = %s, through_price = %s, leave_price = %s, resist_price = %s,
-                support_price = %s, trend_high_price = %s, trend_low_price = %s, last_chg_date = %s
+                support_price = %s, trend_high_price = %s, trend_low_price = %s, watch_type = %s,
+                main_business = %s, market = %s, size = %s, industry = %s, mktcap = %s,
+                last_chg_date = %s
             WHERE acct_no = %s AND code = %s AND proc_yn = 'Y'
             RETURNING interest_day, interest_dtm
         """, (name, prices['through_price'], prices['leave_price'], prices['resist_price'],
-              prices['support_price'], prices['trend_high_price'], prices['trend_low_price'], now,
-              acct_no, code))
+              prices['support_price'], prices['trend_high_price'], prices['trend_low_price'],
+              watch_type_db, main_business, meta['market'], meta['size'], meta['industry'],
+              meta['mktcap'], now, acct_no, code))
         # 변경(UPDATE)이면 등록일시(interest_day/dtm)는 원래 값 그대로다 — 화면 '관심종목
         # 등록일시'가 interest_item_suggest의 registered와 같은 값을 보이도록 실제 값을 돌려준다.
         updated_rows = cur.fetchall()
@@ -907,11 +957,14 @@ def interest_item_register():
             cur.execute("""
                 INSERT INTO public."interestItem_interest_item"
                     (acct_no, code, name, through_price, leave_price, resist_price, support_price,
-                     trend_high_price, trend_low_price, interest_day, interest_dtm, proc_yn, last_chg_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
+                     trend_high_price, trend_low_price, watch_type, main_business,
+                     market, size, industry, mktcap, interest_day, interest_dtm,
+                     proc_yn, last_chg_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Y', %s)
             """, (acct_no, code, name, prices['through_price'], prices['leave_price'],
                   prices['resist_price'], prices['support_price'],
-                  prices['trend_high_price'], prices['trend_low_price'],
+                  prices['trend_high_price'], prices['trend_low_price'], watch_type_db,
+                  main_business, meta['market'], meta['size'], meta['industry'], meta['mktcap'],
                   interest_day, interest_dtm, now))
         conn.commit()
         cur.close()
@@ -924,7 +977,9 @@ def interest_item_register():
     msg = f"[{name}] 관심종목 {'등록' if inserted else '변경'} 완료 (계좌 {acct_no})"
     print(f"[관심종목] {code} {msg}")
     return jsonify({'message': msg, 'inserted': inserted, 'acct_no': acct_no,
-                    'registered': {**prices, 'interest_day': interest_day, 'interest_dtm': interest_dtm}})
+                    'registered': {**prices, 'interest_day': interest_day, 'interest_dtm': interest_dtm,
+                                   'watch_type': watch_type, 'main_business': main_business or '',
+                                   **meta}})
 
 
 @app.route('/api/interest-item/exclude', methods=['POST'])
@@ -1403,6 +1458,16 @@ def invest_mng_info():
             FROM public.invest_mng WHERE code = %s AND proc_yn = 'Y' ORDER BY check_dt DESC NULLS LAST LIMIT 1
         """, (code,))
         row = cur.fetchone()
+        # 주요사업이 invest_mng에 없을 때 쓸 관심종목(proc_yn='Y') 주요사업(가장 최근 변경분)
+        interest_main_business = ''
+        if not (row and (row[2] or '').strip()):
+            cur.execute("""
+                SELECT main_business FROM public."interestItem_interest_item"
+                WHERE code = %s AND proc_yn = 'Y' AND COALESCE(TRIM(main_business), '') <> ''
+                ORDER BY last_chg_date DESC NULLS LAST LIMIT 1
+            """, (code,))
+            irow = cur.fetchone()
+            interest_main_business = irow[0] if irow else ''
         cur.close()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1430,6 +1495,7 @@ def invest_mng_info():
     return jsonify({
         'code': code,
         'existing': existing,
+        'interest_main_business': interest_main_business,
         'market_meta': market_meta,
         'market_meta_error': market_meta_error,
         'invest_point': invest_point_data,
