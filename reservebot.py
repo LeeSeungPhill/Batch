@@ -522,8 +522,7 @@ PLAN_LABELS = {None: "일반", 'h': "홀딩", 'i': "투자", 'e': "정리"}
 
 def build_main_menu_markup():
     main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
-                                 "전체예약", "예약주문", "예약정정", "예약취소", 
-                                 "전체주문", "종목관리", "추적준비", "추적삭제", 
+                                 "예약관리", "종목관리", "추적준비", "추적삭제", 
                                  "추적등록", "추적변경", "추적상태", "매매추적",
                                  "시장관리", "잔고정리", "분할매수", "분할매도"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
@@ -2226,6 +2225,7 @@ def callback_get(update, context) :
         )
 
     elif command == "전체주문":
+        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,주문취소" if "주문취소" in data_selected else "menu,주문정정")]])
 
         ac = account(arguments[1])
         acct_no = ac['acct_no']
@@ -2276,31 +2276,35 @@ def callback_get(update, context) :
                                 text=final_message,
                                 parse_mode='HTML',
                                 chat_id=query.message.chat_id,
-                                message_id=query.message.message_id
+                                message_id=query.message.message_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                         else:
                             # 두 번째 묶음부터는 새로운 메시지로 전송
                             context.bot.send_message(
                                 text=final_message,
                                 parse_mode='HTML',
-                                chat_id=query.message.chat_id
+                                chat_id=query.message.chat_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                 else:
                     context.bot.edit_message_text(
                         text="일별주문체결 조회 대상이 존재하지 않습니다.",
                         chat_id=query.message.chat_id,
-                        message_id=query.message.message_id
+                        message_id=query.message.message_id,
+                        reply_markup=back_markup
                     )                                
 
             else:
                 context.bot.send_message(text="일별주문체결 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id)
+                                            chat_id=query.message.chat_id, reply_markup=back_markup)
 
         except Exception as e:
             print('일별주문체결 조회 오류.', e)
             context.bot.edit_message_text(text="[일별주문체결 조회] 오류 : "+str(e),
                                             chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            message_id=query.message.message_id,
+                                            reply_markup=back_markup)
     
     elif command == "매수주문":
         g_selected_accounts.clear()
@@ -2434,7 +2438,11 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문정정", callback_data="corr_type_01")
         query.edit_message_text(
             text="정정할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문정정,전체주문")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
         )
 
     elif command.startswith("corr_type_"):
@@ -2511,7 +2519,11 @@ def callback_get(update, context) :
         btn_sell = InlineKeyboardButton("매도주문취소", callback_data="cncl_type_01")
         query.edit_message_text(
             text="취소할 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문취소,전체주문")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
         )
 
     elif command.startswith("cncl_type_"):
@@ -2576,6 +2588,7 @@ def callback_get(update, context) :
         show_account_selection_keyboard(query, "52N")
     
     elif command == "전체예약":
+        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약주문")]])
     
         ac = account(arguments[1])
         acct_no = ac['acct_no']
@@ -2645,38 +2658,57 @@ def callback_get(update, context) :
                                 text=final_message,
                                 parse_mode='HTML',
                                 chat_id=query.message.chat_id,
-                                message_id=query.message.message_id
+                                message_id=query.message.message_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                         else:
                             # 두 번째 묶음부터는 새로운 메시지로 전송
                             context.bot.send_message(
                                 text=final_message,
                                 parse_mode='HTML',
-                                chat_id=query.message.chat_id
+                                chat_id=query.message.chat_id,
+                                reply_markup=back_markup if idx == len(chunks) - 1 else None
                             )
                 else:
                     context.bot.edit_message_text(
                         text="전체예약 조회 대상이 존재하지 않습니다.",
                         chat_id=query.message.chat_id,
-                        message_id=query.message.message_id
+                        message_id=query.message.message_id,
+                        reply_markup=back_markup
                     )                
 
             else:
                 context.bot.send_message(text="전체예약 조회 미존재 : " + g_company,
-                                            chat_id=query.message.chat_id)
+                                            chat_id=query.message.chat_id, reply_markup=back_markup)
 
         except Exception as e:
             print('전체예약 조회 오류.', e)
             context.bot.edit_message_text(text="[전체예약 조회] 오류 : "+str(e),
                                             chat_id=query.message.chat_id,
-                                            message_id=query.message.message_id)
+                                            message_id=query.message.message_id,
+                                            reply_markup=back_markup)
+
+    elif command == "예약관리":
+        query.edit_message_text(
+            text="[예약관리] 메뉴를 선택하세요",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("예약주문", callback_data="menu,예약주문"),
+                 InlineKeyboardButton("예약정정", callback_data="menu,예약정정"),
+                 InlineKeyboardButton("예약취소", callback_data="menu,예약취소")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+            ])
+        )
 
     elif command == "예약주문":
         btn_buy  = InlineKeyboardButton("매수예약", callback_data="rsv_type_buy")
         btn_sell = InlineKeyboardButton("매도예약", callback_data="rsv_type_sell")
         query.edit_message_text(
             text="예약 주문 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy, btn_sell], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+            reply_markup=InlineKeyboardMarkup([
+                [btn_buy, btn_sell],
+                [InlineKeyboardButton("전체예약", callback_data="menu,전체예약")],
+                [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")],
+            ])
         )
 
     elif command == "rsv_type_buy":
@@ -2732,7 +2764,7 @@ def callback_get(update, context) :
         btn_sell_rc = InlineKeyboardButton("매도예약정정", callback_data="rsv_corr_type_01")
         query.edit_message_text(
             text="정정할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_rc, btn_sell_rc], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")]])
         )
 
     elif command.startswith("rsv_corr_type_"):
@@ -2809,7 +2841,7 @@ def callback_get(update, context) :
         btn_sell_cn = InlineKeyboardButton("매도예약취소", callback_data="rsv_cncl_type_01")
         query.edit_message_text(
             text="취소할 예약 유형을 선택하세요:",
-            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")]])
+            reply_markup=InlineKeyboardMarkup([[btn_buy_cn, btn_sell_cn], [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")]])
         )
 
     elif command.startswith("rsv_cncl_type_"):
