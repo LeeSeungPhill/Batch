@@ -543,13 +543,13 @@ def build_market_menu_markup():
 # 잔고정리 하위 메뉴: 현재가 정리 / 피보나치 정리 / 물타기 정리
 def build_balance_menu_markup():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
-         InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),],
+        [InlineKeyboardButton("TR전체 정리", callback_data="menu,트레이딩_전체"),
+         InlineKeyboardButton("TR시장 비율(시총)", callback_data="menu,트레이딩_시장"),],
         [InlineKeyboardButton("현재가 정리", callback_data="menu,현재가정리"),
-         InlineKeyboardButton("분할매도", callback_data="menu,분할매도")],
+         InlineKeyboardButton("현재가 분할", callback_data="menu,분할매도")],
         [InlineKeyboardButton("피보나치 정리", callback_data="menu,반등매도"),
-         InlineKeyboardButton("물타기 정리", callback_data="menu,반등정리")],
-        [InlineKeyboardButton("종목 교체", callback_data="menu,보유종목_교체"),
+         InlineKeyboardButton("물타기 정리(단가)", callback_data="menu,반등정리")],
+        [InlineKeyboardButton("종목 교체(단가)", callback_data="menu,보유종목_교체"),
          InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
     ])
 
