@@ -521,10 +521,10 @@ def build_button(text_list, callback_header = "") : # make button list
 PLAN_LABELS = {None: "일반", 'h': "홀딩", 'i': "투자", 'e': "정리"}
 
 def build_main_menu_markup():
-    main_buttons = build_button(["매수주문", "매도주문", "주문정정", "주문취소",
-                                 "예약관리", "종목관리", "추적준비", "추적삭제", 
-                                 "추적등록", "추적변경", "추적상태", "매매추적",
-                                 "시장관리", "잔고정리", "분할매수", "분할매도"], callback_header="menu")
+    main_buttons = build_button(["매수주문", "매도주문", "분할매수", "분할매도",
+                                 "주문정정", "주문취소", "종목관리", "잔고정리",
+                                 "시장관리", "예약관리", "추적준비", "추적삭제", 
+                                 "추적등록", "추적변경", "추적상태", "매매추적"], callback_header="menu")
     cancel_button = build_button(["취소"], callback_header="menu")
     return InlineKeyboardMarkup(build_menu(main_buttons, n_cols=4, footer_buttons=cancel_button))
 
@@ -533,17 +533,19 @@ def build_market_menu_markup():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("코스피", callback_data="menu,코스피"),
          InlineKeyboardButton("코스닥", callback_data="menu,코스닥")],
-        [InlineKeyboardButton("시장흐름", callback_data="menu,시장흐름")],
-        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+        [InlineKeyboardButton("시장흐름", callback_data="menu,시장흐름"),
+         InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
     ])
 
 # 잔고정리 하위 메뉴: 현재가 정리 / 피보나치 정리 / 물타기 정리
 def build_balance_menu_markup():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("현재가 정리", callback_data="menu,현재가정리")],
-        [InlineKeyboardButton("피보나치 정리", callback_data="menu,반등매도")],
-        [InlineKeyboardButton("물타기 정리", callback_data="menu,반등정리")],
-        [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
+        [InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
+         InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
+         InlineKeyboardButton("현재가 정리", callback_data="menu,현재가정리")],
+        [InlineKeyboardButton("피보나치 정리", callback_data="menu,반등매도"),
+         InlineKeyboardButton("물타기 정리", callback_data="menu,반등정리"),
+         InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
     ])
 
 def get_command(update, context) :
@@ -1565,8 +1567,6 @@ def callback_get(update, context) :
             InlineKeyboardButton("보유종목 수정", callback_data="menu,보유종목_수정"),
             InlineKeyboardButton("관심종목 조회", callback_data="menu,관심종목_조회"),
             InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
-            InlineKeyboardButton("트레이딩 전체", callback_data="menu,트레이딩_전체"),
-            InlineKeyboardButton("트레이딩 시장", callback_data="menu,트레이딩_시장"),
             InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
             InlineKeyboardButton("◀ 뒤로가기",     callback_data="menu,main_menu"),
         ]
@@ -3311,7 +3311,7 @@ def callback_get(update, context) :
             "62N": f"rsv_corr_type_{g_rsv_corr_dvsn}",
             "63N": f"rsv_cncl_type_{g_rsv_cncl_dvsn}",
             "01": "menu,보유종목_조회",
-            "TRALL": "menu,종목관리", "TRMAR": "menu,종목관리",
+            "TRALL": "menu,잔고정리", "TRMAR": "menu,잔고정리",
             "HCHG": "menu,보유종목_교체",
             "SPB": "menu,분할매수", "SPS": "menu,분할매도",
             "BCLN": "bcln_back",
