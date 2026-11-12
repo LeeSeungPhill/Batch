@@ -1565,14 +1565,14 @@ def callback_get(update, context) :
         sub_buttons = [
             InlineKeyboardButton("보유종목 조회", callback_data="menu,보유종목_조회"),
             InlineKeyboardButton("보유종목 수정", callback_data="menu,보유종목_수정"),
+            InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
             InlineKeyboardButton("관심종목 조회", callback_data="menu,관심종목_조회"),
             InlineKeyboardButton("관심종목 변경", callback_data="menu,관심종목_변경"),
-            InlineKeyboardButton("보유종목 교체", callback_data="menu,보유종목_교체"),
             InlineKeyboardButton("◀ 뒤로가기",     callback_data="menu,main_menu"),
         ]
         query.edit_message_text(
             text="종목관리 메뉴를 선택하세요:",
-            reply_markup=InlineKeyboardMarkup(build_menu(sub_buttons, 2))
+            reply_markup=InlineKeyboardMarkup(build_menu(sub_buttons, 3))
         )
 
     elif command == "보유종목_조회":
@@ -2468,8 +2468,7 @@ def callback_get(update, context) :
         query.edit_message_text(
             text="정정할 주문 유형을 선택하세요:",
             reply_markup=InlineKeyboardMarkup([
-                [btn_buy, btn_sell],
-                [InlineKeyboardButton("전체주문", callback_data="menu,주문정정,전체주문")],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문정정,전체주문"),btn_buy, btn_sell],
                 [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
             ])
         )
@@ -2549,8 +2548,7 @@ def callback_get(update, context) :
         query.edit_message_text(
             text="취소할 주문 유형을 선택하세요:",
             reply_markup=InlineKeyboardMarkup([
-                [btn_buy, btn_sell],
-                [InlineKeyboardButton("전체주문", callback_data="menu,주문취소,전체주문")],
+                [InlineKeyboardButton("전체주문", callback_data="menu,주문취소,전체주문"),btn_buy, btn_sell],
                 [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,main_menu")],
             ])
         )
@@ -2734,8 +2732,7 @@ def callback_get(update, context) :
         query.edit_message_text(
             text="예약 주문 유형을 선택하세요:",
             reply_markup=InlineKeyboardMarkup([
-                [btn_buy, btn_sell],
-                [InlineKeyboardButton("전체예약", callback_data="menu,전체예약")],
+                [InlineKeyboardButton("전체예약", callback_data="menu,전체예약"), btn_buy, btn_sell],
                 [InlineKeyboardButton("◀ 뒤로가기", callback_data="menu,예약관리")],
             ])
         )
