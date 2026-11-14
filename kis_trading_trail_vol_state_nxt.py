@@ -12,6 +12,7 @@ from datetime import time as dt_time
 import kis_api_resp as resp
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
+from telegram_sender import send_once, get_alert_target
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -622,9 +623,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
             try:
                 message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
                 print(message)
-                bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+                send_once(bot, chat_id, message, 'trail_vol_state_nxt', dedup_key=f"{code}:{trail_day}{trail_dtm}:close:{trade_result}",
                     parse_mode='HTML'
                 )
             except Exception as te:
@@ -1051,7 +1050,7 @@ def get_kis_1min_from_datetime(
                                     f" 상한가({upper_limit:,})원 도달 → 절반 매도 ({trail_qty:,}주)"
                                 )
                                 print(message)
-                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                send_once(bot, chat_id, message, 'trail_vol_state_nxt', dedup_key=f"{stock_code}:{start_date}{start_time}:upper_limit_sell", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -1095,7 +1094,7 @@ def get_kis_1min_from_datetime(
                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원, 거래량 : {tenmin_state['base_vol']:,}주 "
                                     )
                                     print(message)
-                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                    send_once(bot, chat_id, message, 'trail_vol_state_nxt', dedup_key=f"{stock_code}:{start_date}{start_time}:breakout_base:{target_price}", parse_mode='HTML')
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
                             update_trading_trail(int(tenmin_state['base_low']), int(tenmin_state['base_high']), int(tenmin_state['base_vol']), acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
@@ -1255,9 +1254,7 @@ def get_kis_1min_from_datetime(
                                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                 )
                                                 print(message)
-                                                bot.send_message(
-                                                    chat_id=chat_id,
-                                                    text=message,
+                                                send_once(bot, chat_id, message, 'trail_vol_state_nxt', dedup_key=f"{stock_code}:{start_date}{start_time}:profit_complete",
                                                     parse_mode='HTML'
                                                 )
                                             except Exception as te:
@@ -1275,9 +1272,7 @@ def get_kis_1min_from_datetime(
                                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                 )
                                                 print(message)
-                                                bot.send_message(
-                                                    chat_id=chat_id,
-                                                    text=message,
+                                                send_once(bot, chat_id, message, 'trail_vol_state_nxt', dedup_key=f"{stock_code}:{start_date}{start_time}:safety_margin",
                                                     parse_mode='HTML'
                                                 )
                                             except Exception as te:
@@ -1377,8 +1372,8 @@ def process_account(nick):
     try:
         ac = account(nick, conn_acct)
         acct_no = ac['acct_no']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        # 텔레그램 전송 대상 : fnguidePerformbot(kwphills75) 봇/채팅으로 통일 (계좌별 봇 미사용)
+        token, chat_id = get_alert_target()
         _chat_id = chat_id
 
         # Bot 인스턴스를 계좌당 1회만 생성
@@ -1525,7 +1520,7 @@ def process_account(nick):
         print(f"[{nick}] 계좌 처리 오류: {e}")
         if _bot and _chat_id:
             try:
-                _bot.send_message(chat_id=_chat_id, text=f"⚠️ [{nick}] 계좌 처리 오류\n{e}")
+                send_once(_bot, _chat_id, f"⚠️ [{nick}] 계좌 처리 오류\n{e}", 'trail_vol_state_nxt')
             except Exception:
                 pass
     finally:

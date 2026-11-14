@@ -12,6 +12,7 @@ from datetime import time as dt_time
 import kis_api_resp as resp
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
+from telegram_sender import send_once, get_alert_target
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -826,9 +827,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
             try:
                 message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
                 print(message)
-                bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+                send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{code}:{trail_day}{trail_dtm}:close:{trade_result}",
                     parse_mode='HTML'
                 )
             except Exception as te:
@@ -934,9 +933,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
             try:
                 message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
                 print(message)
-                bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+                send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{code}:{trail_day}{trail_dtm}:close:{trade_result}",
                     parse_mode='HTML'
                 )
             except Exception as te:
@@ -1431,7 +1428,7 @@ def get_kis_1min_from_datetime(
                                     f" 수익률:{gain_pct:.1f}%, 추세이탈가({_ep:,})원 이탈 즉시 매도 ({_ep_desc})"
                                 )
                                 print(message)
-                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:trend_exit_sell", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -1575,7 +1572,7 @@ def get_kis_1min_from_datetime(
                                                     f" 15%달성·수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 [시장 약세] 매도 진행"
                                                 )
                                                 print(msg_wait)
-                                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                                send_once(bot, chat_id, msg_wait, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:L_mkt_weak_15pct", parse_mode='HTML')
                                             except Exception as te:
                                                 print(f"텔레그램 발송 실패: {te}")
 
@@ -1601,7 +1598,7 @@ def get_kis_1min_from_datetime(
                                                     f" 15%달성·수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                                 )
                                                 print(msg_wait)
-                                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                                send_once(bot, chat_id, msg_wait, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:L_wait_15pct", parse_mode='HTML')
                                             except Exception as te:
                                                 print(f"텔레그램 발송 실패: {te}")
 
@@ -1642,7 +1639,7 @@ def get_kis_1min_from_datetime(
                                             f" 수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 [시장 약세] 매도 진행"
                                         )
                                         print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                        send_once(bot, chat_id, msg_wait, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:L_mkt_weak", parse_mode='HTML')
                                     except Exception as te:
                                         print(f"텔레그램 발송 실패: {te}")
 
@@ -1668,7 +1665,7 @@ def get_kis_1min_from_datetime(
                                             f" 수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                         )
                                         print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                        send_once(bot, chat_id, msg_wait, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:L_wait", parse_mode='HTML')
                                     except Exception as te:
                                         print(f"텔레그램 발송 실패: {te}")
 
@@ -1688,15 +1685,9 @@ def get_kis_1min_from_datetime(
                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
                                     f" [사전경고] 종가:{close_price:,}원 하락추세:{_trend_ref_price:,}원 이탈"
                                 )
-                                _cb_data = f"downtrend_sell:{stock_name}:{stock_code}:{basic_qty}"
-                                sell_btn = InlineKeyboardButton(
-                                    text=f"하락추세({_trend_ref_price:,}원) 이탈 전량매도",
-                                    callback_data=_cb_data
-                                )
-                                markup = InlineKeyboardMarkup([[sell_btn]])
+                                # 전량매도 버튼(downtrend_sell:) 미사용 : 통합 봇에서는 콜백 처리 불가
                                 print(msg_warn)
-                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
-                                # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
+                                send_once(bot, chat_id, msg_warn, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:downtrend_warn", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                             # _w_mkt_data = _mkt_trend_pre
@@ -1763,7 +1754,7 @@ def get_kis_1min_from_datetime(
                                 f"{stock_name}[<code>{stock_code}</code>]"
                                 f" {_mkt_reason}"
                             )
-                            bot.send_message(chat_id=chat_id, text=_msg_mkt, parse_mode='HTML')
+                            send_once(bot, chat_id, _msg_mkt, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:mkt_sell", parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -1868,7 +1859,7 @@ def get_kis_1min_from_datetime(
                                         f" {sell_reason}, {_ord_desc_L} 매도가:{order_price:,}원, 현재가:{close_price:,}원"
                                     )
                                 print(message)
-                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:{sell_signal_type}", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -2026,7 +2017,7 @@ def get_kis_1min_from_datetime(
                                 f" 돌파 전 이탈 확정({detail}) → {sell_label} ({price_desc})"
                             )
                             print(message)
-                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                            send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:breakdown_before_breakout", parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
                 except Exception as e:
@@ -2088,7 +2079,7 @@ def get_kis_1min_from_datetime(
                                         f" 상한가({upper_limit:,})원 도달 → 절반 매도 ({trail_qty:,}주)"
                                     )
                                     print(message)
-                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                    send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:upper_limit_sell", parse_mode='HTML')
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
                         except Exception as e:
@@ -2184,7 +2175,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:exit_price_mkt_weak", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2199,7 +2190,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:exit_price_wait", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")            
 
@@ -2228,7 +2219,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:stop_price_mkt_weak", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2243,7 +2234,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:stop_price_wait", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2269,9 +2260,7 @@ def get_kis_1min_from_datetime(
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원, 거래량 : {tenmin_state['base_vol']:,}주 "
                                             )
                                             print(message)
-                                            bot.send_message(
-                                                chat_id=chat_id,
-                                                text=message,
+                                            send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:breakout_base:{target_price}",
                                                 parse_mode='HTML'
                                             )
                                         except Exception as te:
@@ -2439,9 +2428,7 @@ def get_kis_1min_from_datetime(
                                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                         )
                                                         print(message)
-                                                        bot.send_message(
-                                                            chat_id=chat_id,
-                                                            text=message,
+                                                        send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:profit_complete",
                                                             parse_mode='HTML'
                                                         )
                                                     except Exception as te:
@@ -2459,9 +2446,7 @@ def get_kis_1min_from_datetime(
                                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                         )
                                                         print(message)
-                                                        bot.send_message(
-                                                            chat_id=chat_id,
-                                                            text=message,
+                                                        send_once(bot, chat_id, message, 'trail_vol_state', dedup_key=f"{stock_code}:{start_date}{start_time}:safety_margin",
                                                             parse_mode='HTML'
                                                         )
                                                     except Exception as te:
@@ -2558,7 +2543,7 @@ def cancel_nxt_pending_orders(nick, ac, bot, chat_id):
                 msg = f"-{nick}- {nxt_name}[<code>{nxt_code}</code>] NXT {sll_buy_name} 미체결 취소 실패 (주문번호:{odno}, 잔량:{rmn_qty}주)"
             print(msg)
             try:
-                bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                send_once(bot, chat_id, msg, 'trail_vol_state', dedup_key=f"{nxt_code}:{odno}:nxt_cancel", parse_mode='HTML')
             except Exception as te:
                 print(f"텔레그램 발송 실패: {te}")
 
@@ -2650,7 +2635,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', dedup_key=f"{stock_code}:{odno}:1520_cancel_fail", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
                     continue
@@ -2675,7 +2660,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', dedup_key=f"{stock_code}:1520_resell", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
 
@@ -2718,7 +2703,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', dedup_key=f"{stock_code}:1520_resell_fail", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
 
@@ -2779,8 +2764,8 @@ def process_account(nick):
     try:
         ac = account(nick, conn_acct)
         acct_no = ac['acct_no']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        # 텔레그램 전송 대상 : fnguidePerformbot(kwphills75) 봇/채팅으로 통일 (계좌별 봇 미사용)
+        token, chat_id = get_alert_target()
         _chat_id = chat_id
 
         # Bot 인스턴스를 계좌당 1회만 생성
@@ -2964,7 +2949,7 @@ def process_account(nick):
         print(f"[{nick}] 계좌 처리 오류: {e}")
         if _bot and _chat_id:
             try:
-                _bot.send_message(chat_id=_chat_id, text=f"⚠️ [{nick}] 계좌 처리 오류\n{e}")
+                send_once(_bot, _chat_id, f"⚠️ [{nick}] 계좌 처리 오류\n{e}", 'trail_vol_state')
             except Exception:
                 pass
     finally:

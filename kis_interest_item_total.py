@@ -10,6 +10,7 @@ import pandas as pd
 import time
 from telegram.ext import Updater
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from telegram_sender import send_once, get_alert_target
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -505,8 +506,8 @@ def process_account(nick):
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        # 텔레그램 전송 대상 : fnguidePerformbot(kwphills75) 봇/채팅으로 통일 (계좌별 봇 미사용)
+        token, chat_id = get_alert_target()
 
         updater = Updater(token=token, use_context=True)
         bot = updater.bot
@@ -669,11 +670,10 @@ def process_account(nick):
                             else:
                                 telegram_text = "[시장하락]" + i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate'] + ", 현재가 : " + format(int(a['stck_prpr']), ',d') + "원"
                         try:
-                            send_markup = InlineKeyboardMarkup([[InlineKeyboardButton(
-                                "매수주문등록",
-                                callback_data=f"menu,interest_trail_buy_{i[0]}_{int(a['stck_prpr'])}_{int(i[3])}_{int(n_buy_sum)}_{int(item_loss_sum or 0)}"
-                            )]]) if n_buy_amount > 0 else None
-                            bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=send_markup)
+                            # 매수주문등록 버튼(interest_trail_buy_) 미사용 : 통합 봇에서는 콜백 처리 불가
+                            send_once(bot, chat_id, telegram_text, 'interest_item',
+                                      dedup_key=f"{i[0]}:signal:{trail_signal_code}",
+                                      parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 전송 오류: {te}")
 
@@ -753,7 +753,9 @@ def process_account(nick):
                     print("시장 : " + i[1] + " 추적신호 : " + trail_signal_name)
                     telegram_text = i[1] + "[" + i[0] + "] : " + trail_signal_name + ", 최고포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_hgpr']), ',f') + ", 최저포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_lwpr']), ',f') + ", 현재포인트 : " + '{:0,.2f}'.format(float(b['bstp_nmix_prpr']), ',f') + ", 거래량 : " + format(int(b['acml_vol']), ',d') + "주"
                     try:
-                        bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                        send_once(bot, chat_id, telegram_text, 'interest_item',
+                                  dedup_key=f"{i[0]}:market_signal:{trail_signal_code}",
+                                  parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 전송 오류: {te}")
 
