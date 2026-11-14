@@ -3,6 +3,7 @@
 
 - telegram_msg_send 테이블에 (전송일, 전송시스템, 봇ID, chat_id, 중복키) 단위로 선점 기록 후 발송
 - 동일 키가 당일 이미 발송(Y)/발송중(N)이면 skip, 이전 발송 실패(E)는 재발송 허용
+- resend_minutes 지정시 마지막 발송 후 해당 시간이 지나면 동일 키도 재발송 허용
 - dedup_key 미지정시 메시지 본문 sha256 해시를 키로 사용
 - 호출측 트랜잭션 오염 방지를 위해 별도 DB 연결(autocommit) 사용
 - DB 장애시에는 알림 유실 방지를 위해 중복체크 없이 발송 (fail-open)
@@ -52,10 +53,11 @@ def _bot_id(bot):
         return ''
 
 
-def send_once(bot, chat_id, text, system, dedup_key=None, **kwargs):
+def send_once(bot, chat_id, text, system, dedup_key=None, resend_minutes=None, **kwargs):
     """
     당일 동일 키 메시지가 없을 때만 텔레그램 발송.
     반환값 : True(발송) / False(중복 skip 또는 발송 실패)
+    resend_minutes : 지정시 동일 키라도 마지막 발송 후 해당 분(分)이 지나면 재발송 허용 (미지정시 당일 1회)
     kwargs : bot.send_message 로 그대로 전달 (parse_mode, reply_markup 등)
     """
     key = dedup_key if dedup_key else hashlib.sha256(text.encode('utf-8')).hexdigest()
@@ -77,9 +79,11 @@ def send_once(bot, chat_id, text, system, dedup_key=None, **kwargs):
                  WHERE telegram_msg_send.send_yn = 'E'
                     OR (telegram_msg_send.send_yn = 'N'
                         AND telegram_msg_send.udate < now() - make_interval(mins => %s))
+                    OR (%s::int IS NOT NULL AND telegram_msg_send.send_yn = 'Y'
+                        AND telegram_msg_send.udate < now() - make_interval(mins => %s::int))
                 RETURNING id
             """, (now.strftime('%Y%m%d'), now.strftime('%H%M%S'), system, _bot_id(bot),
-                  str(chat_id), key, text, _STALE_MINUTES))
+                  str(chat_id), key, text, _STALE_MINUTES, resend_minutes, resend_minutes))
             row = cur.fetchone()
             if row is None:
                 print(f"[중복 메시지 skip] {system} key={key}")
