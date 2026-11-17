@@ -16,6 +16,7 @@ conn_string = "dbname='fund_risk_mng' host='localhost' port='5432' user='postgre
 conn = db.connect(conn_string)
 
 today = datetime.now().strftime("%Y%m%d")
+PREV_LOW_SELL_1510 = False   # 15:10 이후 오종전저 매도 (제외)
 cur_time = datetime.now().strftime("%H%M")
 second = datetime.now().strftime("%H%M%S")
 
@@ -1393,7 +1394,8 @@ if result_one == None:
                         n_sell_sum = int(a['stck_prpr']) * n_sell_amount
                         sell_plan_amount = format(int(n_sell_amount), ',d')
 
-                if cur_time > '1510':
+                # (제외) 15:10 이후 오종전저(오늘 종가 전일 저가) 이탈 매도 — kis_trading_trail_vol_state.py 15:21 동시호가 시장가 매도로 대체
+                if PREV_LOW_SELL_1510 and cur_time > '1510':
                     # 금일 이전 매수한 보유종목 오종전저 존재시
                     if i[9] != None:
                         # 현재가가 오종전저(오늘 종가 전일 저가) 이탈시

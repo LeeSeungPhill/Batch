@@ -1326,24 +1326,7 @@ def get_kis_1min_from_datetime(
                                 # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
-                            # 전일저가 이탈 사전경고 → trail_tp 'P' 변경
-                            # (이미 매도 트리거된 경우 'L' 상태 유지 필요 — 매도 실행 DB 업데이트 조건 보호)
-                            if not sell_trigger:
-                                try:
-                                    cur_p = conn.cursor()
-                                    cur_p.execute("""
-                                        UPDATE public.trading_trail
-                                        SET trail_tp = 'P', mod_dt = %s
-                                        WHERE acct_no = %s
-                                            AND code = %s
-                                            AND trail_day = %s
-                                            AND trail_tp NOT IN ('3', '4')
-                                    """, (datetime.now(), acct_no, stock_code, trade_date))
-                                    conn.commit()
-                                    cur_p.close()
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp → P 변경 완료")
-                                except Exception as de:
-                                    print(f"  [{stock_name}-{stock_code}] trail_tp P 변경 실패: {de}")
+                            # (제외) 전일저가 이탈 사전경고 시 trail_tp 'P' 변경 — 추적 대상에서 빠져 이후 매도 판단이 중단되므로 미적용
 
                 # ===============================
                 # 15:10(또는 11월 19일 16:10) 이후 전일저가 이탈 감시 (gain_pct 무관)
