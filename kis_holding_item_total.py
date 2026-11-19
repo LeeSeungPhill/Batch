@@ -10,6 +10,7 @@ from decimal import Decimal
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from telegram.ext import Updater
+from telegram_sender import send_once, get_alert_target
 
 URL_BASE = "https://openapi.koreainvestment.com:9443"       # 실전서비스
 
@@ -929,8 +930,8 @@ def process_account(nick):
         access_token = ac['access_token']
         app_key = ac['app_key']
         app_secret = ac['app_secret']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        # 텔레그램 전송 대상 : fnguidePerformbot(kwphills75) 봇/채팅으로 통일 (계좌별 봇 미사용)
+        token, chat_id = get_alert_target()
 
         # Bot 인스턴스를 계좌당 1회만 생성
         updater = Updater(token=token, use_context=True)
@@ -1044,9 +1045,10 @@ def process_account(nick):
                     _cancel_ok, _cancel_cnt = cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, i[0], i[1])
                     if not _cancel_ok:
                         try:
-                            bot.send_message(chat_id=chat_id,
-                                             text=f"[{_sp_label}-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
-                                             parse_mode='HTML')
+                            send_once(bot, chat_id,
+                                      f"[{_sp_label}-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                      'holding_item', dedup_key=f"{i[0]}:support_break_{i[12]}:cancel_fail",
+                                      parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
                     else:
@@ -1074,11 +1076,12 @@ def process_account(nick):
                             conn.commit()
                             print(f"{_sp_label} 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 {_price_label}")
                             try:
-                                bot.send_message(
-                                    chat_id=chat_id,
-                                    text=(f"[{_sp_label} 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
-                                          f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매수1호가 : {_bid1:,}원, 매도가 : {_price_label}, 매도량 : {_pp_amount:,}주, "
-                                          f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                send_once(
+                                    bot, chat_id,
+                                    (f"[{_sp_label} 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
+                                     f"지지가 : {_support:,}원, 매입단가 : {int(_pp_price):,}원, 매수1호가 : {_bid1:,}원, 매도가 : {_price_label}, 매도량 : {_pp_amount:,}주, "
+                                     f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                    'holding_item', dedup_key=f"{i[0]}:support_break_{i[12]}:sell_order",
                                     parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
@@ -1116,9 +1119,10 @@ def process_account(nick):
                         _cancel_ok, _cancel_cnt = cancel_open_sell_orders(access_token, app_key, app_secret, acct_no, i[0], i[1])
                         if not _cancel_ok:
                             try:
-                                bot.send_message(chat_id=chat_id,
-                                                 text=f"[매입단가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
-                                                 parse_mode='HTML')
+                                send_once(bot, chat_id,
+                                          f"[매입단가 이탈 손절-{i[1]}[<code>{i[0]}</code>]] 기존 매도주문 취소 실패로 매도주문 미처리",
+                                          'holding_item', dedup_key=f"{i[0]}:purchase_break:cancel_fail",
+                                          parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                         else:
@@ -1141,11 +1145,12 @@ def process_account(nick):
                                 conn.commit()
                                 print(f"매입단가 이탈 손절 매도주문 완료: {i[1]}[{i[0]}] {_pp_amount}주 @ {_sell_price}")
                                 try:
-                                    bot.send_message(
-                                        chat_id=chat_id,
-                                        text=(f"[매입단가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
-                                              f"매입단가 : {int(_pp_price):,}원, 매도가 : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
-                                              f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                    send_once(
+                                        bot, chat_id,
+                                        (f"[매입단가 이탈 손절 매도주문-{i[1]}[<code>{i[0]}</code>]] 현재가 : {_cur_price:,}원, "
+                                         f"매입단가 : {int(_pp_price):,}원, 매도가 : {_sell_price:,}원, 매도량 : {_pp_amount:,}주, "
+                                         f"기존주문취소 : {_cancel_cnt}건, 주문번호 : <code>{int(c['ODNO'])}</code>"),
+                                        'holding_item', dedup_key=f"{i[0]}:purchase_break:sell_order",
                                         parse_mode='HTML')
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
@@ -1216,16 +1221,15 @@ def process_account(nick):
                     sig_price = int(a['stck_prpr'])
                     if n_sell_amount > 0:
                         telegram_text = (f"{i[1]}[<code>{i[0]}</code>] : {trail_signal_name}, 고가 : {format(int(a['stck_hgpr']), ',d')}원, 저가 : {format(int(a['stck_lwpr']), ',d')}원, 현재가 : {format(sig_price, ',d')}원, 거래량 : {format(int(a['acml_vol']), ',d')}주, 거래대비 : {a['prdy_vrss_vol_rate']}, 매도량 : {sell_plan_amount}주, 매도금액 : {format(int(n_sell_sum), ',d')}원")
-                        sell_markup = InlineKeyboardMarkup([[
-                            InlineKeyboardButton(
-                                f"신호발생({format(sig_price, ',d')}원) 전량매도",
-                                callback_data=f"menu,signal_sell_{i[1]}_{i[0]}_{n_sell_amount}"
-                            )
-                        ]])
-                        bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML', reply_markup=sell_markup)
+                        # 전량매도 버튼(signal_sell_) 미사용 : 통합 봇에서는 콜백 처리 불가
+                        send_once(bot, chat_id, telegram_text, 'holding_item',
+                                  dedup_key=f"{i[0]}:signal:{trail_signal_code}",
+                                  parse_mode='HTML')
                     else:
                         telegram_text = i[1] + "[<code>" + i[0] + "</code>] : " + trail_signal_name + ", 고가 : " + format(int(a['stck_hgpr']), ',d') + "원, 저가 : " + format(int(a['stck_lwpr']), ',d') + "원, 현재가 : " + format(sig_price, ',d') + "원, 거래량 : " + format(int(a['acml_vol']), ',d') + "주, 거래대비 : " + a['prdy_vrss_vol_rate']
-                        bot.send_message(chat_id=chat_id, text=telegram_text, parse_mode='HTML')
+                        send_once(bot, chat_id, telegram_text, 'holding_item',
+                                  dedup_key=f"{i[0]}:signal:{trail_signal_code}",
+                                  parse_mode='HTML')
                 except Exception as te:
                     print(f"텔레그램 발송 실패: {te}")
 

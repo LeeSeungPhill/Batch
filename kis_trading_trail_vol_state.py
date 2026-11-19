@@ -12,6 +12,7 @@ from datetime import time as dt_time
 import kis_api_resp as resp
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater
+from telegram_sender import send_once, get_alert_target
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
@@ -689,6 +690,52 @@ def plan_breakdown_sell(stock_code: str, close_price: int, breach_price: int, sh
         return "03", best_bid, f"최유리지정가(매수1호가:{best_bid:,} > 이탈가:{breach_price:,})"
     return "00", breach_price, f"이탈가 지정가:{breach_price:,}(매수1호가:{best_bid:,})"
 
+TENMIN_SELL_MAX_GAP_PCT = 1.0   # 현재가가 매도 하한보다 이 비율 이상 낮으면 현재가 즉시 청산 (이내면 현재가+1틱)
+
+def plan_tenmin_sell(stock_code: str, floor_price: int, close_price: int, short_market_down: bool,
+                     access_token: str, app_key: str, app_secret: str, max_gap_pct: float = TENMIN_SELL_MAX_GAP_PCT):
+    """trail_tp '1','2' 목표가 돌파 후 10분봉 조건(D/A/B/C) 매도 주문가 결정 — 실시간 현재가 기준 지정가
+    floor_price(조건별 매도가)는 주문가가 아닌 '받고 싶은 하한'으로만 사용
+    - 현재가 ≥ 하한             : 현재가 지정가 (즉시 체결권)
+    - 시장 약세 or 하한 대비 -max_gap_pct% 초과 하회 : 현재가 지정가 (즉시 청산)
+    - 하한 대비 소폭 하회        : 현재가 +1틱 지정가 (소폭 반등 시 체결)
+    현재가 조회 실패 시 10분봉 종가 사용
+    반환: (주문구분 '00', 주문가, 설명)"""
+    cur_price = _get_current_price_quick(stock_code, access_token, app_key, app_secret)
+    src = "현재가"
+    if cur_price <= 0:
+        cur_price, src = int(close_price), "10분봉 종가(현재가 조회 실패)"
+    cur_price = get_valid_sell_price(cur_price)
+    floor_price = int(floor_price)
+    if cur_price >= floor_price:
+        return "00", cur_price, f"{src} 지정가:{cur_price:,}(≥ 하한 {floor_price:,})"
+    gap = (floor_price - cur_price) / floor_price * 100 if floor_price > 0 else 0
+    if short_market_down or gap > max_gap_pct:
+        _why = "시장 약세" if short_market_down else f"하한 대비 -{gap:.2f}%"
+        return "00", cur_price, f"{src} 지정가:{cur_price:,}({_why}, 하한 {floor_price:,})"
+    up_price = cur_price + get_tick_size(cur_price)
+    return "00", up_price, f"{src}+1틱 지정가:{up_price:,}(하한 {floor_price:,} 대비 -{gap:.2f}%)"
+
+def plan_current_sell(stock_code: str, close_price: int, breach_price: int,
+                      access_token: str, app_key: str, app_secret: str):
+    """trail_tp 'L' 이탈 확정 매도 주문가 — 실시간 현재가 지정가 (이탈가는 이미 확정 이탈 → 하한으로 두지 않음)
+    현재가 조회 실패 시 분봉 종가 사용. 반환: (주문구분 '00', 주문가, 설명)"""
+    cur_price = _get_current_price_quick(stock_code, access_token, app_key, app_secret)
+    src = "현재가"
+    if cur_price <= 0:
+        cur_price, src = int(close_price), "분봉 종가(현재가 조회 실패)"
+    cur_price = get_valid_sell_price(cur_price)
+    _ref = f", 이탈가 {int(breach_price):,}" if breach_price else ""
+    return "00", cur_price, f"{src} 지정가:{cur_price:,}{_ref}"
+
+L_DOWNTREND_SELL_1510 = False   # trail_tp 'L' 15:10 이후 하락추세 기준가 이탈 매도 (제외)
+
+AUTO_SELL_TAG = "[AUTO] "   # 이 스크립트 자동 매도 표식 (trade_result) → 미체결 재주문 대상 식별, 수동 매도(reservebot)와 구분
+
+def _auto_tag(trade_result) -> str:
+    s = str(trade_result) if trade_result is not None else ""
+    return s if s.startswith(AUTO_SELL_TAG) else AUTO_SELL_TAG + s
+
 def _get_current_price_quick(stock_code: str, access_token: str,
                               app_key: str, app_secret: str) -> int:
     """종목코드의 현재가 즉시 조회 (단일 quote API). 실패 시 0."""
@@ -786,7 +833,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
             result_msgs = []
             try:
                 # 매도 : 지정가 / 최유리지정가 주문
-                ord_unpr = "0" if ord_dvsn == "03" else str(int(trail_price))
+                ord_unpr = "0" if ord_dvsn in ("01", "03") else str(int(trail_price))   # 시장가·최유리지정가는 주문단가 0
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(int(trail_qty)), ord_unpr)
 
                 if c is not None and c['ODNO'] != "":
@@ -809,7 +856,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                         d_total_complete_amt = d['tot_ccld_amt'][k]
 
                         print("매도주문 완료")
-                        _ord_desc = "최유리지정가" if ord_dvsn == "03" else "지정가"
+                        _ord_desc = {"01": "시장가", "03": "최유리지정가"}.get(ord_dvsn, "지정가")
                         msg = f"-{nick}-[추세 이탈 매도-{d_name}] {_ord_desc} 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                         result_msgs.append(msg)
 
@@ -826,9 +873,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
             try:
                 message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
                 print(message)
-                bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+                send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{code}:close:{trade_result}",
                     parse_mode='HTML'
                 )
             except Exception as te:
@@ -863,7 +908,7 @@ def update_trading_daily_close(nick, trail_price, trail_qty, trail_amt, trail_ra
                 AND trail_day = %s
                 AND trail_dtm = %s
                 AND trail_tp = 'L'
-            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, trade_result, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, _auto_tag(trade_result), datetime.now(), acct_no, code, trail_day, trail_dtm))
             conn.commit()
             cur04.close()
 
@@ -894,7 +939,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
             result_msgs = []
             try:
                 # 매도 : 지정가 / 최유리지정가 주문
-                ord_unpr = "0" if ord_dvsn == "03" else str(int(trail_price))
+                ord_unpr = "0" if ord_dvsn in ("01", "03") else str(int(trail_price))   # 시장가·최유리지정가는 주문단가 0
                 c = order_cash(False, access_token, app_key, app_secret, str(acct_no), code, ord_dvsn, str(int(trail_qty)), ord_unpr)
 
                 if c is not None and c['ODNO'] != "":
@@ -917,7 +962,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
                         d_total_complete_amt = d['tot_ccld_amt'][k]
 
                         print("매도주문 완료")
-                        _ord_desc = "최유리지정가" if ord_dvsn == "03" else "지정가"
+                        _ord_desc = {"01": "시장가", "03": "최유리지정가"}.get(ord_dvsn, "지정가")
                         msg = f"-{nick}-[이탈가 이탈 매도-{d_name}] {_ord_desc} 매도가 : {int(d_order_price):,}원, 매도체결량 : {int(d_total_complete_qty):,}주, 매도체결금액 : {int(d_total_complete_amt):,}원 주문 완료, 주문번호 : <code>{d_order_no}</code>"
                         result_msgs.append(msg)
 
@@ -934,9 +979,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
             try:
                 message = "\n".join(result_msgs) if result_msgs else "대상이 존재하지 않습니다."
                 print(message)
-                bot.send_message(
-                    chat_id=chat_id,
-                    text=message,
+                send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{code}:close:{trade_result}",
                     parse_mode='HTML'
                 )
             except Exception as te:
@@ -971,7 +1014,7 @@ def update_trading_close(nick, trail_price, trail_qty, trail_amt, trail_rate, tr
                 AND trail_day = %s
                 AND trail_dtm = %s
                 AND trail_tp IN ('1', '2')
-            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, trade_result, datetime.now(), acct_no, code, trail_day, trail_dtm))
+            """, (str(d_order_no), d_order_type, d_order_dt, d_order_tmd, int(d_order_price), int(d_order_amount), int(d_total_complete_qty), int(d_remain_qty), trail_price, trail_qty, trail_amt, trail_rate, trail_plan, trail_tp, proc_min, basic_qty, basic_amt, _auto_tag(trade_result), datetime.now(), acct_no, code, trail_day, trail_dtm))
             conn.commit()
             cur04.close()
 
@@ -1132,22 +1175,26 @@ def volume_rate_chk(current_time, vol_ratio, trade_date=""):
 
     return is_volume_satisfied
 
-def get_valid_sell_price(price: int) -> int:
-    """KIS 호가단위 기준으로 price를 유효한 매도 호가로 내림처리."""
+def get_tick_size(price: int) -> int:
+    """KRX 호가가격단위 (2023.01.25 개편, 유가·코스닥 공통)"""
     if price < 2000:
-        tick = 1
+        return 1
     elif price < 5000:
-        tick = 5
-    elif price < 10000:
-        tick = 10
+        return 5
+    elif price < 20000:
+        return 10
     elif price < 50000:
-        tick = 50
-    elif price < 100000:
-        tick = 100
+        return 50
+    elif price < 200000:
+        return 100
     elif price < 500000:
-        tick = 500
-    else:
-        tick = 1000
+        return 500
+    return 1000
+
+def get_valid_sell_price(price: int) -> int:
+    """KRX 호가단위 기준으로 price를 유효한 매도 호가로 내림처리."""
+    price = int(price)
+    tick = get_tick_size(price)
     return (price // tick) * tick
 
 def _read_alert_keys_db(conn, acct_no, stock_code, trail_day, trail_dtm, table="public.trading_trail"):
@@ -1356,9 +1403,9 @@ def get_kis_1min_from_datetime(
             return None
 
         def _l_order_plan(close_price, breach_price):
-            """이탈 매도 주문 방식 (plan_breakdown_sell): 시장 약세 → 현재가 지정가 / 매수1호가 > 이탈가 → 최유리지정가 / 그 외 → 이탈가 지정가
-            반환: (주문구분, 주문(기준)가, 설명)"""
-            return plan_breakdown_sell(stock_code, close_price, breach_price, _short_market_down, access_token, app_key, app_secret)
+            """이탈 매도 주문 방식 (plan_current_sell): 실시간 현재가 지정가 (미체결 시 reorder_pending_auto_sells 2분 재주문)
+            반환: (주문구분, 주문가, 설명)"""
+            return plan_current_sell(stock_code, close_price, breach_price, access_token, app_key, app_secret)
 
         for _, row in df.iterrows():
 
@@ -1431,7 +1478,7 @@ def get_kis_1min_from_datetime(
                                     f" 수익률:{gain_pct:.1f}%, 추세이탈가({_ep:,})원 이탈 즉시 매도 ({_ep_desc})"
                                 )
                                 print(message)
-                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:trend_exit_sell", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -1533,9 +1580,13 @@ def get_kis_1min_from_datetime(
                                 if tenmin_close_b < peak_sell_threshold_L:
                                     sell_trigger = True
                                     sell_price_b = get_valid_sell_price(max(tenmin_close_b, peak_sell_threshold_L))
-                                    sell_reason = f"고점({peak_high_tenmin:,})원 되돌림 임계({peak_sell_threshold_L:,})원 종가 이탈 (매도가:{sell_price_b:,})"
+                                    # 임계가는 하한으로만 사용, 실시간 현재가 기준 지정가 (plan_tenmin_sell)
+                                    sell_ord_dvsn, order_price, _b_desc = plan_tenmin_sell(
+                                        stock_code, sell_price_b, tenmin_close_b, _short_market_down,
+                                        access_token, app_key, app_secret
+                                    )
+                                    sell_reason = f"고점({peak_high_tenmin:,})원 되돌림 임계({peak_sell_threshold_L:,})원 종가 이탈 (주문가 {_b_desc})"
                                     sell_signal_type = "PEAK_RETRACEMENT_B"
-                                    order_price = sell_price_b
 
                         # 발동 불가 상태(peak_to_safety 미충족) fallback: stop_price 이탈 → 10분봉 저가·거래량 대기
                         if not sell_trigger:
@@ -1560,9 +1611,9 @@ def get_kis_1min_from_datetime(
                                             "order_price": close_price,
                                         })                                        
                                         sell_trigger = True
-                                        sell_reason = f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                        sell_ord_dvsn, order_price, _w_desc = _l_order_plan(close_price, fixed_stop)
+                                        sell_reason = f"이탈가({fixed_stop:,})원 이탈 [15%달성·수익률:{gain_pct:.1f}%] (주문가 {_w_desc})"
                                         sell_signal_type = "FIXED_STOP"
-                                        order_price = close_price
 
                                         # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                         _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1575,7 +1626,7 @@ def get_kis_1min_from_datetime(
                                                     f" 15%달성·수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 [시장 약세] 매도 진행"
                                                 )
                                                 print(msg_wait)
-                                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                                send_once(bot, chat_id, msg_wait, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:L_mkt_weak_15pct", parse_mode='HTML')
                                             except Exception as te:
                                                 print(f"텔레그램 발송 실패: {te}")
 
@@ -1601,7 +1652,7 @@ def get_kis_1min_from_datetime(
                                                     f" 15%달성·수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                                 )
                                                 print(msg_wait)
-                                                bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                                send_once(bot, chat_id, msg_wait, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:L_wait_15pct", parse_mode='HTML')
                                             except Exception as te:
                                                 print(f"텔레그램 발송 실패: {te}")
 
@@ -1627,9 +1678,9 @@ def get_kis_1min_from_datetime(
                                     "order_price": close_price,
                                 })                                
                                 sell_trigger = True
-                                sell_reason = f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%] (매도가:{close_price:,})"
+                                sell_ord_dvsn, order_price, _w_desc = _l_order_plan(close_price, fixed_stop)
+                                sell_reason = f"이탈가({fixed_stop:,})원 이탈 [수익률:{gain_pct:.1f}%] (주문가 {_w_desc})"
                                 sell_signal_type = "FIXED_STOP"
-                                order_price = close_price
 
                                 # 중복 알림 방지: 알림 1회 발송 후 재발송 없음
                                 _cur_key_str = current_10min_key.strftime("%Y%m%d%H%M")
@@ -1642,7 +1693,7 @@ def get_kis_1min_from_datetime(
                                             f" 수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 [시장 약세] 매도 진행"
                                         )
                                         print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                        send_once(bot, chat_id, msg_wait, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:L_mkt_weak", parse_mode='HTML')
                                     except Exception as te:
                                         print(f"텔레그램 발송 실패: {te}")
 
@@ -1668,7 +1719,7 @@ def get_kis_1min_from_datetime(
                                             f" 수익률:{gain_pct:.1f}%, 이탈가({fixed_stop:,}) 이탈 감지 → 10분봉 저가 이탈 대기"
                                         )
                                         print(msg_wait)
-                                        bot.send_message(chat_id=chat_id, text=msg_wait, parse_mode='HTML')
+                                        send_once(bot, chat_id, msg_wait, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:L_wait", parse_mode='HTML')
                                     except Exception as te:
                                         print(f"텔레그램 발송 실패: {te}")
 
@@ -1688,15 +1739,9 @@ def get_kis_1min_from_datetime(
                                     f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>]"
                                     f" [사전경고] 종가:{close_price:,}원 하락추세:{_trend_ref_price:,}원 이탈"
                                 )
-                                _cb_data = f"downtrend_sell:{stock_name}:{stock_code}:{basic_qty}"
-                                sell_btn = InlineKeyboardButton(
-                                    text=f"하락추세({_trend_ref_price:,}원) 이탈 전량매도",
-                                    callback_data=_cb_data
-                                )
-                                markup = InlineKeyboardMarkup([[sell_btn]])
+                                # 전량매도 버튼(downtrend_sell:) 미사용 : 통합 봇에서는 콜백 처리 불가
                                 print(msg_warn)
-                                bot.send_message(chat_id=chat_id, text=msg_warn, parse_mode='HTML', reply_markup=markup)
-                                # 콜백 수신은 reservebot.py 의 callback_get 에서 처리 (get_updates 충돌 방지)
+                                send_once(bot, chat_id, msg_warn, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:downtrend_warn", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                             # _w_mkt_data = _mkt_trend_pre
@@ -1741,18 +1786,19 @@ def get_kis_1min_from_datetime(
                             #             print(f"텔레그램 발송 실패: {te}")
 
                 # ===============================
-                # 15:10(또는 11월 19일 16:10) 이후 하락추세 매도
+                # 15:10(또는 11월 19일 16:10) 이후 하락추세 매도 — 제외 (L_DOWNTREND_SELL_1510 = False)
                 # ===============================
                 _downtrend_cutoff = "161000" if trade_date.endswith("1119") else "151000"
-                if (not breakdown_wait["active"] and not sell_trigger and current_time >= _downtrend_cutoff and _trend_down and close_price < _trend_ref_price and not _market_sell_checked and row["dt"] == df["dt"].max()):
+                if (L_DOWNTREND_SELL_1510 and not breakdown_wait["active"] and not sell_trigger and current_time >= _downtrend_cutoff and _trend_down and close_price < _trend_ref_price and not _market_sell_checked and row["dt"] == df["dt"].max()):
                     _market_sell_checked = True
 
                     print(f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[{stock_code}] [장종료전] 종가:{close_price:,}원 하락추세:{_trend_ref_price:,}원 이탈")
-                    _mkt_reason = f"[장종료전] 종가:{close_price:,}원 하락추세:{_trend_ref_price:,}원 이탈"
+                    _dt_dvsn, _dt_price, _dt_desc = _l_order_plan(close_price, int(_trend_ref_price))
+                    _mkt_reason = f"[장종료전] 종가:{close_price:,}원 하락추세:{_trend_ref_price:,}원 이탈 (주문가 {_dt_desc})"
                     try:
                         update_trading_daily_close(
-                            nick, close_price, basic_qty, close_price * basic_qty, round((close_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0,
-                            "100", basic_qty, close_price * basic_qty, acct_no,
+                            nick, _dt_price, basic_qty, _dt_price * basic_qty, round((_dt_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0,
+                            "100", basic_qty, _dt_price * basic_qty, acct_no,
                             access_token, app_key, app_secret,
                             stock_code, stock_name, start_date, start_time, "4",
                             row['시간'].replace(':', '') + '00', _mkt_reason, conn, bot, chat_id
@@ -1763,7 +1809,7 @@ def get_kis_1min_from_datetime(
                                 f"{stock_name}[<code>{stock_code}</code>]"
                                 f" {_mkt_reason}"
                             )
-                            bot.send_message(chat_id=chat_id, text=_msg_mkt, parse_mode='HTML')
+                            send_once(bot, chat_id, _msg_mkt, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:mkt_sell", parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -1774,7 +1820,7 @@ def get_kis_1min_from_datetime(
                         "발생일자": row["일자"],
                         "발생시간": row["시간"], 
                         "매도수량": basic_qty,
-                        "매도가격": close_price,
+                        "매도가격": _dt_price,
                     })
                     return signals
                     # _mkt_data = _mkt_trend_pre
@@ -1868,7 +1914,7 @@ def get_kis_1min_from_datetime(
                                         f" {sell_reason}, {_ord_desc_L} 매도가:{order_price:,}원, 현재가:{close_price:,}원"
                                     )
                                 print(message)
-                                bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:{sell_signal_type}", parse_mode='HTML')
                             except Exception as te:
                                 print(f"텔레그램 발송 실패: {te}")
                     except Exception as e:
@@ -2026,7 +2072,7 @@ def get_kis_1min_from_datetime(
                                 f" 돌파 전 이탈 확정({detail}) → {sell_label} ({price_desc})"
                             )
                             print(message)
-                            bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                            send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:breakdown_before_breakout", parse_mode='HTML')
                         except Exception as te:
                             print(f"텔레그램 발송 실패: {te}")
                 except Exception as e:
@@ -2088,7 +2134,7 @@ def get_kis_1min_from_datetime(
                                         f" 상한가({upper_limit:,})원 도달 → 절반 매도 ({trail_qty:,}주)"
                                     )
                                     print(message)
-                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                    send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:upper_limit_sell", parse_mode='HTML')
                                 except Exception as te:
                                     print(f"텔레그램 발송 실패: {te}")
                         except Exception as e:
@@ -2184,7 +2230,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:exit_price_mkt_weak", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2199,7 +2245,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 최종이탈가({exit_price:,})원 이탈 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:exit_price_wait", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")            
 
@@ -2228,7 +2274,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 [시장 약세] 10분봉 완성 후 매도 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:stop_price_mkt_weak", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2243,7 +2289,7 @@ def get_kis_1min_from_datetime(
                                                         f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 이탈가({stop_price:,})원 이탈 대기"
                                                     )
                                                     print(message)
-                                                    bot.send_message(chat_id=chat_id, text=message, parse_mode='HTML')
+                                                    send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:stop_price_wait", parse_mode='HTML')
                                                 except Exception as te:
                                                     print(f"텔레그램 발송 실패: {te}")
 
@@ -2269,9 +2315,7 @@ def get_kis_1min_from_datetime(
                                                 f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] 목표가 {target_price:,}원 돌파 기준봉 설정, 고가 : {tenmin_state['base_high']:,}원, 저가 : {tenmin_state['base_low']:,}원, 거래량 : {tenmin_state['base_vol']:,}주 "
                                             )
                                             print(message)
-                                            bot.send_message(
-                                                chat_id=chat_id,
-                                                text=message,
+                                            send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:breakout_base:{target_price}",
                                                 parse_mode='HTML'
                                             )
                                         except Exception as te:
@@ -2416,13 +2460,14 @@ def get_kis_1min_from_datetime(
                                     )
 
                                 if sell_trigger:
-                                    # 해당 종목의 시장이 단기 하락인 경우 : 매도주문가 = 현재가, 매도비율 70%
-                                    if _short_market_down:
-                                        order_price = sell_price
-                                        i_trail_plan = trail_plan if trail_plan else "70"
-                                    else:   # 해당 종목의 시장이 단기 상승인 경우 : 매도주문가 = 기준봉저가가 매도가 아래면 매도가 otherwise 기준봉저가, 매도비율 50%
-                                        order_price = sell_price if tenmin_state['base_low'] < sell_price else tenmin_state['base_low']
-                                        i_trail_plan = trail_plan if trail_plan else "50"
+                                    # 매도주문가: 조건별 매도가(sell_price)는 하한으로만 사용, 실시간 현재가 기준 지정가 (plan_tenmin_sell)
+                                    # 매도비율: 시장 단기 하락 70% / 그 외 50%
+                                    sell_ord_dvsn, order_price, price_desc = plan_tenmin_sell(
+                                        stock_code, sell_price, tenmin_close, _short_market_down,
+                                        access_token, app_key, app_secret
+                                    )
+                                    sell_reason = f"{sell_reason} → 주문가 {price_desc}"
+                                    i_trail_plan = trail_plan if trail_plan else ("70" if _short_market_down else "50")
                                     trail_rate = round((100 - (order_price / basic_price) * 100) * -1, 2) if basic_price > 0 else 0
                                     trail_qty = int(basic_qty * int(i_trail_plan) * 0.01)
                                     trail_amt = order_price * trail_qty
@@ -2431,7 +2476,7 @@ def get_kis_1min_from_datetime(
 
                                     if basic_qty == trail_qty:
                                         try:
-                                            result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료', conn, bot, chat_id)
+                                            result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "4", row['시간'].replace(':', '')+'00', '수익완료', conn, bot, chat_id, ord_dvsn=sell_ord_dvsn)
                                             if result:
                                                 if verbose:
                                                     try:
@@ -2439,9 +2484,7 @@ def get_kis_1min_from_datetime(
                                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                         )
                                                         print(message)
-                                                        bot.send_message(
-                                                            chat_id=chat_id,
-                                                            text=message,
+                                                        send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:profit_complete",
                                                             parse_mode='HTML'
                                                         )
                                                     except Exception as te:
@@ -2451,7 +2494,7 @@ def get_kis_1min_from_datetime(
 
                                     else:
                                         try:
-                                            result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진', conn, bot, chat_id)
+                                            result = update_trading_close(nick, order_price, trail_qty, trail_amt, trail_rate, i_trail_plan, u_basic_qty, u_basic_amt, acct_no, access_token, app_key, app_secret, stock_code, stock_name, start_date, start_time, "3", row['시간'].replace(':', '')+'00', '안전마진', conn, bot, chat_id, ord_dvsn=sell_ord_dvsn)
                                             if result:
                                                 if verbose:
                                                     try:
@@ -2459,9 +2502,7 @@ def get_kis_1min_from_datetime(
                                                             f"-{nick}-[{row['일자']}-{row['시간']}]{stock_name}[<code>{stock_code}</code>] {sell_reason} (10분봉 종가:{tenmin_close:,}원, 저가:{tenmin_low:,}원), 거래량:{tenmin_vol:,}주"
                                                         )
                                                         print(message)
-                                                        bot.send_message(
-                                                            chat_id=chat_id,
-                                                            text=message,
+                                                        send_once(bot, chat_id, message, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:safety_margin",
                                                             parse_mode='HTML'
                                                         )
                                                     except Exception as te:
@@ -2558,13 +2599,241 @@ def cancel_nxt_pending_orders(nick, ac, bot, chat_id):
                 msg = f"-{nick}- {nxt_name}[<code>{nxt_code}</code>] NXT {sll_buy_name} 미체결 취소 실패 (주문번호:{odno}, 잔량:{rmn_qty}주)"
             print(msg)
             try:
-                bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{nxt_code}:{odno}:nxt_cancel", parse_mode='HTML')
             except Exception as te:
                 print(f"텔레그램 발송 실패: {te}")
 
             time.sleep(0.3)
     except Exception as e:
         print(f"[{nick}] NXT 미체결 주문 전량 취소 처리 오류: {e}")
+
+TENMIN_SELL_REORDER_SEC = 120   # 자동 매도 미체결 재주문 간격 (backtest_sell_reorder.py: 2분 최적)
+REORDER_PENDING_SELLS = False   # 자동 매도 미체결 2분 재주문 (제외)
+
+def reorder_pending_auto_sells(nick, ac, bot, chat_id, conn, reorder_sec=TENMIN_SELL_REORDER_SEC):
+    """
+    이 스크립트 자동 매도주문(trade_result '[AUTO] ...' — trail_tp '1','2' 조건 D/A/B/C·이탈 매도, trail_tp 'L' 전 경로) 미체결 재주문
+    (표식 도입 전 기록된 '수익완료'/'안전마진' 도 포함, reservebot 수동 매도는 표식이 없어 제외)
+    주문시각(order_tmd) 이후 reorder_sec 경과 + 잔량(rmn_qty) 존재 시 → 기존 주문 취소 후 현재가 지정가 재주문
+    (재주문 후 order_no·order_tmd 갱신 → 다시 reorder_sec 경과 시 반복, 15:20 이후는 cleanup_pending_sell_orders 가 정리)
+    """
+    acct_no      = ac['acct_no']
+    access_token = ac['access_token']
+    app_key      = ac['app_key']
+    app_secret   = ac['app_secret']
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT code, name, trail_day, trail_dtm, order_no, order_tmd, COALESCE(basic_price, 0)
+            FROM public.trading_trail
+            WHERE acct_no = %s
+              AND trail_day = %s
+              AND trail_tp IN ('3', '4')
+              AND (trade_result LIKE %s OR trade_result IN ('수익완료', '안전마진'))
+              AND order_no IS NOT NULL
+              AND COALESCE(order_tmd, '') <> ''
+        """, (acct_no, today, AUTO_SELL_TAG.strip() + '%'))
+        rows = cur.fetchall()
+        cur.close()
+    except Exception as e:
+        print(f"[{nick}] 미체결 재주문 DB 조회 오류: {e}")
+        return
+
+    now = datetime.now()
+    for stock_code, stock_name, trail_day, trail_dtm, order_no, order_tmd, basic_price in rows:
+        try:
+            ord_dt = datetime.strptime(today + str(order_tmd).zfill(6)[:6], "%Y%m%d%H%M%S")
+            if (now - ord_dt).total_seconds() < reorder_sec:
+                continue
+
+            output1 = get_my_complete(access_token, app_key, app_secret, acct_no, stock_code, str(order_no))
+            if not output1:
+                continue
+            df = pd.DataFrame(output1)
+
+            for i in df.index:
+                sll_buy_name = str(df.loc[i, 'sll_buy_dvsn_cd_name']) if 'sll_buy_dvsn_cd_name' in df.columns else ''
+                rmn_qty      = int(df.loc[i, 'rmn_qty'])               if 'rmn_qty'              in df.columns else 0
+                cncl_yn      = str(df.loc[i, 'cncl_yn'])               if 'cncl_yn'              in df.columns else ''
+                odno         = str(df.loc[i, 'odno'])                  if 'odno'                 in df.columns else str(order_no)
+                excg_id      = df.loc[i, 'excg_id_dvsn_cd']            if 'excg_id_dvsn_cd'      in df.columns else None
+                old_price    = int(float(df.loc[i, 'ord_unpr']))       if 'ord_unpr'             in df.columns else 0
+
+                if sll_buy_name.startswith(('매도정정', '매도취소')):
+                    continue
+                if rmn_qty <= 0 or cncl_yn == 'Y':
+                    continue
+
+                current_price = get_valid_sell_price(_get_current_price_quick(stock_code, access_token, app_key, app_secret))
+                if current_price <= 0:
+                    print(f"[{nick}] {stock_name}({stock_code}) 재주문 현재가 조회 실패 → 다음 실행 시 재시도")
+                    continue
+
+                # ── 1. 기존 매도주문 취소 ──
+                cancel_result = order_cancel_revice(access_token, app_key, app_secret, acct_no, "02", odno, "0", "0", excg_id)
+                if cancel_result is None or cancel_result.get('ODNO', '') == '':
+                    # 취소 실패 = 그 사이 전량 체결 등 → 다음 실행 시 재확인
+                    print(f"[{nick}] {stock_name}({stock_code}) 미체결 재주문 - 취소 실패(주문번호:{odno}, 잔량:{rmn_qty}주)")
+                    continue
+                time.sleep(0.5)
+
+                # ── 2. 현재가 지정가 재주문 ──
+                sell_result = order_cash(False, access_token, app_key, app_secret, acct_no, stock_code, "00", str(rmn_qty), str(current_price))
+                new_order_no = sell_result.get('ODNO', '') if sell_result is not None else ''
+                if not new_order_no:
+                    msg = (f"-{nick}- {stock_name}[<code>{stock_code}</code>] 미체결 잔량({rmn_qty}주) 취소 후"
+                           f" 현재가({current_price:,}원) 재매도 실패")
+                    print(msg)
+                    try:
+                        send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:reorder_fail", parse_mode='HTML')
+                    except Exception as te:
+                        print(f"텔레그램 발송 실패: {te}")
+                    continue
+
+                _proc_min   = datetime.now().strftime('%H%M%S')
+                _trail_rate = round((current_price / basic_price - 1) * 100, 2) if basic_price > 0 else 0
+                msg = (f"-{nick}- {stock_name}[<code>{stock_code}</code>] {reorder_sec // 60}분 미체결 잔량({rmn_qty}주)"
+                       f" {old_price:,}원 → 현재가({current_price:,}원) 재매도 (신규주문:<code>{new_order_no}</code>)")
+                print(msg)
+                try:
+                    send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:{new_order_no}:reorder", parse_mode='HTML')
+                except Exception as te:
+                    print(f"텔레그램 발송 실패: {te}")
+
+                try:
+                    cur_upd = conn.cursor()
+                    cur_upd.execute("""
+                        UPDATE public.trading_trail
+                        SET order_no    = %s
+                          , order_price = %s
+                          , order_tmd   = %s
+                          , trail_price = %s
+                          , trail_rate  = %s
+                          , trail_amt   = %s
+                          , proc_min    = %s
+                          , mod_dt      = %s
+                        WHERE acct_no   = %s AND code      = %s
+                          AND trail_day = %s AND trail_dtm = %s
+                          AND trail_tp IN ('3', '4')
+                    """, (new_order_no, current_price, _proc_min, current_price, _trail_rate,
+                          current_price * rmn_qty, _proc_min, datetime.now(),
+                          acct_no, stock_code, trail_day, trail_dtm))
+                    conn.commit()
+                    cur_upd.close()
+                except Exception as de:
+                    conn.rollback()
+                    print(f"[{nick}] {stock_code} 재주문 order_no 갱신 오류: {de}")
+
+            time.sleep(0.3)
+
+        except Exception as e:
+            print(f"[{nick}] {stock_name}({stock_code}) 미체결 재주문 오류: {e}")
+
+
+def _get_closing_auction_quote(stock_code: str, access_token: str, app_key: str, app_secret: str) -> dict:
+    """장마감 동시호가 시세: 예상체결가·예상체결량(호가 API output2), 현재가·누적거래량(현재가 API). 실패 항목은 0."""
+    q = {"antc_cnpr": 0, "antc_vol": 0, "stck_prpr": 0, "acml_vol": 0}
+    try:
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn",
+            headers={"Content-Type": "application/json", "authorization": f"Bearer {access_token}",
+                     "appKey": app_key, "appSecret": app_secret, "tr_id": "FHKST01010200", "custtype": "P"},
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output2'):
+            q["antc_cnpr"] = int(float(d['output2'].get('antc_cnpr') or 0))
+            q["antc_vol"]  = int(float(d['output2'].get('antc_vol') or 0))
+    except Exception:
+        pass
+    try:
+        res = requests.get(
+            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
+            headers={"Content-Type": "application/json", "authorization": f"Bearer {access_token}",
+                     "appkey": app_key, "appsecret": app_secret, "tr_id": "FHKST01010100", "custtype": "P"},
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": stock_code},
+            verify=False, timeout=10
+        )
+        d = res.json()
+        if d.get('rt_cd') == '0' and d.get('output'):
+            q["stck_prpr"] = int(d['output'].get('stck_prpr') or 0)
+            q["acml_vol"]  = int(d['output'].get('acml_vol') or 0)
+    except Exception:
+        pass
+    return q
+
+
+def closing_auction_prevlow_sell(nick, ac, bot, chat_id, conn):
+    """
+    15:21(수능일 16:21) 장마감 동시호가 — trail_tp 'L' 보유 종목 일봉상 오종전저(오늘 종가 < 전일 저가) 시장가 전량 매도
+    - 오늘 종가: 동시호가 예상체결가(antc_cnpr), 없으면 현재가
+    - 거래량 조건: 일봉 예상 거래량(누적거래량 + 예상체결량) > 전일 거래량 50%
+    - 주문: 기존 매도주문 취소 후 보유수량(basic_qty) 전량 시장가(01) → 종가 단일가로 체결
+    - 주문 성공 시 trail_tp 'L' → '4' (update_trading_daily_close) 로 재주문되지 않음
+    """
+    acct_no      = ac['acct_no']
+    access_token = ac['access_token']
+    app_key      = ac['app_key']
+    app_secret   = ac['app_secret']
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT code, name, trail_day, trail_dtm, COALESCE(basic_price, 0), COALESCE(basic_qty, 0)
+            FROM public.trading_trail
+            WHERE acct_no = %s AND trail_day = %s AND trail_tp = 'L' AND COALESCE(basic_qty, 0) > 0
+            ORDER BY code, trail_dtm DESC
+        """, (acct_no, today))
+        rows = cur.fetchall()
+        cur.close()
+    except Exception as e:
+        print(f"[{nick}] 동시호가 오종전저 DB 조회 오류: {e}")
+        return
+
+    _done = set()
+    for stock_code, stock_name, trail_day, trail_dtm, basic_price, basic_qty in rows:
+        if stock_code in _done:
+            continue
+        _done.add(stock_code)
+        try:
+            prev = get_prev_day_info(stock_code, today, access_token, app_key, app_secret, conn)
+            if not prev or not prev.get('low_price'):
+                print(f"[{nick}] {stock_name}({stock_code}) 동시호가 오종전저 - 전일 일봉 없음 → 건너뜀")
+                continue
+            prev_low, prev_vol = int(prev['low_price']), int(prev.get('volume') or 0)
+
+            q = _get_closing_auction_quote(stock_code, access_token, app_key, app_secret)
+            close_est = q["antc_cnpr"] if q["antc_cnpr"] > 0 else q["stck_prpr"]
+            vol_est = q["acml_vol"] + q["antc_vol"]
+            if close_est <= 0:
+                print(f"[{nick}] {stock_name}({stock_code}) 동시호가 오종전저 - 예상체결가·현재가 조회 실패 → 다음 실행 시 재시도")
+                continue
+            if not (close_est < prev_low and vol_est > int(prev_vol / 2)):
+                continue
+
+            basic_price, basic_qty = int(basic_price), int(basic_qty)
+            _src = "예상체결가" if q["antc_cnpr"] > 0 else "현재가"
+            trail_rate = round((close_est / basic_price - 1) * 100, 2) if basic_price > 0 else 0
+            reason = (f"동시호가 오종전저 시장가 매도 - {_src}:{close_est:,}원 < 전일저가:{prev_low:,}원,"
+                      f" 예상거래량:{vol_est:,}주 > 전일거래량 50%:{int(prev_vol / 2):,}주")
+            print(f"-{nick}- {stock_name}[{stock_code}] {reason}")
+            result = update_trading_daily_close(
+                nick, close_est, basic_qty, close_est * basic_qty, trail_rate, "100", 0, 0, acct_no,
+                access_token, app_key, app_secret, stock_code, stock_name, trail_day, trail_dtm, "4",
+                datetime.now().strftime('%H%M%S'), reason, conn, bot, chat_id, ord_dvsn="01"
+            )
+            try:
+                msg = (f"-{nick}- {stock_name}[<code>{stock_code}</code>] {reason}, 매도량:{basic_qty:,}주, 수익률:{trail_rate:+.2f}%"
+                       f"{'' if result else ' [주문 처리 실패]'}")
+                send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:closing_prevlow", parse_mode='HTML')
+            except Exception as te:
+                print(f"텔레그램 발송 실패: {te}")
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"[{nick}] {stock_name}({stock_code}) 동시호가 오종전저 매도 오류: {e}")
+
 
 def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
     """
@@ -2650,7 +2919,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:{odno}:1520_cancel_fail", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
                     continue
@@ -2675,7 +2944,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:1520_resell", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
 
@@ -2718,7 +2987,7 @@ def cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn):
                     )
                     print(msg)
                     try:
-                        bot.send_message(chat_id=chat_id, text=msg, parse_mode='HTML')
+                        send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{stock_code}:1520_resell_fail", parse_mode='HTML')
                     except Exception as te:
                         print(f"텔레그램 발송 실패: {te}")
 
@@ -2779,8 +3048,8 @@ def process_account(nick):
     try:
         ac = account(nick, conn_acct)
         acct_no = ac['acct_no']
-        token = ac['bot_token2']
-        chat_id = ac['chat_id']
+        # 텔레그램 전송 대상 : fnguidePerformbot(kwphills75) 봇/채팅으로 통일 (계좌별 봇 미사용)
+        token, chat_id = get_alert_target()
         _chat_id = chat_id
 
         # Bot 인스턴스를 계좌당 1회만 생성
@@ -2898,6 +3167,13 @@ def process_account(nick):
             conn_acct.commit()
             cur_balance.close()
 
+        # 15:21~15:29(수능일 16:21~16:29) 장마감 동시호가: trail_tp 'L' 일봉상 오종전저 시장가 전량 매도
+        # (매매추적 조회 전에 수행 → 매도된 종목은 trail_tp '4' 로 이번 실행 종목별 처리에서 제외)
+        _ca_hhmm = datetime.now().strftime('%H%M')
+        _ca_start, _ca_end = ('1621', '1630') if today.endswith("1119") else ('1521', '1530')
+        if _ca_start <= _ca_hhmm < _ca_end:
+            closing_auction_prevlow_sell(nick, ac, bot, chat_id, conn_acct)
+
         # 매매추적 조회
         cur200 = conn_acct.cursor()
         cur200.execute("select code, name, trail_day, trail_dtm, target_price, stop_price, basic_price, COALESCE(basic_qty, 0), CASE WHEN trail_tp = 'L' THEN 'L' ELSE trail_tp END, trail_plan, proc_min, volumn, trade_tp, exit_price from public.trading_trail where acct_no = '" + str(acct_no) + "' and trail_tp in ('1', '2', 'L') and trail_day = '" + today + "' and to_char(to_timestamp(proc_min, 'HH24MISS') + interval '5 minutes', 'HH24MISS') <= to_char(now(), 'HH24MISS') and basic_qty > 0 order by code, proc_min, mod_dt")
@@ -2928,6 +3204,9 @@ def process_account(nick):
             # 수능일인 경우, 16:20~16:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
             if '1620' <= _now_hhmm < '1623':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
+            # 10:10~16:20 10분봉 조건(D/A/B/C) 매도 미체결 2분 경과 시 현재가 재주문
+            if REORDER_PENDING_SELLS and '1010' <= _now_hhmm < '1620':
+                reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
         else:
             # 09:00~09:02 NXT 매수/매도 미체결 주문 전량 취소 (종목별 처리와 별개로 수행)
             if '0900' <= _now_hhmm < '0903':
@@ -2935,6 +3214,9 @@ def process_account(nick):
             # 15:20~15:22 미체결 매도주문 정리 (종목별 처리와 별개로 수행)
             if '1520' <= _now_hhmm < '1523':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
+            # 09:10~15:20 10분봉 조건(D/A/B/C) 매도 미체결 2분 경과 시 현재가 재주문
+            if REORDER_PENDING_SELLS and '0910' <= _now_hhmm < '1520':
+                reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
 
         trade_date = today
         if result_two00:
@@ -2964,7 +3246,7 @@ def process_account(nick):
         print(f"[{nick}] 계좌 처리 오류: {e}")
         if _bot and _chat_id:
             try:
-                _bot.send_message(chat_id=_chat_id, text=f"⚠️ [{nick}] 계좌 처리 오류\n{e}")
+                send_once(_bot, _chat_id, f"⚠️ [{nick}] 계좌 처리 오류\n{e}", 'trail_vol_state')
             except Exception:
                 pass
     finally:
