@@ -2608,6 +2608,7 @@ def cancel_nxt_pending_orders(nick, ac, bot, chat_id):
         print(f"[{nick}] NXT 미체결 주문 전량 취소 처리 오류: {e}")
 
 TENMIN_SELL_REORDER_SEC = 120   # 자동 매도 미체결 재주문 간격 (backtest_sell_reorder.py: 2분 최적)
+REORDER_PENDING_SELLS = False   # 자동 매도 미체결 2분 재주문 (제외)
 
 def reorder_pending_auto_sells(nick, ac, bot, chat_id, conn, reorder_sec=TENMIN_SELL_REORDER_SEC):
     """
@@ -3204,7 +3205,7 @@ def process_account(nick):
             if '1620' <= _now_hhmm < '1623':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
             # 10:10~16:20 10분봉 조건(D/A/B/C) 매도 미체결 2분 경과 시 현재가 재주문
-            if '1010' <= _now_hhmm < '1620':
+            if REORDER_PENDING_SELLS and '1010' <= _now_hhmm < '1620':
                 reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
         else:
             # 09:00~09:02 NXT 매수/매도 미체결 주문 전량 취소 (종목별 처리와 별개로 수행)
@@ -3214,7 +3215,7 @@ def process_account(nick):
             if '1520' <= _now_hhmm < '1523':
                 cleanup_pending_sell_orders(nick, ac, bot, chat_id, conn_acct)
             # 09:10~15:20 10분봉 조건(D/A/B/C) 매도 미체결 2분 경과 시 현재가 재주문
-            if '0910' <= _now_hhmm < '1520':
+            if REORDER_PENDING_SELLS and '0910' <= _now_hhmm < '1520':
                 reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
 
         trade_date = today

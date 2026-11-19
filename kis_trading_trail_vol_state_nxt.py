@@ -1375,6 +1375,7 @@ def get_kis_1min_from_datetime(
 
 
 TENMIN_SELL_REORDER_SEC = 120   # 주문 후 최소 경과 시간 (kis_trading_trail_vol_state.py 와 동일 2분)
+REORDER_PENDING_SELLS = False   # 자동 매도 미체결 체결회차 경과 후 재주문 (제외)
 OVTM_RESULT_DELAY_SEC = 60      # 단일가 체결 후 체결내역 반영 대기
 
 def reorder_pending_auto_sells(nick, ac, bot, chat_id, conn):
@@ -1676,7 +1677,8 @@ def process_account(nick):
             result_two00 = _filtered_two00
 
         # 10분봉 조건(D/A/B/C) 시간외단일가 매도 미체결 → 체결 회차 경과 후 현재가 재주문 (종목별 처리와 별개로 수행)
-        reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
+        if REORDER_PENDING_SELLS:
+            reorder_pending_auto_sells(nick, ac, bot, chat_id, conn_acct)
 
         if result_two00:
             # 일봉 데이터 사전 조회 (캐시 워밍업 - 순차 처리로 rate limit 방지)
