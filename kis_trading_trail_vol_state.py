@@ -730,6 +730,13 @@ def plan_current_sell(stock_code: str, close_price: int, breach_price: int,
 
 L_DOWNTREND_SELL_1510 = False   # trail_tp 'L' 15:10 이후 하락추세 기준가 이탈 매도 (제외)
 
+SELL_WAIT_DELAY_MIN = 3   # trail_tp '1' 돌파 전 이탈가·최종이탈가 이탈 대기 메시지 후 매도 주문까지 최소 경과 분 (1분봉 시각 기준)
+
+def _sell_wait_elapsed(wait: dict, row_dt) -> bool:
+    """매도 대기 등록 1분봉 시각 + SELL_WAIT_DELAY_MIN 분 이후 1분봉에서만 대기 기반 매도 허용 (등록 시각 없으면 허용)"""
+    w = wait.get("wait_dt")
+    return w is None or row_dt >= w + timedelta(minutes=SELL_WAIT_DELAY_MIN)
+
 AUTO_SELL_TAG = "[AUTO] "   # 이 스크립트 자동 매도 표식 (trade_result) → 미체결 재주문 대상 식별, 수동 매도(reservebot)와 구분
 
 def _auto_tag(trade_result) -> str:
@@ -2031,6 +2038,7 @@ def get_kis_1min_from_datetime(
                 "sell_label": "",            # 매도 사유 ('손절매도' / '이탈매도')
                 "sell_on_candle_close": False,  # True: 10분봉 완성 시점에 즉시 매도 (_short_market_down 케이스)
                 "last_alert_tenmin_key": _cached_alert_key_1,  # 스케줄러 재호출 간 유지 (10분 중복 방지)
+                "wait_dt": None,             # 매도 대기 등록(대기 메시지) 1분봉 시각 → SELL_WAIT_DELAY_MIN 경과 후 매도
             }
 
             _vol_1min_1 = df["거래량"].astype(int)
@@ -2164,16 +2172,18 @@ def get_kis_1min_from_datetime(
                                     if current_10min_key_1 == breakdown_wait_1["tenmin_key"]:
                                         # 2단계: 진행 중 10분봉 경과분 비례 거래량 조기 확인
                                         _detail_1 = _confirm_early_vol_1(current_10min_key_1, row["dt"])
-                                        if _detail_1:
+                                        if _detail_1 and _sell_wait_elapsed(breakdown_wait_1, row["dt"]):
                                             return _sell_breakdown_1(row, close_price, breakdown_check, _detail_1)
                                     else:
                                         # sell_on_candle_close: _short_market_down 이탈가 이탈 → 해당 10분봉 완성 시 즉시 매도
                                         # (tenmin_low 이탈 대기 없이 봉 완성 시점에 현재가로 매도)
+                                        # 대기 메시지 후 SELL_WAIT_DELAY_MIN 경과 전이면 대기 유지 (저가·거래량 확정 단계 미수행 → 대기 해제 방지)
                                         if breakdown_wait_1.get("sell_on_candle_close"):
-                                            return _sell_breakdown_1(row, close_price, breakdown_check, "[시장 약세] 이탈 10분봉 완성")
+                                            if _sell_wait_elapsed(breakdown_wait_1, row["dt"]):
+                                                return _sell_breakdown_1(row, close_price, breakdown_check, "[시장 약세] 이탈 10분봉 완성")
 
                                         # 3단계: 이탈 발생 10분봉 완성 → 저가·거래량 확정
-                                        if breakdown_wait_1["tenmin_low"] is None:
+                                        elif breakdown_wait_1["tenmin_low"] is None:
                                             trigger_key_1 = breakdown_wait_1["tenmin_key"]
                                             trigger_bars_1 = df[df["dt"].apply(get_10min_key) == trigger_key_1]
                                             if not trigger_bars_1.empty:
@@ -2196,7 +2206,7 @@ def get_kis_1min_from_datetime(
                                                     })
 
                                     # 현재 분봉 저가가 이탈 10분봉 저가 이탈 시 매도
-                                    if breakdown_wait_1["tenmin_low"] is not None and low_price < breakdown_wait_1["tenmin_low"]:
+                                    if breakdown_wait_1["tenmin_low"] is not None and low_price < breakdown_wait_1["tenmin_low"] and _sell_wait_elapsed(breakdown_wait_1, row["dt"]):
                                         _detail_1 = (
                                             f"10분봉저가({breakdown_wait_1['tenmin_low']:,}) 이탈, "
                                             f"이탈봉:{breakdown_wait_1['tenmin_vol']:,}주/직전20봉평균:{breakdown_wait_1['tenmin_avg_vol']:,}주"
@@ -2211,6 +2221,7 @@ def get_kis_1min_from_datetime(
                                         breakdown_wait_1.update({
                                             "active": True,
                                             "tenmin_key": current_10min_key_1,
+                                            "wait_dt": row["dt"],            # 매도 대기 등록(대기 메시지) 1분봉 시각
                                             "tenmin_low": None,
                                             "tenmin_vol_ok": None,
                                             "sell_label": "최종이탈가 매도",
@@ -2255,6 +2266,7 @@ def get_kis_1min_from_datetime(
                                         breakdown_wait_1.update({
                                             "active": True,
                                             "tenmin_key": current_10min_key_1,
+                                            "wait_dt": row["dt"],            # 매도 대기 등록(대기 메시지) 1분봉 시각
                                             "tenmin_low": None,
                                             "tenmin_vol_ok": None,
                                             "sell_label": "이탈가 매도",
