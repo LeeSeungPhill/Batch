@@ -398,16 +398,28 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
                 low_price = int(f['stck_lwpr'])                 # 최저가
                 current_price = int(f['stck_prpr'])             # 종가
                 volumn = int(f['acml_vol'])                     # 누적거래량
-                volumn_rate = float(f['prdy_vrss_vol_rate'])    # 전일대비거래량비율  
+                volumn_rate = float(f['prdy_vrss_vol_rate'])    # 전일대비거래량비율
             except Exception as ex:
-                print(f"현재가 시세 에러 : [{code}] {ex}")          
-        
+                print(f"현재가 시세 에러 : [{code}] {ex}")
+
         watch_type = i[8]                                   # 관심유형
         main_business = i[9]                                # 주요사업
+
+        # 시장구분, 규모, 업종, 시가총액은 현재 시세 기준으로 설정 (조회 실패 시 관심종목 저장값 사용)
         market = i[10]                                      # 시장구분
         size = i[11]                                        # 규모
         industry = i[12]                                    # 업종
-        mktcap = i[13]                                      # 시가총액
+        mktcap = i[13]                                      # 시가총액(억원)
+        if isinstance(f, dict) and f.get('hts_avls'):
+            market = f.get('rprs_mrkt_kor_name') or market
+            industry = f.get('bstp_kor_isnm') or industry
+            try:
+                mktcap = int(str(f['hts_avls']).replace(',', ''))
+                if   mktcap >= 10000: size = '대형주'
+                elif mktcap >= 3000:  size = '중형주'
+                else:                 size = '소형주'
+            except Exception:
+                pass
 
         insert_query22 = "with upsert as (update dly_stock_interest set current_price = %s, open_price = %s, high_price = %s, low_price = %s, volumn = %s, volumn_rate = %s, through_price = %s, leave_price = %s, resist_price = %s, support_price = %s, trend_high_price = %s, trend_low_price = %s, watch_type = %s, main_business = %s, market = %s, size = %s, industry = %s, mktcap = %s, last_chg_date = %s where dt = %s and code = %s and acct = %s returning * ) insert into dly_stock_interest(acct, dt, name, code, current_price, open_price, high_price, low_price, volumn, volumn_rate, through_price, leave_price, resist_price, support_price, trend_high_price, trend_low_price, watch_type, main_business, market, size, industry, mktcap, last_chg_date) select %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s where not exists(select * from upsert)"
         # insert 인자값 설정
@@ -417,7 +429,14 @@ def trading_proc(access_token, app_key, app_secret, acct_no):
             watch_type, main_business, market, size, industry, mktcap, datetime.now()])
         # DB 연결된 커서의 쿼리 수행
         cur22.execute(insert_query22, record_to_insert22)
-        conn.commit()    
+
+        # 관심종목 테이블에도 현재 기준 시장구분, 규모, 업종, 시가총액 반영
+        cur22.execute("""
+            UPDATE "interestItem_interest_item"
+            SET market = %s, size = %s, industry = %s, mktcap = %s
+            WHERE acct_no = %s AND interest_day = %s AND code = %s
+        """, (market, size, industry, mktcap, str(acct_no), today, code))
+        conn.commit()
 
     cur1.close()
     cur11.close()
