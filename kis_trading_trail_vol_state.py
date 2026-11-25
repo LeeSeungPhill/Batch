@@ -2743,6 +2743,65 @@ def reorder_pending_auto_sells(nick, ac, bot, chat_id, conn, reorder_sec=TENMIN_
             print(f"[{nick}] {stock_name}({stock_code}) 미체결 재주문 오류: {e}")
 
 
+AVG_CHANGE_TARGET_RATE = 0.05   # 보유단가 변경 시 목표가 = 보유단가 × (1 + 5%)
+
+def ceil_to_tick(price) -> int:
+    """KRX 호가단위 기준 올림"""
+    p = int(-(-float(price) // 1))
+    tick = get_tick_size(p)
+    return -(-p // tick) * tick
+
+def update_target_on_avg_change(nick, c, acct_no, conn, bot, chat_id):
+    """잔고 보유단가가 매매추적(trail_tp '1') basic_price 와 다르면 변경 보유단가 기준 +5% 목표가로 재설정
+    - 기존 basic_price 가 없거나 0 이면(최초 체결) 변경으로 보지 않음
+    - 보유수량 0 종목 제외"""
+    try:
+        bal = {}
+        for i in range(len(c)):
+            if int(c['hldg_qty'][i]) > 0 and float(c['pchs_avg_pric'][i]) > 0:
+                bal[c['pdno'][i]] = (float(c['pchs_avg_pric'][i]), c['prdt_name'][i])
+        if not bal:
+            return
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT code, trail_dtm, COALESCE(basic_price, 0), COALESCE(target_price, 0)
+            FROM public.trading_trail
+            WHERE acct_no = %s AND trail_day = %s AND trail_tp = '1'
+        """, (acct_no, today))
+        rows = cur.fetchall()
+        changed = []
+        for code, trail_dtm, old_basic, old_target in rows:
+            if code not in bal or int(old_basic) <= 0:
+                continue
+            new_avg, name = bal[code]
+            if abs(new_avg - int(old_basic)) < 1:
+                continue
+            new_target = ceil_to_tick(new_avg * (1 + AVG_CHANGE_TARGET_RATE))
+            if new_target == int(old_target):
+                continue
+            cur.execute("""
+                UPDATE public.trading_trail SET target_price = %s, mod_dt = %s
+                WHERE acct_no = %s AND code = %s AND trail_day = %s AND trail_dtm = %s AND trail_tp = '1'
+            """, (new_target, datetime.now(), acct_no, code, today, trail_dtm))
+            changed.append((code, name, int(old_basic), new_avg, int(old_target), new_target))
+        conn.commit()
+        cur.close()
+        for code, name, old_basic, new_avg, old_target, new_target in changed:
+            msg = (f"-{nick}- {name}[<code>{code}</code>] 보유단가 변경 {old_basic:,}원 → {int(round(new_avg)):,}원,"
+                   f" 목표가 {old_target:,}원 → {new_target:,}원(보유단가 +{AVG_CHANGE_TARGET_RATE * 100:.0f}%)")
+            print(msg)
+            try:
+                send_once(bot, chat_id, msg, 'trail_vol_state', resend_minutes=10, dedup_key=f"{code}:avg_target:{new_target}", parse_mode='HTML')
+            except Exception as te:
+                print(f"텔레그램 발송 실패: {te}")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        print(f"[{nick}] 보유단가 변경 목표가 재설정 오류: {e}")
+
+
 def _get_closing_auction_quote(stock_code: str, access_token: str, app_key: str, app_secret: str) -> dict:
     """장마감 동시호가 시세: 예상체결가·예상체결량(호가 API output2), 현재가·누적거래량(현재가 API). 실패 항목은 0."""
     q = {"antc_cnpr": 0, "antc_vol": 0, "stck_prpr": 0, "acml_vol": 0}
@@ -3154,6 +3213,12 @@ def process_account(nick):
         """, (datetime.now(), acct_no, today))
         conn_acct.commit()
         cur_dedup.close()
+
+        # 2-0) 보유단가 변경 시 목표가 재설정 (basic_price 현행화 전에 기존 값과 비교)
+        #  - 대상: trail_tp '1'(목표가 돌파 전) — '2' 는 target_price 가 돌파 후 고점(기준봉 상태), 'L' 은 목표가 미사용
+        #  - 잔고 보유단가(pchs_avg_pric)가 매매추적 basic_price 와 1원 이상 다르면 목표가 = 변경 보유단가 × 1.05 (호가단위 올림)
+        if len(c) > 0:
+            update_target_on_avg_change(nick, c, acct_no, conn_acct, bot, chat_id)
 
         # 2) 잔고 데이터로 매매추적 최종건 basic_price, basic_qty, basic_amt 현행화 (배치 처리)
         if len(c) > 0:
