@@ -178,6 +178,7 @@ g_buy21_loss_buy_amt = 0     # 손절금액 기준 매수금액
 g_buy21_amt_buy_qty = 0      # 매수금액 기준 매수량
 g_buy21_amt_buy_amt = 0      # 매수금액 기준 매수금액
 g_buy21_short_buy_qty = 0    # 단기시장 기준 매수량
+g_buy21_market = False       # 동시호가 시간대 매수가 0 입력 → 시장가 주문 여부
 
 # 보유종목 매도 수량
 g_holding_sell_qty = 0
@@ -245,6 +246,7 @@ g_kk_field = ""   # 수정할 필드명
 g_trail71_code = ""
 g_trail71_company = ""
 g_trail71_buy_price = 0
+g_trail71_market = False     # 동시호가 시간대 매수가 0 입력 → 시장가 주문 여부
 g_trail71_loss_price = 0
 g_trail71_item_loss_sum = ""
 g_trail71_buy_qty = 0
@@ -262,6 +264,7 @@ _trail71_from_signal = False  # 신호 버튼에서 진입 시 True → acc_71_c
 g_trail73_code = ""
 g_trail73_company = ""
 g_trail73_buy_price = 0
+g_trail73_market = False     # 동시호가 시간대 매수가 0 입력 → 시장가 주문 여부
 g_trail73_loss_price = 0
 g_trail73_item_loss_sum = ""
 g_trail73_buy_qty = 0
@@ -836,6 +839,19 @@ def order_cancel_proc(access_token, app_key, app_secret, acct_no, code, sell_buy
 def is_after_market_hours():
     t = datetime.now().strftime('%H%M')
     return '1600' <= t < '2000'
+
+# 동시호가(장전 08:50~09:00, 장후 15:20~15:30) 여부 — 08:30~08:50 은 NXT 주문 시간대라 제외
+def is_auction_hours():
+    t = datetime.now().strftime('%H%M')
+    return '0850' <= t < '0900' or '1520' <= t < '1530'
+
+# 동시호가 시간대에 현재가:0 입력시 시장가 주문 여부
+def is_market_input(raw_price):
+    return is_auction_hours() and str(raw_price).strip() == '0'
+
+# 주문구분/주문단가 결정 — 시장가: ("01", "0"), 지정가: ("00", 가격)
+def resolve_ord_dvsn_price(market_flag, price):
+    return ("01", "0") if market_flag else ("00", str(price))
 
 # 프리마켓(NXT, 08:00~08:50) 여부
 def is_pre_market_nxt_hours():
@@ -2374,6 +2390,7 @@ def callback_get(update, context) :
         cb_company = g_buy21_company
         cb_buy_price = g_buy21_buy_price
         cb_buy_qty = g_buy21_buy_qty
+        cb_buy_market = g_buy21_market
         target_nicks = g_selected_accounts[:] if g_selected_accounts else [None]
         ac_default = account(arguments[1])
 
@@ -2387,7 +2404,8 @@ def callback_get(update, context) :
 
                 if int(b) > int(buy_expect_sum):
                     try:
-                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
+                        ord_dvsn_b21, ord_unpr_b21 = resolve_ord_dvsn_price(cb_buy_market, t_buy_price)
+                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, ord_dvsn_b21, str(t_buy_qty), ord_unpr_b21)
                         if c_ord is not None and c_ord['ODNO'] != "":
                             time.sleep(0.5)
                             output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
@@ -2397,7 +2415,7 @@ def callback_get(update, context) :
                                 d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
                                 d_order_amount = d_ord['ord_qty'][i]
                                 d_order_no = int(d_ord['odno'][i])
-                                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(d_order_price), ',d') + "원, 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
+                                cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + ("시장가" if cb_buy_market and int(d_order_price) == 0 else format(int(d_order_price), ',d') + "원") + ", 매수량 : " + format(int(d_order_amount), ',d') + "주 매수주문 완료, 주문번호 : <code>" + str(d_order_no) + "</code>", parse_mode='HTML')
                         else:
                             cb_bot.send_message(chat_id=cb_user_id, text="-" + nick + "-[" + cb_company + "{<code>" + cb_code + "</code>}] 매수가 : " + format(int(t_buy_price), ',d') + "원, 매수량 : " + format(int(t_buy_qty), ',d') + "주 매수주문 실패", parse_mode='HTML')
                     except Exception as e:
@@ -2947,6 +2965,7 @@ def callback_get(update, context) :
         cb_code = g_trail71_code
         cb_company = g_trail71_company
         cb_buy_price = g_trail71_buy_price
+        cb_buy_market = g_trail71_market
         cb_loss_price = g_trail71_loss_price
         cb_buy_qty = g_trail71_buy_qty
         cb_year_day = g_trail71_year_day
@@ -2983,7 +3002,8 @@ def callback_get(update, context) :
 
                 if int(b) > int(buy_expect_sum):
                     try:
-                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
+                        ord_dvsn_t, ord_unpr_t = resolve_ord_dvsn_price(cb_buy_market, t_buy_price)
+                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, ord_dvsn_t, str(t_buy_qty), ord_unpr_t)
                         if c_ord is not None and c_ord['ODNO'] != "":
                             time.sleep(0.5)
                             output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
@@ -2995,6 +3015,8 @@ def callback_get(update, context) :
                                 d_order_dt = d_ord['ord_dt'][i]
                                 d_order_tmd = d_ord['ord_tmd'][i]
                                 d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
+                                if cb_buy_market and int(d_order_price) == 0:
+                                    d_order_price = t_buy_price   # 시장가: 산정 매수가(현재가)로 추적 등록
                                 d_order_amount = d_ord['ord_qty'][i]
                                 d_order_complete_qty = d_ord['tot_ccld_qty'][i]
                                 d_order_remain_qty = d_ord['rmn_qty'][i]
@@ -3101,6 +3123,7 @@ def callback_get(update, context) :
         cb_code = g_trail73_code
         cb_company = g_trail73_company
         cb_buy_price = g_trail73_buy_price
+        cb_buy_market = g_trail73_market
         cb_loss_price = g_trail73_loss_price
         cb_buy_qty = g_trail73_buy_qty
         cb_year_day = g_trail73_year_day
@@ -3137,7 +3160,8 @@ def callback_get(update, context) :
 
                 if int(b) > int(buy_expect_sum):
                     try:
-                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, "00", str(t_buy_qty), str(t_buy_price))
+                        ord_dvsn_t, ord_unpr_t = resolve_ord_dvsn_price(cb_buy_market, t_buy_price)
+                        c_ord = order_cash(True, t_access_token, t_app_key, t_app_secret, str(t_acct_no), cb_code, ord_dvsn_t, str(t_buy_qty), ord_unpr_t)
                         if c_ord is not None and c_ord['ODNO'] != "":
                             time.sleep(0.5)
                             output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret, t_acct_no, cb_code, c_ord['ODNO'], '02')
@@ -3149,6 +3173,8 @@ def callback_get(update, context) :
                                 d_order_dt = d_ord['ord_dt'][i]
                                 d_order_tmd = d_ord['ord_tmd'][i]
                                 d_order_price = d_ord['avg_prvs'][i] if int(d_ord['avg_prvs'][i]) > 0 else d_ord['ord_unpr'][i]
+                                if cb_buy_market and int(d_order_price) == 0:
+                                    d_order_price = t_buy_price   # 시장가: 산정 매수가(현재가)로 추적 등록
                                 d_order_amount = d_ord['ord_qty'][i]
                                 d_order_complete_qty = d_ord['tot_ccld_qty'][i]
                                 d_order_remain_qty = d_ord['rmn_qty'][i]
@@ -5786,6 +5812,7 @@ def echo(update, context):
         else:
             sell_price_01 = 0  # 계좌별 보유단가 기준으로 process_nick_01 에서 계산
         sell_ratio_01 = int(parts01[1].strip())
+        sell_market_01 = sell_pct_01 is None and is_market_input(price_tok_01)   # 동시호가 시간대 0 입력시 시장가
         cb_code_01    = g_holding_sell_code
         cb_name_01    = g_holding_sell_name
         target_nicks_01 = g_selected_accounts[:] if g_selected_accounts else [None]
@@ -5816,8 +5843,9 @@ def echo(update, context):
                 else:
                     t_sell_price = sell_price_01
                 t_sell_qty = max(1, int(t_hldg_qty * sell_ratio_01 / 100))
+                ord_dvsn_01, ord_unpr_01 = resolve_ord_dvsn_price(sell_market_01, t_sell_price)
                 c_ord = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
-                                   cb_code_01, "00", str(t_sell_qty), str(t_sell_price))
+                                   cb_code_01, ord_dvsn_01, str(t_sell_qty), ord_unpr_01)
                 if c_ord is not None and c_ord['ODNO'] != "":
                     time.sleep(0.5)
                     output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret,
@@ -5828,10 +5856,11 @@ def echo(update, context):
                         d_price = d['avg_prvs'][k] if int(d['avg_prvs'][k]) > 0 else d['ord_unpr'][k]
                         d_qty   = d['ord_qty'][k]
                         d_no    = int(d['odno'][k])
+                        d_price_txt = "시장가" if sell_market_01 and int(d_price) == 0 else format(int(d_price), ',d') + "원"
                         context.bot.send_message(
                             chat_id=user_id,
                             text=f"-{nick}-[{cb_name_01}(<code>{cb_code_01}</code>)] "
-                                 f"매도가:{format(int(d_price), ',d')}원 | 매도량:{format(int(d_qty), ',d')}주 "
+                                 f"매도가:{d_price_txt} | 매도량:{format(int(d_qty), ',d')}주 "
                                  f"({sell_ratio_01}%) 매도주문 완료, 주문번호:<code>{d_no}</code>{pct_note_01}",
                             parse_mode='HTML'
                         )
@@ -6637,8 +6666,13 @@ def echo(update, context):
         except Exception as e:
             context.bot.send_message(chat_id=user_id, text=f"[{c51n_company}] 현재가 조회 오류: {str(e)}")
             return
-        c51n_revise_price = c51n_cur_price if user_text.strip() == '0' else int(user_text.strip())
-        c51n_revise_price = round_to_valid_price(c51n_revise_price, get_tick_size(c51n_revise_price))
+        c51n_market = is_market_input(user_text)   # 동시호가 시간대 0 입력시 시장가 정정(정정가 0 → ORD_DVSN 01)
+        if c51n_market:
+            c51n_revise_price = 0
+        else:
+            c51n_revise_price = c51n_cur_price if user_text.strip() == '0' else int(user_text.strip())
+            c51n_revise_price = round_to_valid_price(c51n_revise_price, get_tick_size(c51n_revise_price))
+        c51n_price_label = "시장가" if c51n_market else format(c51n_revise_price, ',') + "원"
         target_nicks_51n = g_selected_accounts[:] if g_selected_accounts else [None]
 
         def process_nick_51n(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -6672,7 +6706,7 @@ def echo(update, context):
                                 chat_id=user_id,
                                 text=(f"-{t_nick_label}-[{c51n_company}(<code>{c51n_code}</code>)] "
                                       f"{dvsn_label} 주문정정 완료 "
-                                      f"{format(ord_price, ',')}→{format(c51n_revise_price, ',')}원 "
+                                      f"{format(ord_price, ',')}→{c51n_price_label} "
                                       f"주문번호:<code>{str(int(c_51n['ODNO']))}</code>"),
                                 parse_mode='HTML'
                             )
@@ -6750,6 +6784,9 @@ def echo(update, context):
         sell_ratio     = int(parts_hc[1])
         buy_target_raw = parts_hc[2]
         buy_unpr_in    = int(parts_hc[3])
+        # 동시호가 시간대 단가 0 입력시 시장가 주문
+        hc_sell_market = is_market_input(parts_hc[0])
+        hc_buy_market  = is_market_input(parts_hc[3])
 
         # 대체매수 종목 해석 ("0" 또는 공백 → 매수 생략, 매도만 수행)
         hc_buy_code = ""
@@ -6804,15 +6841,16 @@ def echo(update, context):
                 sell_qty = sell_psbl_qty if sell_ratio >= 100 else max(1, int(sell_psbl_qty * sell_ratio / 100))
                 sell_qty = min(sell_qty, sell_psbl_qty)
 
+                sell_ord_dvsn, sell_ord_unpr = resolve_ord_dvsn_price(hc_sell_market, sell_price)
                 c_s = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct_no,
-                                 hc_sell_code, "00", str(sell_qty), str(sell_price))
+                                 hc_sell_code, sell_ord_dvsn, str(sell_qty), sell_ord_unpr)
                 if c_s is None or c_s['ODNO'] == "":
                     lines.append(f"[{s_nm}] 매도주문 실패")
                     return
                 sell_ord_no = str(int(c_s['ODNO']))
-                sell_amt = sell_price * sell_qty
+                sell_amt = sell_price * sell_qty   # 시장가시 현재가 기준 예상금액
                 lines.append((f"[{s_nm}(<code>{hc_sell_code}</code>)] 매도주문 완료 | "
-                          f"매도가:{format(sell_price, ',d')}원 | 비율:{sell_ratio}% | 수량:{format(sell_qty, ',d')}주 | "
+                          f"매도가:{'시장가(현재가 ' + format(sell_price, ',d') + '원)' if hc_sell_market else format(sell_price, ',d') + '원'} | 비율:{sell_ratio}% | 수량:{format(sell_qty, ',d')}주 | "
                           f"매도금액:{format(sell_amt, ',d')}원 | 주문번호:<code>{sell_ord_no}</code>"))
 
                 time.sleep(0.5)
@@ -6844,11 +6882,12 @@ def echo(update, context):
                 if buy_qty <= 0:
                     lines.append(f"[{b_nm}] 매도금액({format(sell_amt, ',d')}원) 기준 매수량 0주 → 매수 미처리")
                     return
+                buy_ord_dvsn, buy_ord_unpr = resolve_ord_dvsn_price(hc_buy_market, buy_price)
                 c_b = order_cash(True, t_access_token, t_app_key, t_app_secret, t_acct_no,
-                                 hc_buy_code, "00", str(buy_qty), str(buy_price))
+                                 hc_buy_code, buy_ord_dvsn, str(buy_qty), buy_ord_unpr)
                 if c_b is not None and c_b['ODNO'] != "":
                     lines.append((f"[{b_nm}(<code>{hc_buy_code}</code>)] 대체 매수주문 완료 | "
-                              f"매수가:{format(buy_price, ',d')}원 | 수량:{format(buy_qty, ',d')}주 | "
+                              f"매수가:{'시장가(현재가 ' + format(buy_price, ',d') + '원)' if hc_buy_market else format(buy_price, ',d') + '원'} | 수량:{format(buy_qty, ',d')}주 | "
                               f"매수금액:{format(buy_price * buy_qty, ',d')}원 | 주문번호:<code>{str(int(c_b['ODNO']))}</code>"))
                 else:
                     lines.append(f"[{b_nm}] 대체 매수주문 실패")
@@ -7039,6 +7078,7 @@ def echo(update, context):
             context.bot.send_message(chat_id=user_id, text="[현재가 정리] 매도비율은 1~100 숫자로 입력하세요.")
             return  # menuNum 유지 → 재입력 가능
         bc_ratio = int(bc_txt)
+        bc_market = is_auction_hours()   # 동시호가 시간대에는 현재가 대신 시장가 주문
         initMenuNum()
 
         def process_nick_bcln(nick, t_acct_no, t_access_token, t_app_key, t_app_secret):
@@ -7086,11 +7126,12 @@ def echo(update, context):
                         ap_bc = inquire_price(t_access_token, t_app_key, t_app_secret, bc_code)
                         bc_price = int(ap_bc['stck_prpr'])
                         bc_price = round_to_valid_price(bc_price, get_tick_size(bc_price))
+                        bc_ord_dvsn, bc_ord_unpr = resolve_ord_dvsn_price(bc_market, bc_price)
                         c_bc = order_cash(False, t_access_token, t_app_key, t_app_secret, t_acct,
-                                          bc_code, "00", str(bc_qty), str(bc_price))
+                                          bc_code, bc_ord_dvsn, str(bc_qty), bc_ord_unpr)
                         if c_bc is not None and c_bc['ODNO'] != "":
                             ok_cnt += 1
-                            lines.append(f"{tag} 매도완료 | {format(bc_price, ',d')}원 | "
+                            lines.append(f"{tag} 매도완료 | {'시장가(현재가 ' + format(bc_price, ',d') + '원)' if bc_market else format(bc_price, ',d') + '원'} | "
                                          f"{format(bc_qty, ',d')}/{format(bc_psbl, ',d')}주 | "
                                          f"{format(bc_price * bc_qty, ',d')}원 | <code>{str(int(c_bc['ODNO']))}</code>")
                         else:
@@ -7634,6 +7675,8 @@ def echo(update, context):
             else:
                 buy_price_21 = int(stck_prpr) if parts21[1].strip() == '0' else int(parts21[1].strip())
                 buy_price_21 = round_to_valid_price(buy_price_21, get_tick_size(buy_price_21))
+                global g_buy21_market
+                g_buy21_market = is_market_input(parts21[1])   # 동시호가 시간대 0 입력시 시장가(수량 산정은 현재가 기준)
                 loss_price_21 = int(stck_lwpr) if parts21[2].strip() == '0' else int(parts21[2].strip())
                 loss_price_21 = round_to_valid_price(loss_price_21, get_tick_size(loss_price_21))
                 input_buy_amt_21 = int(parts21[3].strip())    # 입력 매수금액
@@ -7801,6 +7844,8 @@ def echo(update, context):
             else:
                 buy_price_71 = int(stck_prpr) if parts71[1].strip() == '0' else int(parts71[1].strip())
                 buy_price_71 = round_to_valid_price(buy_price_71, get_tick_size(buy_price_71))
+                global g_trail71_market
+                g_trail71_market = is_market_input(parts71[1])   # 동시호가 시간대 0 입력시 시장가(수량 산정은 현재가 기준)
                 loss_price_71 = int(stck_lwpr) if parts71[2].strip() == '0' else int(parts71[2].strip())
                 loss_price_71 = round_to_valid_price(loss_price_71, get_tick_size(loss_price_71))
                 input_buy_amt_71 = int(parts71[3].strip())    # 입력 매수금액
@@ -8090,6 +8135,8 @@ def echo(update, context):
             else:
                 buy_price_73 = int(stck_prpr) if parts73[1].strip() == '0' else int(parts73[1].strip())
                 buy_price_73 = round_to_valid_price(buy_price_73, get_tick_size(buy_price_73))
+                global g_trail73_market
+                g_trail73_market = is_market_input(parts73[1])   # 동시호가 시간대 0 입력시 시장가(수량 산정은 현재가 기준)
 
                 # 이탈가 : 미입력 또는 0 → 금일 저가, 매수금액/손절금액 : 시장비율 기반 제안값 자동 적용
                 if len(parts73) >= 3 and parts73[2].strip().isdecimal() and parts73[2].strip() != '0':
