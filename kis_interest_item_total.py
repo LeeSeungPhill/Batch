@@ -674,7 +674,7 @@ def process_account(nick):
             elif len(i[0]) == 4:
 
                 oldest_time = datetime.now().strftime("%H%M%S")
-                if today.endswith("0102") or today.endswith("1119"):
+                if today.endswith("0104") or today.endswith("1119"):
                     if oldest_time <= "100000":
                         continue
                 else:

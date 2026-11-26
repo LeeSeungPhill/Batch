@@ -1026,7 +1026,7 @@ def process_account(nick):
                 short_market_signal = 'D'
 
             # trading_plan = 'h'(홀딩) / 'e'(정리) 보유종목 장중 손절 처리
-            #  - 처리시간 : 장시작 갭하락 방지 위해 09:10 ~ 15:20 (1월 2일 10:10 ~ 15:20, 11월 19일 수능일 10:10 ~ 16:20)
+            #  - 처리시간 : 장시작 갭하락 방지 위해 09:10 ~ 15:20 (1월 4일 10:10 ~ 15:20, 11월 19일 수능일 10:10 ~ 16:20)
             #  ① 지지가(sign_support_price) 이탈 ('h', 'e') : 기존 미체결 매도주문 전량 취소 → 보유수량 전량 최유리지정가 매도 → trading_plan = NULL
             #  ② 매입단가(purchase_price) 이탈 ('h' 전용, ①에 해당하지 않을 때) : 당일 최초 1회만 기존 매도주문 취소 후
             #     이탈 시점 10분봉 고가(고가 <= 매입단가이면 매입단가)로 지정가 대기 매도 → 이후 주문가 고정 (trail_signal '11' 기록으로 재주문 방지)
@@ -1034,7 +1034,7 @@ def process_account(nick):
             _pp_amount = int(i[6]) if i[6] is not None else 0
             _pp_price  = float(i[14]) if i[14] is not None else 0
             _support   = int(i[3]) if i[3] else 0
-            _start_hm  = '1010' if (today.endswith('0102') or today.endswith('1119')) else '0910'
+            _start_hm  = '1010' if (today.endswith('0104') or today.endswith('1119')) else '0910'
             _end_hm    = '1620' if today.endswith('1119') else '1520'
             _in_session    = _pp_amount > 0 and _start_hm <= datetime.now().strftime('%H%M') < _end_hm
             _support_break = i[12] in ('h', 'e') and _in_session and _support > 0 and _cur_price < _support
