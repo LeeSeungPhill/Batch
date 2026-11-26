@@ -3357,7 +3357,7 @@ def callback_get(update, context) :
             )
             return
         prompt_texts = {
-            "01": "매도가(현재가:0), 매도율(%)을 입력하세요.",
+            "01": "매도가(현재가:0, 보유단가 기준:숫자%), 매도율(%)을 입력하세요.",
             "02": "수정할 가격 값을 입력하세요. (숫자만 입력)",
             "03": "매도가를 입력하세요. (현재가:0)",
             "21": "종목코드(종목명), 매수가(현재가:0), 이탈가(저가:0), 매수금액, 손절금액을 입력하세요.",
@@ -5763,17 +5763,28 @@ def echo(update, context):
         initMenuNum()
         global g_holding_sell_code, g_holding_sell_name, g_holding_sell_price
         parts01 = user_text.strip().split(',', 1)
+        # 매도가 끝에 % 입력시 선택계좌별 보유단가 기준 %(양/음의 정수) 적용
+        price_tok_01 = parts01[0].strip().replace(' ', '') if parts01 else ''
+        pct_mode_01  = price_tok_01.endswith('%')
+        pct_body_01  = price_tok_01[:-1] if pct_mode_01 else ''
+        pct_valid_01 = (pct_mode_01 and pct_body_01.lstrip('+-').isdecimal()
+                        and len(pct_body_01) - len(pct_body_01.lstrip('+-')) <= 1)
         if (len(parts01) < 2
-                or not parts01[0].strip().isdecimal()
+                or not (price_tok_01.isdecimal() or pct_valid_01)
                 or not parts01[1].strip().isdecimal()
-                or not (1 <= int(parts01[1].strip()) <= 100)):
+                or not (1 <= int(parts01[1].strip()) <= 100)
+                or (pct_valid_01 and int(pct_body_01) <= -100)):
             context.bot.send_message(
                 chat_id=user_id,
-                text=f"[{g_holding_sell_name}] 매도가(현재가:0) 정수, 매도 비율은 1~100 사이 정수로 입력하세요."
+                text=f"[{g_holding_sell_name}] 매도가(현재가:0, 보유단가 기준:5% 또는 -3%) 정수, 매도 비율은 1~100 사이 정수로 입력하세요."
             )
             return
-        sell_price_01 = g_holding_sell_price if parts01[0].strip() == '0' else int(parts01[0].strip())
-        sell_price_01 = round_to_valid_price(sell_price_01, get_tick_size(sell_price_01))
+        sell_pct_01 = int(pct_body_01) if pct_valid_01 else None
+        if sell_pct_01 is None:
+            sell_price_01 = g_holding_sell_price if price_tok_01 == '0' else int(price_tok_01)
+            sell_price_01 = round_to_valid_price(sell_price_01, get_tick_size(sell_price_01))
+        else:
+            sell_price_01 = 0  # 계좌별 보유단가 기준으로 process_nick_01 에서 계산
         sell_ratio_01 = int(parts01[1].strip())
         cb_code_01    = g_holding_sell_code
         cb_name_01    = g_holding_sell_name
@@ -5783,17 +5794,30 @@ def echo(update, context):
             try:
                 c_bal = stock_balance(t_access_token, t_app_key, t_app_secret, t_acct_no, "")
                 t_hldg_qty = 0
+                t_avg_price = 0.0
                 for i, _ in enumerate(c_bal.index):
                     if c_bal['pdno'][i] == cb_code_01:
                         t_hldg_qty = int(c_bal['hldg_qty'][i])
+                        t_avg_price = float(c_bal['pchs_avg_pric'][i])
                         break
                 if t_hldg_qty == 0:
                     context.bot.send_message(chat_id=user_id,
                         text=f"-{nick}-[{cb_name_01}(<code>{cb_code_01}</code>)] 보유 수량 없음", parse_mode='HTML')
                     return
+                pct_note_01 = ""
+                if sell_pct_01 is not None:
+                    if t_avg_price <= 0:
+                        context.bot.send_message(chat_id=user_id,
+                            text=f"-{nick}-[{cb_name_01}(<code>{cb_code_01}</code>)] 보유단가 조회 불가", parse_mode='HTML')
+                        return
+                    t_sell_price = int(t_avg_price * (1 + sell_pct_01 / 100))
+                    t_sell_price = round_to_valid_price(t_sell_price, get_tick_size(t_sell_price))
+                    pct_note_01 = f" [보유단가:{format(int(t_avg_price), ',d')}원 {sell_pct_01:+d}%]"
+                else:
+                    t_sell_price = sell_price_01
                 t_sell_qty = max(1, int(t_hldg_qty * sell_ratio_01 / 100))
                 c_ord = order_cash(False, t_access_token, t_app_key, t_app_secret, str(t_acct_no),
-                                   cb_code_01, "00", str(t_sell_qty), str(sell_price_01))
+                                   cb_code_01, "00", str(t_sell_qty), str(t_sell_price))
                 if c_ord is not None and c_ord['ODNO'] != "":
                     time.sleep(0.5)
                     output1 = daily_order_complete(t_access_token, t_app_key, t_app_secret,
@@ -5808,14 +5832,14 @@ def echo(update, context):
                             chat_id=user_id,
                             text=f"-{nick}-[{cb_name_01}(<code>{cb_code_01}</code>)] "
                                  f"매도가:{format(int(d_price), ',d')}원 | 매도량:{format(int(d_qty), ',d')}주 "
-                                 f"({sell_ratio_01}%) 매도주문 완료, 주문번호:<code>{d_no}</code>",
+                                 f"({sell_ratio_01}%) 매도주문 완료, 주문번호:<code>{d_no}</code>{pct_note_01}",
                             parse_mode='HTML'
                         )
                 else:
                     context.bot.send_message(
                         chat_id=user_id,
                         text=f"-{nick}-[{cb_name_01}(<code>{cb_code_01}</code>)] "
-                             f"매도가:{format(sell_price_01, ',d')}원 | 매도량:{format(t_sell_qty, ',d')}주 매도주문 실패",
+                             f"매도가:{format(t_sell_price, ',d')}원 | 매도량:{format(t_sell_qty, ',d')}주 매도주문 실패{pct_note_01}",
                         parse_mode='HTML'
                     )
             except Exception as e:
