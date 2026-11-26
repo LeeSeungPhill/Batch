@@ -731,8 +731,8 @@ def get_kis_1min_full_day(
         prev_oldest_dt = oldest_dt
         all_df.append(df)
 
-        # 장 시작 도달 시 종료 : 1월 2일 / 11월 19일 17시 시작
-        if trade_date.endswith("0102") or trade_date.endswith("1119"):
+        # 장 시작 도달 시 종료 : 1월 4일 / 11월 19일 17시 시작
+        if trade_date.endswith("0104") or trade_date.endswith("1119"):
             if oldest_time <= "170000":
                 break
         else:
@@ -1080,6 +1080,26 @@ def get_kis_1min_from_datetime(
             breakout_check = high_price if breakout_type == "high" else close_price
             breakdown_check = low_price if breakdown_type == "low" else close_price
 
+            # ===============================
+            # 돌파 10분봉 완성 → 기준봉 확정 (고저 동일 분봉 포함 항상 수행)
+            # 돌파 시점 기준봉은 형성 중 10분봉의 그 시점까지 데이터(부분값)이므로,
+            # 해당 10분봉 마지막 1분봉 + 봉 완성 후에 전체 봉 저가·고가·거래량으로 갱신
+            # ===============================
+            if tenmin_state["base_low"] is not None and tenmin_state["base_key"] is not None                     and get_10min_key(row["dt"]) == tenmin_state["base_key"]                     and tenmin_state["base_key"] < current_10min_key:
+                _bk_rows = df[df["dt"].apply(get_10min_key) == tenmin_state["base_key"]]
+                if not _bk_rows.empty and row["dt"] == _bk_rows["dt"].max():
+                    _bk_low  = int(_bk_rows["저가"].astype(int).min())
+                    _bk_high = int(_bk_rows["고가"].astype(int).max())
+                    _bk_vol  = int(_bk_rows["거래량"].astype(int).sum())
+                    _bk_prev = (int(tenmin_state["base_low"]), int(tenmin_state["base_high"]), int(tenmin_state["base_vol"]))
+                    tenmin_state.update({"base_low": _bk_low, "base_high": _bk_high, "base_vol": _bk_vol})
+                    tenmin_state["peak_high"] = max(int(tenmin_state["peak_high"]), _bk_high)
+                    update_trading_trail(_bk_low, int(tenmin_state["peak_high"]), _bk_vol, acct_no, stock_code, start_date, start_time, "2", row['시간'].replace(':', '')+'00', conn)
+                    if verbose and (_bk_low, _bk_high, _bk_vol) != _bk_prev:
+                        print(f"-{nick}-[{tenmin_state['base_key'].strftime('%Y%m%d %H:%M')}]{stock_name}[{stock_code}] 돌파 10분봉 완성 기준봉 확정"
+                              f" 고가 : {_bk_high:,}원, 저가 : {_bk_low:,}원, 거래량 : {_bk_vol:,}주"
+                              f" (돌파 시점 고가 {_bk_prev[1]:,}원, 저가 {_bk_prev[0]:,}원, 거래량 {_bk_prev[2]:,}주)")
+                    continue
 
             if high_price > low_price:
 
@@ -1374,8 +1394,8 @@ def get_kis_1min_from_datetime(
     return signals
 
 
-TENMIN_SELL_REORDER_SEC = 120   # 주문 후 최소 경과 시간 (kis_trading_trail_vol_state.py 와 동일 2분)
-REORDER_PENDING_SELLS = False   # 자동 매도 미체결 체결회차 경과 후 재주문 (제외)
+TENMIN_SELL_REORDER_SEC = 180   # 주문 후 최소 경과 시간 (kis_trading_trail_vol_state.py 와 동일 3분)
+REORDER_PENDING_SELLS = True    # 자동 매도 미체결 체결회차 경과 후 재주문
 OVTM_RESULT_DELAY_SEC = 60      # 단일가 체결 후 체결내역 반영 대기
 
 def reorder_pending_auto_sells(nick, ac, bot, chat_id, conn):
